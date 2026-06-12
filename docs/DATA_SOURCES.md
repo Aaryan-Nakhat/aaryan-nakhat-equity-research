@@ -1,8 +1,13 @@
 # Data Sources
 
 > **Initial-thinking inventory** of primary/official Indian equity data sources
-> and their scrapability. This is a *first pass from reasoning*, **not yet
-> validated** against `scrapling`. Phase 1 will confirm/correct each row.
+> and their scrapability. This was a *first pass from reasoning*.
+>
+> ⚠️ **Partially validated (2026-06-13).** Key sources have now been probed with
+> `scrapling` — see [`SCRAPING.md`](SCRAPING.md) for empirical results, which
+> **supersede** the ratings below where they differ. Notably: NSE bhavcopy +
+> delivery % is **plain-HTTP** via the archive host (easier than the 🟡 below),
+> while NSE `/api/quote-equity` is currently **WAF-blocked** even in a browser.
 
 ## Ground rules
 

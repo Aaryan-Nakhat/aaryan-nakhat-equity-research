@@ -26,17 +26,24 @@ matters.
 
 ## 3. Scope (Phase-by-phase)
 
-### Phase 0 — Scaffolding (this commit)
-Repo, structure, planning docs. No code yet.
+### Phase 0 — Scaffolding ✅ done
+Repo, structure, planning docs.
 
-### Phase 1 — Validate scraping (de-risk first)
-Prove `scrapling` can reliably pull from the hardest source before building
-anything on top. Order, easiest → hardest:
-1. BSE bhavcopy / filings (friendlier).
-2. NSE session-gated JSON (quotes, filings, corporate actions).
-3. NSE F&O / option chain (most bot-protected) — confirm feasibility.
+### Phase 1 — Validate scraping (de-risk first) — 🟡 in progress
+Prove `scrapling` can reliably pull before building on top.
 
-Output: a thin scraper per source that returns clean structured data.
+**Probe results (2026-06-13) — see [`SCRAPING.md`](SCRAPING.md):**
+- ✅ **BSE** quotes/fundamentals: plain HTTP (`Fetcher`).
+- ✅ **NSE bhavcopy + delivery %**: plain HTTP via `nsearchives.nseindia.com`
+  (archive files dodge the WAF entirely — easier than expected).
+- ⚠️ **NSE `/api/`**: browser tier (Camoufox in-page `fetch`); works for
+  `marketStatus` etc., but `quote-equity` is currently WAF-blocked. Not a
+  blocker — BSE + archives cover our needs.
+
+**Remaining for Phase 1:** build a thin scraper module per confirmed path
+(BSE quote, NSE bhavcopy/delivery, NSE `/api/` browser helper) returning clean
+structured data; map the specific NSE `/api/` endpoints we need (FII/DII
+derivs, OI).
 
 ### Phase 2 — Fundamental analysis
 - Ingest financials (XBRL + PDF results) into DuckDB.
