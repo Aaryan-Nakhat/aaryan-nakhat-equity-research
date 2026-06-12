@@ -1,0 +1,23 @@
+# Normalize line endings — LF in the repo, auto-convert on checkout per-OS.
+* text=auto
+
+# Force LF for these regardless of platform.
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.txt   text eol=lf
+*.cfg   text eol=lf
+*.ini   text eol=lf
+.gitignore   text eol=lf
+.gitattributes text eol=lf
+
+# Treat as binary — never normalize.
+*.pdf    binary
+*.parquet binary
+*.duckdb binary
+*.png    binary
+*.jpg    binary
+*.xlsx   binary
