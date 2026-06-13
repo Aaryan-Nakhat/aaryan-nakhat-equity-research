@@ -101,10 +101,24 @@ Validated FY24 standalone: Revenue ₹547,942cr · Net ₹42,042cr · **CFO ₹7
 `annual_overview()` adds earnings-quality signals — notably **CFO-vs-PAT**
 (`cfo_to_pat_x`) and the accruals ratio: FY24 CFO/PAT = 1.76 (cash backs profit).
 
+## Forensic / quality scores (`analysis/forensic.py`)
+
+All three built and validated on RELIANCE. Each returns the score, its
+components, and a list of any **missing inputs** — emitted only when every input
+is present (no silent zero-proxying).
+
+| Score | RELIANCE FY24 | Reads | Bands |
+|---|---|---|---|
+| **Altman Z** | 2.27 (book-equity variant) | WC, OtherEquity (RE), EBIT, equity/liab, sales, all /assets | >2.99 safe · 1.81-2.99 grey · <1.81 distress |
+| **Piotroski F** | 5/9 | ROA/CFO/accruals/ΔROA, Δleverage, Δcurrent-ratio, shares, Δgross-margin, Δturnover | 8-9 strong · 0-2 weak |
+| **Beneish M** | −2.81 (clean) | DSRI/GMI/AQI/SGI/DEPI/SGAI/TATA/LVGI | M > −1.78 ⇒ possible manipulation |
+
+Report: `uv run python scripts/forensic_report.py RELIANCE [--mcap <crore>]`.
+Approximations (noted in output): COGS ≈ materials + purchases + Δinventory;
+SG&A ≈ employee + other expenses; Altman X4 uses book equity unless `--mcap` given.
+
 ## Limits / follow-ups
 
-- **Full forensic scores next**: Piotroski F, Altman Z, Beneish M — each needs
-  specific 2-year balance-sheet/CF inputs; map elements + validate per score.
 - **Deeper history**: only recent annual filings parse cleanly; older ones may
   use an earlier XBRL taxonomy (different namespace) — handle to extend history.
 - Valuation: shares-outstanding (`EquityShareCapital` ÷ face value) × `equity_eod`

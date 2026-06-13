@@ -70,12 +70,15 @@ NSE `corporates-financial-results` (catalog, browser) → XBRL on `nsearchives`
 per-quarter margins (net/PBT/EBIT/EBITDA), interest cover, effective tax rate,
 YoY growth, and TTM aggregates. Validated on RELIANCE.
 
+**Annual + forensic engine built** (`analysis/forensic.py` + `forensic_report.py`):
+annual balance-sheet/cash-flow ingested; **Altman Z, Piotroski F, Beneish M** and
+CFO-vs-PAT all computed + validated on RELIANCE (Z 2.27 / F 5 / M −2.81 clean).
+Scores emit only when every input is present (missing inputs reported).
+
 **Remaining:**
-- Ingest **annual balance-sheet / cash-flow** XBRL (quarterly results are
-  P&L-heavy) → unlocks ROE/ROCE/ROIC, leverage, liquidity, and the forensic
-  scores (Piotroski F, Altman Z, Beneish M, CFO-vs-PAT).
-- Valuation vs **own history** and **sector** (joins financials × `equity_eod`;
-  needs shares-outstanding for P/E / market cap).
+- Deeper history (older annual filings use an earlier XBRL taxonomy/namespace).
+- Valuation vs **own history** and **sector** (join financials × `equity_eod`;
+  shares-outstanding for P/E / market cap → also feeds Altman X4).
 
 ### Phase 3 — Technical analysis
 Computed from EOD OHLCV + delivery %:
