@@ -57,6 +57,20 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS financials (
+        symbol        VARCHAR,
+        period_end    DATE,
+        period_start  DATE,
+        period_type   VARCHAR,   -- 'Q' (quarter), 'Y' (full year), 'YTD'
+        consolidated  BOOLEAN,
+        element       VARCHAR,   -- in-bse-fin tag local name (e.g. ProfitLossForPeriod)
+        value         DOUBLE,
+        filing_date   DATE,
+        source_url    VARCHAR,
+        PRIMARY KEY (symbol, period_end, consolidated, period_type, element)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS participant_oi (
         trade_date          DATE,
         client_type         VARCHAR,

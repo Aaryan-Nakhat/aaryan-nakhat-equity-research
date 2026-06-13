@@ -58,13 +58,20 @@ verified, re-runs overwrite cleanly).
 moved NSE paths (index constituents, index option chain); land `fo_bhavcopy` at
 contract grain when Phase 3 needs OI.
 
-### Phase 2 — Fundamental analysis
-- Ingest financials (XBRL + PDF results) into DuckDB.
-- Multi-year (5–10 yr) series: P&L, balance sheet, cash flow.
-- Computed ratios: ROE / ROCE / ROIC, leverage, liquidity, cash conversion.
-- Quality / forensic scores: Piotroski F, Altman Z, Beneish M; CFO-vs-PAT
-  divergence; promoter pledge; related-party creep; receivables vs revenue.
-- Valuation vs **own history** and **sector**, not absolutes.
+### Phase 2 — Fundamental analysis — 🟡 in progress
+**Data path built + validated** (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)):
+NSE `corporates-financial-results` (catalog, browser) → XBRL on `nsearchives`
+(plain HTTP) → `in-bse-fin` tags. `scrapers/nse_financials.py` +
+`ingest.ingest_financials(symbol)` land a clean quarterly P&L series into the
+`financials` table (long format). Validated on RELIANCE (Q3 FY25 rev ₹128,260cr
+/ net ₹8,721cr, exact). Solved the BSE-XBRL context-ID gotcha (OneD=quarter).
+
+**Remaining:**
+- Ratio + forensic engine (`analysis/fundamentals.py`): margins, growth, tax
+  rate, TTM from quarters; then ROE/ROCE/ROIC, leverage, liquidity, Piotroski F,
+  Altman Z, Beneish M, CFO-vs-PAT — these need **annual balance-sheet/cash-flow**
+  XBRL (quarterly results are P&L-heavy), so ingest those next.
+- Valuation vs **own history** and **sector** (joins financials × `equity_eod`).
 
 ### Phase 3 — Technical analysis
 Computed from EOD OHLCV + delivery %:

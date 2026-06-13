@@ -12,7 +12,8 @@ import duckdb
 import pandas as pd
 
 from equity_research.common.db import replace_for_date
-from equity_research.scrapers import nse_archives
+from equity_research.common.http import ScrapeError, fetch_bytes
+from equity_research.scrapers import nse_archives, nse_financials
 
 # Source-column -> schema-column maps (schema order preserved on write).
 _EOD_MAP = {
@@ -70,6 +71,50 @@ def ingest_participant_oi(d: date, con: duckdb.DuckDBPyConnection) -> int:
     df = nse_archives.fetch_participant_oi(d)
     num = [c for c in _POI_MAP.values() if c != "client_type"]
     return replace_for_date(con, "participant_oi", _prepare(df, _POI_MAP, d, num), d)
+
+
+def ingest_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
+                      period: str = "Quarterly", max_filings: int | None = None) -> int:
+    """Land structured quarterly financial line items for ``symbol`` (long format).
+
+    Lists result filings (browser), downloads + parses each XBRL (plain HTTP),
+    and stores the **current-quarter** facts (the OneD context) per filing —
+    giving a clean, non-overlapping quarterly series. Annual figures are derived
+    downstream by summing four quarters. Returns rows written.
+    """
+    filings = nse_financials.list_result_filings(symbol, period=period)
+    filings = [f for f in filings if f.xbrl_url and f.to_date]
+    if max_filings:
+        filings = filings[:max_filings]
+
+    rows: list[dict] = []
+    for f in filings:
+        try:
+            parsed = nse_financials.parse_result_xbrl(fetch_bytes(f.xbrl_url))
+        except (ScrapeError, ValueError):
+            continue
+        facts = parsed.current_quarter()      # OneD = the reported quarter
+        if not facts:
+            continue
+        for element, value in facts.items():
+            rows.append({
+                "symbol": symbol, "period_end": f.to_date, "period_start": f.from_date,
+                "period_type": "Q", "consolidated": f.consolidated,
+                "element": element, "value": value,
+                "filing_date": f.filing_date, "source_url": f.xbrl_url,
+            })
+    if not rows:
+        return 0
+
+    df = pd.DataFrame(rows, columns=["symbol", "period_end", "period_start",
+                                     "period_type", "consolidated", "element",
+                                     "value", "filing_date", "source_url"])
+    con.register("_fin", df)
+    try:
+        con.execute("INSERT OR REPLACE INTO financials SELECT * FROM _fin")
+    finally:
+        con.unregister("_fin")
+    return len(df)
 
 
 def ingest_eod(d: date, con: duckdb.DuckDBPyConnection) -> dict[str, int]:
