@@ -40,10 +40,16 @@ Prove `scrapling` can reliably pull before building on top.
   `marketStatus` etc., but `quote-equity` is currently WAF-blocked. Not a
   blocker — BSE + archives cover our needs.
 
-**Remaining for Phase 1:** build a thin scraper module per confirmed path
-(BSE quote, NSE bhavcopy/delivery, NSE `/api/` browser helper) returning clean
-structured data; map the specific NSE `/api/` endpoints we need (FII/DII
-derivs, OI).
+**Thin scrapers built** (`src/equity_research/scrapers/`, smoke-tested live):
+- `bse.fetch_scrip_header(scripcode)` — quote/company JSON.
+- `nse_archives.fetch_bhavcopy(date)` — EOD + numeric `DELIV_PER`;
+  `fetch_index_closes(date)`.
+- `nse_api.fetch_api(path)` — Camoufox in-page XHR for NSE `/api/`.
+- Shared `common.http` helpers (work around the `.text`-empty gotcha).
+
+**Remaining for Phase 1:** map the specific NSE `/api/` endpoints we need
+(FII/DII derivs, OI, corporate filings) and add scrapers; decide storage
+(DuckDB schema) for landing scraped data. Then Phase 1 closes.
 
 ### Phase 2 — Fundamental analysis
 - Ingest financials (XBRL + PDF results) into DuckDB.
