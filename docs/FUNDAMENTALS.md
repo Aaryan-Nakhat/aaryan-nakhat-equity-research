@@ -72,6 +72,17 @@ independently matches `resCmpData`.
 
 `ingest_financials(symbol, con, period="Quarterly", max_filings=N)`.
 
+## Ratio engine (`analysis/fundamentals.py`)
+
+Reads the quarterly series and computes — validated on RELIANCE:
+
+- **Per quarter** (`quarterly_metrics`): net / PBT / EBIT / EBITDA margins,
+  interest coverage, effective tax rate, other-income-to-PBT, and **YoY** revenue
+  & net-profit growth (vs the same quarter a year earlier).
+- **TTM** (`ttm`): trailing-4-quarter revenue, net profit and margins.
+
+Report: `uv run python scripts/fundamentals_report.py RELIANCE [--consolidated]`.
+
 ## Limits / follow-ups
 
 - Quarterly result XBRL is **P&L-heavy**; full balance-sheet / cash-flow items

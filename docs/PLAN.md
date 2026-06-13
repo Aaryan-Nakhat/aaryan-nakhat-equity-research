@@ -66,12 +66,16 @@ NSE `corporates-financial-results` (catalog, browser) → XBRL on `nsearchives`
 `financials` table (long format). Validated on RELIANCE (Q3 FY25 rev ₹128,260cr
 / net ₹8,721cr, exact). Solved the BSE-XBRL context-ID gotcha (OneD=quarter).
 
+**P&L ratio engine built** (`analysis/fundamentals.py` + `fundamentals_report.py`):
+per-quarter margins (net/PBT/EBIT/EBITDA), interest cover, effective tax rate,
+YoY growth, and TTM aggregates. Validated on RELIANCE.
+
 **Remaining:**
-- Ratio + forensic engine (`analysis/fundamentals.py`): margins, growth, tax
-  rate, TTM from quarters; then ROE/ROCE/ROIC, leverage, liquidity, Piotroski F,
-  Altman Z, Beneish M, CFO-vs-PAT — these need **annual balance-sheet/cash-flow**
-  XBRL (quarterly results are P&L-heavy), so ingest those next.
-- Valuation vs **own history** and **sector** (joins financials × `equity_eod`).
+- Ingest **annual balance-sheet / cash-flow** XBRL (quarterly results are
+  P&L-heavy) → unlocks ROE/ROCE/ROIC, leverage, liquidity, and the forensic
+  scores (Piotroski F, Altman Z, Beneish M, CFO-vs-PAT).
+- Valuation vs **own history** and **sector** (joins financials × `equity_eod`;
+  needs shares-outstanding for P/E / market cap).
 
 ### Phase 3 — Technical analysis
 Computed from EOD OHLCV + delivery %:
