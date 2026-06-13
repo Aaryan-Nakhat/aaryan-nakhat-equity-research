@@ -83,10 +83,30 @@ Reads the quarterly series and computes — validated on RELIANCE:
 
 Report: `uv run python scripts/fundamentals_report.py RELIANCE [--consolidated]`.
 
+## Annual data (balance sheet + cash flow)
+
+Annual filings (`period=Annual`) carry the full year **plus** the year-end
+balance sheet and cash-flow statement. Context mapping (validated on RELIANCE):
+
+| Data | Context | Notes |
+|---|---|---|
+| Full-year P&L + cash flow | `FourD` (duration) | `OneD` here = Q4 quarter |
+| Year-end balance sheet | instant context dated at `to_date` | matched **by date** (instants are reliable) |
+| Prior year | `FiveD` + prior instant | 2 years in one filing (for YoY scores) |
+
+`ingest_annual_financials(symbol, con)` lands these as `period_type='Y'`.
+Validated FY24 standalone: Revenue ₹547,942cr · Net ₹42,042cr · **CFO ₹73,998cr**
+· Assets ₹959,643cr.
+
+`annual_overview()` adds earnings-quality signals — notably **CFO-vs-PAT**
+(`cfo_to_pat_x`) and the accruals ratio: FY24 CFO/PAT = 1.76 (cash backs profit).
+
 ## Limits / follow-ups
 
-- Quarterly result XBRL is **P&L-heavy**; full balance-sheet / cash-flow items
-  (instant contexts) are sparse. Forensic scores (Piotroski/Altman/Beneish) and
-  ROE/ROCE need those → ingest **annual** filings / balance-sheet XBRL next.
-- Annual figures: derive as **TTM** (sum 4 quarters) until annual ingest lands.
+- **Full forensic scores next**: Piotroski F, Altman Z, Beneish M — each needs
+  specific 2-year balance-sheet/CF inputs; map elements + validate per score.
+- **Deeper history**: only recent annual filings parse cleanly; older ones may
+  use an earlier XBRL taxonomy (different namespace) — handle to extend history.
+- Valuation: shares-outstanding (`EquityShareCapital` ÷ face value) × `equity_eod`
+  price → market cap / P-E vs own history.
 - The catalog step is browser-tier; cache filing lists to avoid re-warming.

@@ -103,9 +103,12 @@ def ingest_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
                 "element": element, "value": value,
                 "filing_date": f.filing_date, "source_url": f.xbrl_url,
             })
+    return _write_financials(con, rows)
+
+
+def _write_financials(con: duckdb.DuckDBPyConnection, rows: list[dict]) -> int:
     if not rows:
         return 0
-
     df = pd.DataFrame(rows, columns=["symbol", "period_end", "period_start",
                                      "period_type", "consolidated", "element",
                                      "value", "filing_date", "source_url"])
@@ -115,6 +118,39 @@ def ingest_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
     finally:
         con.unregister("_fin")
     return len(df)
+
+
+def ingest_annual_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
+                             max_filings: int | None = None) -> int:
+    """Land annual full-year P&L + cash-flow + year-end balance sheet (period_type='Y').
+
+    Per annual filing: the full-year flows live in the FourD context; the
+    year-end balance sheet is the instant context dated at the filing's to_date.
+    One filing = one fiscal year; N filings = N years of history.
+    """
+    filings = nse_financials.list_result_filings(symbol, period="Annual")
+    filings = [f for f in filings if f.xbrl_url and f.to_date]
+    if max_filings:
+        filings = filings[:max_filings]
+
+    rows: list[dict] = []
+    for f in filings:
+        try:
+            parsed = nse_financials.parse_result_xbrl(fetch_bytes(f.xbrl_url))
+        except (ScrapeError, ValueError):
+            continue
+        facts = dict(parsed.facts_by_context.get(nse_financials.CURRENT_YEAR_CTX, {}))
+        facts.update(parsed.instant_facts(f.to_date))   # + year-end balance sheet
+        if not facts:
+            continue
+        for element, value in facts.items():
+            rows.append({
+                "symbol": symbol, "period_end": f.to_date, "period_start": None,
+                "period_type": "Y", "consolidated": f.consolidated,
+                "element": element, "value": value,
+                "filing_date": f.filing_date, "source_url": f.xbrl_url,
+            })
+    return _write_financials(con, rows)
 
 
 def ingest_eod(d: date, con: duckdb.DuckDBPyConnection) -> dict[str, int]:

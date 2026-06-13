@@ -93,3 +93,42 @@ def ttm(con: duckdb.DuckDBPyConnection, symbol: str,
         "ttm_ebitda_margin_%": 100 * (pbt + fin + dep) / rev if rev else np.nan,
         "quarters_used": float(len(last4)),
     }
+
+
+def load_annual(con: duckdb.DuckDBPyConnection, symbol: str,
+                consolidated: bool = False) -> pd.DataFrame:
+    """Wide annual frame: index = fiscal year-end, columns = XBRL elements."""
+    df = con.execute(
+        """SELECT period_end, element, value FROM financials
+           WHERE symbol = ? AND consolidated = ? AND period_type = 'Y'""",
+        [symbol, consolidated],
+    ).df()
+    if df.empty:
+        return pd.DataFrame()
+    return (df.pivot_table(index="period_end", columns="element", values="value",
+                           aggfunc="first")
+              .sort_index())
+
+
+def annual_overview(con: duckdb.DuckDBPyConnection, symbol: str,
+                    consolidated: bool = False) -> pd.DataFrame:
+    """Per-year headline + earnings-quality signals (incl. CFO-vs-PAT)."""
+    a = load_annual(con, symbol, consolidated)
+    if a.empty:
+        return pd.DataFrame()
+
+    rev = _col(a, "RevenueFromOperations")
+    net = _col(a, "ProfitLossForPeriod")
+    cfo = _col(a, "CashFlowsFromUsedInOperatingActivities")
+    assets = _col(a, "Assets")
+
+    o = pd.DataFrame(index=a.index)
+    o["revenue_cr"] = rev / CR
+    o["net_profit_cr"] = net / CR
+    o["cfo_cr"] = cfo / CR
+    o["assets_cr"] = assets / CR
+    # CFO-vs-PAT: cash should back the profit. < 1 persistently = a quality flag.
+    o["cfo_to_pat_x"] = cfo / net
+    o["accruals_%_assets"] = 100 * (net - cfo) / assets   # high positive = aggressive
+    o["roa_%"] = 100 * net / assets
+    return o.replace([np.inf, -np.inf], np.nan)
