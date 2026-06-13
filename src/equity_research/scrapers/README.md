@@ -7,8 +7,13 @@ data (dict / `DataFrame`); no storage or analysis here.
 | Module | Source | Tier | Returns |
 |---|---|---|---|
 | `bse` | `api.bseindia.com` | plain HTTP | `fetch_scrip_header(scripcode)` → quote/company dict |
-| `nse_archives` | `nsearchives.nseindia.com` | plain HTTP | `fetch_bhavcopy(date)` → DataFrame (incl. `DELIV_PER`); `fetch_index_closes(date)` |
-| `nse_api` | `www.nseindia.com/api/*` | Camoufox browser | `fetch_api(path)` → JSON (in-page XHR; reserve for endpoints with no file equivalent) |
+| `nse_archives` | `nsearchives.nseindia.com` | plain HTTP | `fetch_bhavcopy(date)` (incl. `DELIV_PER`); `fetch_index_closes(date)`; `fetch_participant_oi(date)`; `fetch_fo_bhavcopy(date)` |
+| `nse_api` | `www.nseindia.com/api/*` | Camoufox browser | `fetch_api(path)` (generic in-page XHR); `fii_dii_activity()`; `corporate_announcements()`; `corporate_actions()`; `option_chain_equity(symbol)` |
+
+Prefer the plain-HTTP `nse_archives` files wherever they exist (fast, robust);
+the browser tier is only for `/api/` endpoints with no file equivalent.
+`equity-stockIndices` and `option-chain-indices` currently 404 (paths moved) —
+not yet wrapped.
 
 Shared fetch helpers live in `equity_research.common.http` (`fetch_bytes` /
 `fetch_text` / `fetch_json`), which work around the `Response.text`-empty gotcha

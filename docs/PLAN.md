@@ -40,16 +40,23 @@ Prove `scrapling` can reliably pull before building on top.
   `marketStatus` etc., but `quote-equity` is currently WAF-blocked. Not a
   blocker — BSE + archives cover our needs.
 
-**Thin scrapers built** (`src/equity_research/scrapers/`, smoke-tested live):
+**Scrapers built** (`src/equity_research/scrapers/`, smoke-tested live):
 - `bse.fetch_scrip_header(scripcode)` — quote/company JSON.
-- `nse_archives.fetch_bhavcopy(date)` — EOD + numeric `DELIV_PER`;
-  `fetch_index_closes(date)`.
-- `nse_api.fetch_api(path)` — Camoufox in-page XHR for NSE `/api/`.
+- `nse_archives` — `fetch_bhavcopy` (+numeric `DELIV_PER`), `fetch_index_closes`,
+  `fetch_participant_oi`, `fetch_fo_bhavcopy` (all plain HTTP).
+- `nse_api` — `fetch_api` + wrappers `fii_dii_activity`,
+  `corporate_announcements`, `corporate_actions`, `option_chain_equity`
+  (Camoufox in-page XHR). NSE endpoint map in [`SCRAPING.md`](SCRAPING.md).
 - Shared `common.http` helpers (work around the `.text`-empty gotcha).
 
-**Remaining for Phase 1:** map the specific NSE `/api/` endpoints we need
-(FII/DII derivs, OI, corporate filings) and add scrapers; decide storage
-(DuckDB schema) for landing scraped data. Then Phase 1 closes.
+**Storage built** (`common/db.py` + `ingest.py` + `scripts/ingest_eod.py`):
+DuckDB landing tables `equity_eod` / `index_close` / `participant_oi` with a
+date-idempotent writer. `ingest_eod(date)` lands a full day (3246/147/5 rows
+verified, re-runs overwrite cleanly).
+
+**Phase 1 essentially complete.** Remaining (minor, deferrable): re-find the two
+moved NSE paths (index constituents, index option chain); land `fo_bhavcopy` at
+contract grain when Phase 3 needs OI.
 
 ### Phase 2 — Fundamental analysis
 - Ingest financials (XBRL + PDF results) into DuckDB.

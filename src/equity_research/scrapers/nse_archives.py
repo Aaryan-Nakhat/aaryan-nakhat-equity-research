@@ -10,6 +10,7 @@ See ``docs/SCRAPING.md`` for the probe that validated this path.
 from __future__ import annotations
 
 import io
+import zipfile
 from datetime import date
 
 import pandas as pd
@@ -18,6 +19,9 @@ from equity_research.common.http import fetch_bytes
 
 _BHAVCOPY = "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{d}.csv"
 _INDEX_CLOSE = "https://nsearchives.nseindia.com/content/indices/ind_close_all_{d}.csv"
+_PARTICIPANT_OI = "https://nsearchives.nseindia.com/content/nsccl/fao_participant_oi_{d}.csv"
+_FO_BHAVCOPY = ("https://nsearchives.nseindia.com/content/fo/"
+                "BhavCopy_NSE_FO_0_0_0_{ymd}_F_0000.csv.zip")
 
 
 def _ddmmyyyy(d: date) -> str:
@@ -54,3 +58,29 @@ def fetch_index_closes(d: date) -> pd.DataFrame:
     """Daily close values for all NSE indices on trade date ``d``."""
     raw = fetch_bytes(_INDEX_CLOSE.format(d=_ddmmyyyy(d)))
     return _read_csv(raw)
+
+
+def fetch_participant_oi(d: date) -> pd.DataFrame:
+    """Participant-wise F&O open interest (Client / DII / FII / Pro) for ``d``.
+
+    The file's first line is a title; the real header is the second line, with
+    trailing-space column names. Columns cover Future/Option Index/Stock
+    Long/Short OI by participant — the raw input for FII derivatives positioning.
+    """
+    raw = fetch_bytes(_PARTICIPANT_OI.format(d=_ddmmyyyy(d)))
+    df = pd.read_csv(io.BytesIO(raw), skiprows=1, skipinitialspace=True)
+    df.columns = [c.strip() for c in df.columns]
+    return df
+
+
+def fetch_fo_bhavcopy(d: date) -> pd.DataFrame:
+    """Full F&O (derivatives) bhavcopy for ``d`` — the UDiFF zipped CSV.
+
+    One row per contract (futures + options): TckrSymb, XpryDt, StrkPric,
+    OptnTp, OHLC, settlement, OpnIntrst, ChngInOpnIntrst, etc.
+    """
+    raw = fetch_bytes(_FO_BHAVCOPY.format(ymd=d.strftime("%Y%m%d")))
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        inner = zf.namelist()[0]
+        data = zf.read(inner)
+    return pd.read_csv(io.BytesIO(data))

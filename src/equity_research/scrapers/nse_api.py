@@ -69,3 +69,26 @@ def fetch_api(
     if captured.get("status") != 200:
         raise ScrapeError(warm_url.rstrip("/") + path, captured.get("status"))
     return json.loads(captured.get("body") or "{}")
+
+
+# --- Named wrappers for the endpoints validated as working (see SCRAPING.md) ---
+# (equity-stockIndices and option-chain-indices currently 404 — paths moved.)
+
+def fii_dii_activity() -> Any:
+    """FII/DII cash-market buy/sell activity (latest published day)."""
+    return fetch_api("/api/fiidiiTradeReact")
+
+
+def corporate_announcements(index: str = "equities") -> Any:
+    """Corporate announcements / filings feed (results, transcripts, PPTs)."""
+    return fetch_api(f"/api/corporate-announcements?index={index}")
+
+
+def corporate_actions(index: str = "equities") -> Any:
+    """Corporate actions (dividends, splits, bonuses, buybacks)."""
+    return fetch_api(f"/api/corporates-corporateActions?index={index}")
+
+
+def option_chain_equity(symbol: str) -> Any:
+    """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
+    return fetch_api(f"/api/option-chain-equities?symbol={symbol}")

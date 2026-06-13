@@ -79,10 +79,47 @@ Install browsers once: `uv run scrapling install`.
 reserve the **Camoufox browser tier** only for NSE `/api/` endpoints that have no
 file equivalent. Treat `quote-equity` as unavailable for now.
 
+## NSE `/api/` endpoint map (probed 2026-06-13)
+
+Via Camoufox in-page XHR, warm = homepage. Probe:
+[`scripts/probe_nse_endpoints.py`](../scripts/probe_nse_endpoints.py).
+
+| Endpoint | Result | Wrapped as |
+|---|---|---|
+| `/api/marketStatus` | ✅ 200 | `nse_api.fetch_api(...)` |
+| `/api/fiidiiTradeReact` | ✅ 200 | `nse_api.fii_dii_activity()` |
+| `/api/corporate-announcements?index=equities` | ✅ 200 | `corporate_announcements()` |
+| `/api/corporates-corporateActions?index=equities` | ✅ 200 | `corporate_actions()` |
+| `/api/option-chain-equities?symbol=…` | ✅ 200 (empty when closed) | `option_chain_equity()` |
+| `/api/equity-stockIndices?index=NIFTY 50` | ❌ 404 (path moved) | — |
+| `/api/option-chain-indices?symbol=NIFTY` | ❌ 404 (path moved) | — |
+
+## Derivatives = plain-HTTP archive files (no browser!)
+
+Both validated `200` via `Fetcher`:
+- **Participant-wise OI** (`fao_participant_oi_DDMMYYYY.csv`) — FII/DII/Client/Pro
+  futures+options long/short. First line is a title (skip it). →
+  `nse_archives.fetch_participant_oi(date)`.
+- **F&O bhavcopy** (`BhavCopy_NSE_FO_…_YYYYMMDD_F_0000.csv.zip`, UDiFF) — every
+  contract's OHLC/settlement/OI. → `nse_archives.fetch_fo_bhavcopy(date)`.
+
+## Storage (DuckDB landing)
+
+`common/db.py` defines the schema + a date-idempotent writer; `ingest.py` maps
+scraped frames to it; `scripts/ingest_eod.py` is the CLI.
+
+| Table | Source | Grain | PK |
+|---|---|---|---|
+| `equity_eod` | bhavcopy | symbol-day (incl. `deliv_per`) | (trade_date, symbol, series) |
+| `index_close` | index closes | index-day (incl. `pe`/`pb`) | (trade_date, index_name) |
+| `participant_oi` | participant OI | client-type-day | (trade_date, client_type) |
+
+`uv run python scripts/ingest_eod.py 2026-06-12` → 3246 / 147 / 5 rows;
+re-running a date overwrites it (verified idempotent).
+
 ## Open follow-ups
 
-- Map which NSE `/api/` endpoints we actually need (FII/DII derivs, option chain,
-  corporate filings) and confirm each via in-page fetch.
-- Find archive-file equivalents for NSE corporate announcements / shareholding
-  (file downloads dodge the WAF entirely).
-- Build a thin scraper module per confirmed path (Phase 1 deliverable).
+- Find the moved paths for index constituents + index option chain (404 above).
+- Land `fo_bhavcopy` into DuckDB (contract-grain table) once Phase 3 needs OI.
+- BSE/NSE corporate **filings → PDF** pipeline (annual reports, transcripts) for
+  the Claude layer (Phase 4).
