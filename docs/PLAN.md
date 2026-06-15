@@ -102,12 +102,16 @@ RELIANCE. Relative-strength-vs-Nifty wired (needs `index_close` backfill).
 **Remaining (deferrable):** derivatives positioning (OI, PCR, FII deriv stats —
 data already scrapable via `nse_archives`/`nse_api`); ADX.
 
-### Phase 4 — Claude integration + email reports
-- Claude reads unstructured filings (annual reports, concall transcripts) →
-  extracts guidance, tone, risk-factor changes, red flags.
-- Year-over-year diffing of annual reports (high-signal, tedious for a human).
-- Synthesises quant signals + qualitative read into a structured thesis.
-- **Emails** the result (the "Claude sends me the results" piece).
+### Phase 4 — Claude integration + email reports — 🟡 in progress
+**Built** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
+`brief.build_brief` assembles all quant signals → `synthesize.synthesize_thesis`
+(Claude `opus-4-8`, adaptive thinking, reads an optional concall/annual-report
+PDF via Files API) → `email.send_report` (SMTP). Brief + orchestration +
+`--dry-run` validated on RELIANCE; synthesis/email import-clean.
+
+**Remaining:** live run needs user creds (`ANTHROPIC_API_KEY`, `SMTP_*` — see
+`.env.example`); auto-fetch latest filing PDF from the BSE feed; YoY annual-report
+diffing; HTML email; watchlist digest.
 
 ### Phase 5 — Triggers / alerting
 Event-driven emails: results day, ratio breaches, pledge increases, rating
