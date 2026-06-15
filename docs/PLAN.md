@@ -102,18 +102,21 @@ RELIANCE. Relative-strength-vs-Nifty wired (needs `index_close` backfill).
 **Remaining (deferrable):** derivatives positioning (OI, PCR, FII deriv stats —
 data already scrapable via `nse_archives`/`nse_api`); ADX.
 
-### Phase 4 — LLM integration + email reports — 🟡 in progress
-**Built** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
-`brief.build_brief` assembles all quant signals → `synthesize.synthesize_thesis`
-(**the LLM `the-model` via the provider AI / the LLM Developer API**, streaming,
-reads an optional concall/annual-report PDF inline) → `email.send_report` (SMTP).
-Brief + orchestration + `--dry-run` validated on RELIANCE; synthesis/email
-import-clean. (LLM provider is the LLM — chosen so an existing the provider key can be
-reused; the brief/email layers are provider-agnostic.)
+### Phase 4 — LLM integration + reports — ✅ done (live)
+**Built + live** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
+`brief`/`deep_brief` assemble all quant signals → `synthesize.synthesize_thesis`
+(**the LLM `the-model` via the provider AI**, service-account auth, streaming, reads
+an optional concall/annual-report PDF) → delivered via:
+- **Telegram bot** (`scripts/telegram_bot.py`, always-on Windows scheduled task):
+  name → `resolve` (the LLM+Search) → deep report, **formatted inline (MarkdownV2)
+  + styled PDF** (`reports/pdf.py`). Live-validated on RELIANCE / EXPWR.
+- **CLI** (`research_report.py`) and **email** (`reports/email.py`, SMTP).
 
-**Remaining:** live run needs user config (the LLM/the provider env + `SMTP_*` — see
-`.env.example`); auto-fetch latest filing PDF from the BSE feed; YoY annual-report
-diffing; HTML email; watchlist digest.
+(LLM provider is the LLM — reuses an existing a cloud the provider key, employer-
+authorized; the brief/email layers are provider-agnostic.)
+
+**Remaining (optional):** auto-fetch latest filing PDF from the BSE feed; YoY
+annual-report diffing; live email-path test (needs `SMTP_*`).
 
 ### Phase 5 — Triggers / alerting
 Event-driven emails: results day, ratio breaches, pledge increases, rating
