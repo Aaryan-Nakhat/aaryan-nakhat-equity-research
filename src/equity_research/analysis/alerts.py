@@ -225,9 +225,12 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
             return datetime.min
     anns = sorted(anns, key=dt, reverse=True)
     last_seen = state.get("last_ann_dt")
-    last_dt = datetime.fromisoformat(last_seen) if last_seen else None
-    A, newest = [], dt(anns[0])
+    newest = dt(anns[0])
     up = {"last_ann_dt": newest.isoformat()}
+    if not last_seen:                 # first time we see this symbol's feed: seed, no alerts
+        return [], up
+    last_dt = datetime.fromisoformat(last_seen)
+    A: list[Alert] = []
     for a in anns:
         adt = dt(a)
         if last_dt is not None and adt <= last_dt:
