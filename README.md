@@ -25,6 +25,7 @@ Working end-to-end (NSE/BSE → DuckDB → fundamentals/forensics/technicals/
 valuation → Gemini report → Telegram bot, always-on). Phases 1–4 done; Phase 5
 (watchlist alerts) pending. Docs:
 
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) / [`docs/SCRAPING.md`](docs/SCRAPING.md) — sources + scrapability findings.
 - [`docs/FUNDAMENTALS.md`](docs/FUNDAMENTALS.md) — financials data path, ratios, forensic scores, valuation.
