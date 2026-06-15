@@ -122,4 +122,4 @@ re-running a date overwrites it (verified idempotent).
 - Find the moved paths for index constituents + index option chain (404 above).
 - Land `fo_bhavcopy` into DuckDB (contract-grain table) once Phase 3 needs OI.
 - BSE/NSE corporate **filings → PDF** pipeline (annual reports, transcripts) for
-  the Claude layer (Phase 4).
+  the LLM layer (Phase 4).
