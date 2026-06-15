@@ -102,14 +102,16 @@ RELIANCE. Relative-strength-vs-Nifty wired (needs `index_close` backfill).
 **Remaining (deferrable):** derivatives positioning (OI, PCR, FII deriv stats —
 data already scrapable via `nse_archives`/`nse_api`); ADX.
 
-### Phase 4 — Claude integration + email reports — 🟡 in progress
+### Phase 4 — LLM integration + email reports — 🟡 in progress
 **Built** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
 `brief.build_brief` assembles all quant signals → `synthesize.synthesize_thesis`
-(Claude `opus-4-8`, adaptive thinking, reads an optional concall/annual-report
-PDF via Files API) → `email.send_report` (SMTP). Brief + orchestration +
-`--dry-run` validated on RELIANCE; synthesis/email import-clean.
+(**Gemini `gemini-2.5-pro` via Vertex AI / Gemini Developer API**, streaming,
+reads an optional concall/annual-report PDF inline) → `email.send_report` (SMTP).
+Brief + orchestration + `--dry-run` validated on RELIANCE; synthesis/email
+import-clean. (LLM provider is Gemini — chosen so an existing Vertex key can be
+reused; the brief/email layers are provider-agnostic.)
 
-**Remaining:** live run needs user creds (`ANTHROPIC_API_KEY`, `SMTP_*` — see
+**Remaining:** live run needs user config (Gemini/Vertex env + `SMTP_*` — see
 `.env.example`); auto-fetch latest filing PDF from the BSE feed; YoY annual-report
 diffing; HTML email; watchlist digest.
 
@@ -123,10 +125,10 @@ downgrades, technical breakouts.
 - Macro overlay (RBI / MOSPI) feeding sector calls.
 - Screener across a broad universe to *find* ideas, not just analyse known ones.
 
-## 4. Where Claude fits
+## 4. Where the LLM fits
 
-The quant layer (ratios, scores, technicals) is deterministic Python. Claude's
-value is on the **unstructured** side:
+The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
+(Gemini) adds value on the **unstructured** side:
 - Digesting 200-page annual reports & concall transcripts.
 - YoY diffing risk factors / accounting policy / RPTs.
 - Synthesising everything into a readable thesis with a verdict and *reasons*,
@@ -145,5 +147,5 @@ value is on the **unstructured** side:
 
 ## 6. Stack
 
-Python 3.12 · `uv` · `scrapling` · DuckDB · pandas · Anthropic Claude API ·
-email delivery. (Choices to be firmed up as we build.)
+Python 3.12 · `uv` · `scrapling` · DuckDB · pandas · Gemini (`google-genai`, via
+Vertex AI / Gemini Developer API) · email delivery.

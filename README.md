@@ -15,14 +15,14 @@ Personal use. Not a hosted product.
 - **Analyse** — fundamental (multi-year ratios, quality/forensic scores,
   valuation vs history & sector) and technical (trend, momentum, volume,
   delivery %, derivatives positioning).
-- **Report** — Claude reads the unstructured filings (annual reports, concall
+- **Report** — Gemini reads the unstructured filings (annual reports, concall
   transcripts) and synthesises a thesis; results are **emailed** to me.
 
 ## Status
 
 Early scaffolding. See planning docs:
 
-- [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phases, where Claude fits.
+- [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phases, where the LLM fits.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) — detailed inventory of every
   data source and its scrapability (login / session / public).
 
@@ -45,5 +45,5 @@ tests/         tests
 - Python 3.12, `uv`
 - `scrapling` (scraping, incl. anti-bot session handling for NSE)
 - DuckDB (analytics) · pandas
-- Anthropic Claude API (qualitative analysis + report synthesis)
+- Gemini (`google-genai`, via Vertex AI or the Gemini Developer API) — qualitative analysis + report synthesis
 - Email delivery for reports

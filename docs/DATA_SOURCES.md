@@ -132,7 +132,7 @@ sites only for gaps.
 4. **No login needed** anywhere we actually plan to use — it's session/cookie/
    header friction and rate limits, not authentication walls.
 5. **PDF parsing** (annual reports, transcripts, rating rationales) is a
-   separate, heavier workstream from JSON/CSV scraping — and where Claude earns
+   separate, heavier workstream from JSON/CSV scraping — and where the LLM earns
    its keep.
 
 ## Scraping-difficulty order (de-risk easiest → hardest)

@@ -3,10 +3,10 @@
     # just the quant brief (no API/email needed):
     uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2
 
-    # brief + Claude synthesis, printed (needs ANTHROPIC_API_KEY):
+    # brief + Gemini synthesis, printed (needs Gemini/Vertex env — see .env.example):
     uv run python scripts/research_report.py RELIANCE --shares 1353.2
 
-    # + attach a concall transcript / annual report PDF for Claude to read:
+    # + attach a concall transcript / annual report PDF for the model to read:
     uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf
 
     # + email it (needs SMTP_* env, see .env.example):
@@ -51,9 +51,9 @@ def main(argv: list[str]) -> int:
         print("\n[--dry-run: skipping Claude synthesis and email]")
         return 0
 
-    # Synthesis (needs ANTHROPIC_API_KEY).
+    # Synthesis (needs Gemini/Vertex env — see .env.example).
     from equity_research.reports.synthesize import synthesize_thesis
-    print("\n" + "=" * 60 + "\nSynthesising thesis with Claude...\n")
+    print("\n" + "=" * 60 + "\nSynthesising thesis with Gemini...\n")
     thesis = synthesize_thesis(brief, symbol, pdf_path=pdf)
     print(thesis)
 

@@ -1,19 +1,26 @@
-"""Claude synthesis — turn the quant brief (+ optional filing PDF) into a thesis.
+"""LLM synthesis — turn the quant brief (+ optional filing PDF) into a thesis.
 
-The deterministic brief carries the numbers; Claude's job is the qualitative
-read: weigh the signals, fold in management commentary from a concall transcript
-or annual report (if supplied), and produce a structured verdict with reasons.
+Uses Google's Gemini via the `google-genai` SDK. The deterministic brief carries
+the numbers; the model's job is the qualitative read: weigh the signals, fold in
+management commentary from a concall transcript / annual report (if supplied),
+and produce a structured verdict with reasons.
 
-Needs ANTHROPIC_API_KEY in the environment. See ``docs/REPORTS.md``.
+Auth — set in the environment (see ``.env.example``), two options:
+  - **Vertex AI** (workplace GCP): GOOGLE_GENAI_USE_VERTEXAI=true,
+    GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION (+ ADC, or a Vertex API key via
+    GOOGLE_API_KEY for express mode).
+  - **Gemini Developer API**: GOOGLE_API_KEY (or GEMINI_API_KEY) only.
+Model via GEMINI_MODEL (default gemini-2.5-pro). See ``docs/REPORTS.md``.
 """
 
 from __future__ import annotations
 
 import os
 
-import anthropic
+from google import genai
+from google.genai import types
 
-MODEL = "claude-opus-4-8"
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 
 _SYSTEM = """You are a sober, sell-side-grade equity analyst covering Indian \
 stocks. You are given a quantitative brief assembled from PRIMARY sources only \
@@ -26,54 +33,49 @@ not in the brief or the filing. Where the brief says a value is n/a or flags a \
 caveat (e.g. stale shares), respect it.
 
 Structure:
-1. **Verdict** — one line: Buy / Accumulate / Hold / Reduce / Avoid, with a one-\
+1. Verdict — one line: Buy / Accumulate / Hold / Reduce / Avoid, with a one-\
 sentence rationale.
-2. **Why** — 3-6 bullets tying the call to specific fundamental, forensic, \
-technical, and valuation signals.
-3. **Risks / red flags** — what could break the thesis (forensic flags, valuation \
+2. Why — 3-6 bullets tying the call to specific fundamental, forensic, technical, \
+and valuation signals.
+3. Risks / red flags — what could break the thesis (forensic flags, valuation \
 stretch, technical weakness, anything from the filing).
-4. **What to watch** — 2-3 concrete upcoming triggers.
+4. What to watch — 2-3 concrete upcoming triggers.
 
 Keep it under ~450 words. This is analysis for a personal decision, not advice \
 for the public."""
 
 
+def _client() -> genai.Client:
+    """Vertex (project+location / ADC) if configured, else the Developer API key."""
+    if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes"):
+        return genai.Client(
+            vertexai=True,
+            project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
+        )
+    return genai.Client()  # reads GOOGLE_API_KEY / GEMINI_API_KEY
+
+
 def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None,
                       model: str = MODEL) -> str:
     """Run the synthesis. Returns the thesis text. Streams (long output)."""
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
+    client = _client()
 
-    user_content: list[dict] = []
+    parts: list[types.Part] = []
     if pdf_path:
         with open(pdf_path, "rb") as fh:
-            uploaded = client.beta.files.upload(
-                file=(os.path.basename(pdf_path), fh, "application/pdf"),
-            )
-        user_content.append({
-            "type": "document",
-            "source": {"type": "file", "file_id": uploaded.id},
-            "title": os.path.basename(pdf_path),
-        })
-    user_content.append({
-        "type": "text",
-        "text": f"Quantitative brief for {symbol}:\n\n{brief_md}\n\n"
-                "Write the investment note.",
-    })
+            parts.append(types.Part.from_bytes(data=fh.read(), mime_type="application/pdf"))
+    parts.append(types.Part.from_text(
+        text=f"Quantitative brief for {symbol}:\n\n{brief_md}\n\nWrite the investment note."))
 
-    kwargs = dict(
-        model=model,
-        max_tokens=4000,
-        thinking={"type": "adaptive"},
-        system=_SYSTEM,
-        messages=[{"role": "user", "content": user_content}],
+    config = types.GenerateContentConfig(
+        system_instruction=_SYSTEM,
+        max_output_tokens=4000,
     )
-    # PDF documents go through the beta Files API surface.
-    create = client.beta.messages.stream if pdf_path else client.messages.stream
-    if pdf_path:
-        kwargs["betas"] = ["files-api-2025-04-14"]
-
-    parts: list[str] = []
-    with create(**kwargs) as stream:
-        for text in stream.text_stream:
-            parts.append(text)
-    return "".join(parts).strip()
+    out: list[str] = []
+    for chunk in client.models.generate_content_stream(
+        model=model, contents=parts, config=config,
+    ):
+        if chunk.text:
+            out.append(chunk.text)
+    return "".join(out).strip()
