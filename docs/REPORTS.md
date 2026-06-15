@@ -86,7 +86,7 @@ bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
 ```
 You: "Adani Power"  ──►  resolve (Gemini + Google Search) ──►  one match? run it
                                                           └─► several? buttons → you pick
-   ──►  ensure-ingested (on demand) ──►  deep brief ──►  Gemini forensic ──►  reply (inline + .md file)
+   ──►  ensure-ingested (on demand) ──►  deep brief ──►  Gemini forensic ──►  reply (formatted inline + PDF)
 ```
 
 - **Resolver** (`reports/resolve.py`): Gemini + Google-Search grounding maps free
@@ -94,6 +94,11 @@ You: "Adani Power"  ──►  resolve (Gemini + Google Search) ──►  one m
   otherwise (handles small-cap / newly-listed names, not just a fixed universe).
 - **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` —
   ingests financials on demand for any NSE symbol, builds the brief, runs Gemini.
+- **Reply formatting**: the analysis is sent inline as **Telegram MarkdownV2**
+  (via `telegramify-markdown` — bold, bullets, emojis, tables as aligned monospace
+  blocks; plain-text fallback if a chunk won't parse), and the full report is
+  attached as a **styled PDF** (`reports/pdf.py`: markdown → HTML → landscape-A4
+  via the installed Playwright Chromium; falls back to a `.md` file on failure).
 - **Security**: only `TELEGRAM_ALLOWED_USERS` (numeric IDs) are served; the bot
   token lives in `.env`. Add `consolidated` to a message for the group view.
 
