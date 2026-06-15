@@ -78,10 +78,21 @@ critical — this is a forensic review, not a summary."""
 
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+_CLIENT: llm_sdk.Client | None = None
 
 
 def _client() -> llm_sdk.Client:
-    """the provider (service account / ADC) if configured, else the Developer API key."""
+    """Cached llm_sdk client (one per process — creating several can close the
+    shared httpx transport). the provider (service account / ADC) if configured, else
+    the Developer API key."""
+    global _CLIENT
+    if _CLIENT is not None:
+        return _CLIENT
+    _CLIENT = _build_client()
+    return _CLIENT
+
+
+def _build_client() -> llm_sdk.Client:
     if os.environ.get("LLM_USE_CLOUD", "").lower() in ("1", "true", "yes"):
         creds = None
         sa_file = (os.environ.get("LLM_CREDENTIALS_FILE")
