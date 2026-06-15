@@ -44,6 +44,38 @@ stretch, technical weakness, anything from the filing).
 Keep it under ~450 words. This is analysis for a personal decision, not advice \
 for the public."""
 
+_DEEP_SYSTEM = """You are a forensic equity analyst doing an exhaustive, in-depth \
+fundamental review of an Indian company for a sophisticated personal investor. \
+You are given a detailed brief with multi-year Income Statement, Balance Sheet \
+and Cash Flow (CFO/CFI/CFF), a full derived-ratio layer (margins, ROE/ROCE/ROIC, \
+leverage, liquidity, working-capital/cash-conversion, FCF/FCFF/FCFE, CFO/PAT and \
+CFO/EBITDA incl. rolled figures), a forensic block (Altman Z, Piotroski F, \
+Beneish M with components), and valuation/technical context — all from PRIMARY \
+sources (exchange XBRL filings, EOD prices). Optionally also a filing PDF.
+
+Write a thorough, section-by-section analysis. Do NOT artificially compress — \
+length is fine; depth and rigour matter more. Cite the actual numbers. Cover:
+
+1. **Earnings quality & cash conversion** — is profit backed by cash? Read CFO vs \
+PAT (yearly + the 3/5-yr rolled figures), CFO/EBITDA, accruals, FCF/FCFF/FCFE \
+trend and capex intensity. Call out any divergence as a flag.
+2. **Profitability & returns** — margin trajectory, ROE/ROCE/ROIC vs cost of \
+capital, DuPont-style drivers (margin × turnover × leverage).
+3. **Balance-sheet health** — leverage (D/E, net-debt/EBITDA, interest cover), \
+liquidity, and the asset/working-capital structure; trend in receivable/inventory/\
+payable days and the cash conversion cycle.
+4. **Growth & momentum** — multi-year revenue/PAT trajectory and the recent \
+quarterly trend; is growth decelerating or re-accelerating?
+5. **Forensic assessment** — interpret Altman/Piotroski/Beneish *and their \
+components*; flag aggressive accounting, other-income dependence, tax-rate \
+anomalies, related-party / receivables concerns the numbers hint at.
+6. **Valuation** — current multiples vs own history and sector; what is priced in.
+7. **Verdict** — Buy / Accumulate / Hold / Reduce / Avoid, the key reasons, the \
+main risks/red flags, and concrete things to watch.
+
+Respect any n/a or caveat in the brief; never invent data. Be specific and \
+critical — this is a forensic review, not a summary."""
+
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
@@ -68,20 +100,27 @@ def _client() -> genai.Client:
 
 
 def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None,
-                      model: str = MODEL) -> str:
-    """Run the synthesis. Returns the thesis text. Streams (long output)."""
+                      model: str = MODEL, deep: bool = False) -> str:
+    """Run the synthesis. Returns the thesis text. Streams (long output).
+
+    ``deep=True`` switches to the exhaustive forensic prompt and leaves the output
+    length uncapped (the model's own default max).
+    """
     client = _client()
 
     parts: list[types.Part] = []
     if pdf_path:
         with open(pdf_path, "rb") as fh:
             parts.append(types.Part.from_bytes(data=fh.read(), mime_type="application/pdf"))
+    instruction = ("Write the full forensic fundamental analysis." if deep
+                   else "Write the investment note.")
     parts.append(types.Part.from_text(
-        text=f"Quantitative brief for {symbol}:\n\n{brief_md}\n\nWrite the investment note."))
+        text=f"Brief for {symbol}:\n\n{brief_md}\n\n{instruction}"))
 
     config = types.GenerateContentConfig(
-        system_instruction=_SYSTEM,
-        max_output_tokens=4000,
+        system_instruction=_DEEP_SYSTEM if deep else _SYSTEM,
+        # deep mode: leave max_output_tokens unset (uncapped — use the model max).
+        **({} if deep else {"max_output_tokens": 4000}),
     )
     out: list[str] = []
     for chunk in client.models.generate_content_stream(

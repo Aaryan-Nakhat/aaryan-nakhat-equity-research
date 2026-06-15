@@ -19,6 +19,7 @@ import sys
 
 from equity_research.common.db import connect
 from equity_research.reports.brief import build_brief
+from equity_research.reports.deep_brief import build_deep_brief
 
 
 def _arg(argv, flag, default=None):
@@ -37,12 +38,14 @@ def main(argv: list[str]) -> int:
     consolidated = "--consolidated" in argv
     dry_run = "--dry-run" in argv
     do_email = "--email" in argv
+    deep = "--deep" in argv
     pdf = _arg(argv, "--pdf")
     shares = float(_arg(argv, "--shares")) * 1e7 if "--shares" in argv else None
 
     con = connect()
     try:
-        brief = build_brief(con, symbol, consolidated=consolidated, target_shares=shares)
+        builder = build_deep_brief if deep else build_brief
+        brief = builder(con, symbol, consolidated=consolidated, target_shares=shares)
     finally:
         con.close()
 
@@ -53,8 +56,9 @@ def main(argv: list[str]) -> int:
 
     # Synthesis (needs Gemini/Vertex env — see .env.example).
     from equity_research.reports.synthesize import synthesize_thesis
-    print("\n" + "=" * 60 + "\nSynthesising thesis with Gemini...\n")
-    thesis = synthesize_thesis(brief, symbol, pdf_path=pdf)
+    mode = "forensic deep-dive" if deep else "thesis"
+    print("\n" + "=" * 60 + f"\nSynthesising {mode} with Gemini...\n")
+    thesis = synthesize_thesis(brief, symbol, pdf_path=pdf, deep=deep)
     print(thesis)
 
     report = f"{brief}\n\n{'=' * 60}\n## Thesis\n\n{thesis}"

@@ -59,9 +59,22 @@ Gmail needs an App Password.
 ```bash
 uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2   # brief only, no creds
 uv run python scripts/research_report.py RELIANCE --shares 1353.2             # + Gemini thesis
+uv run python scripts/research_report.py RELIANCE --deep --shares 1353.2      # full forensic deep-dive
 uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf        # + read a filing
 uv run python scripts/research_report.py RELIANCE --email                     # + email it
 ```
+
+### Deep mode (`--deep`)
+
+For an exhaustive fundamental + forensic review, `--deep` swaps the one-pager for
+`reports/deep_brief.build_deep_brief` — full multi-year **Income Statement /
+Balance Sheet / Cash Flow (CFO·CFI·CFF)** tables plus a complete derived layer:
+margins, ROE/ROCE/ROIC/ROA, leverage, liquidity, working-capital &
+cash-conversion days, **FCF / FCFF / FCFE**, CFO/PAT & CFO/EBITDA (incl. 3- and
+5-yr rolled), the quarterly trend, and forensic scores with full component
+breakdowns. The Gemini call uses a section-by-section forensic prompt and is
+**output-uncapped**. (Order book/backlog isn't in XBRL — order-driven sectors
+only; needs a PDF read.)
 
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
