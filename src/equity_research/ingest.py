@@ -57,7 +57,9 @@ def ingest_bhavcopy(d: date, con: duckdb.DuckDBPyConnection) -> int:
     df = nse_archives.fetch_bhavcopy(d)
     num = ["prev_close", "open", "high", "low", "last", "close", "avg_price",
            "ttl_trd_qnty", "turnover_lacs", "no_of_trades", "deliv_qty", "deliv_per"]
-    return replace_for_date(con, "equity_eod", _prepare(df, _EOD_MAP, d, num), d)
+    out = _prepare(df, _EOD_MAP, d, num)
+    out = out.dropna(subset=["symbol", "series"])   # some files carry junk/total rows
+    return replace_for_date(con, "equity_eod", out, d)
 
 
 def ingest_index_closes(d: date, con: duckdb.DuckDBPyConnection) -> int:
@@ -151,6 +153,24 @@ def ingest_annual_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
                 "filing_date": f.filing_date, "source_url": f.xbrl_url,
             })
     return _write_financials(con, rows)
+
+
+def ingest_eod_on_or_before(d: date, con: duckdb.DuckDBPyConnection, *,
+                            lookback: int = 7) -> date | None:
+    """Ingest the bhavcopy for ``d`` or the nearest earlier trading day.
+
+    Fiscal year-ends (31-Mar) are often holidays; step back up to ``lookback``
+    days until a bhavcopy exists. Returns the date ingested, or None.
+    """
+    from datetime import timedelta
+    for i in range(lookback + 1):
+        day = d - timedelta(days=i)
+        try:
+            ingest_bhavcopy(day, con)
+            return day
+        except ScrapeError:
+            continue
+    return None
 
 
 def ingest_eod(d: date, con: duckdb.DuckDBPyConnection) -> dict[str, int]:

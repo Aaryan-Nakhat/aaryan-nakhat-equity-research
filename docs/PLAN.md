@@ -75,10 +75,17 @@ annual balance-sheet/cash-flow ingested; **Altman Z, Piotroski F, Beneish M** an
 CFO-vs-PAT all computed + validated on RELIANCE (Z 2.27 / F 5 / M −2.81 clean).
 Scores emit only when every input is present (missing inputs reported).
 
-**Remaining:**
-- Deeper history (older annual filings use an earlier XBRL taxonomy/namespace).
-- Valuation vs **own history** and **sector** (join financials × `equity_eod`;
-  shares-outstanding for P/E / market cap → also feeds Altman X4).
+**Deeper history done**: taxonomy-agnostic parser → 6 years of P&L (FY2019-24);
+balance sheet + forensic/valuation stay FY2023+ (older result XBRLs omit the
+balance sheet).
+
+**Valuation done** (`analysis/valuation.py` + `valuation_report.py`): P/E & P/B vs
+own history (contemporaneous, bonus-invariant); current snapshot + market cap
+feeding Altman X4 (RELIANCE Z 2.27→3.94). Bonus/split staleness surfaced.
+
+**Phase 2 essentially complete.** Remaining (deferrable): valuation **vs sector**
+(needs a peer universe); auto-adjust current shares for post-filing corporate
+actions; cache browser-tier catalog calls.
 
 ### Phase 3 — Technical analysis
 Computed from EOD OHLCV + delivery %:

@@ -129,10 +129,31 @@ Report: `uv run python scripts/forensic_report.py RELIANCE [--mcap <crore>]`.
 Approximations (noted in output): COGS ≈ materials + purchases + Δinventory;
 SG&A ≈ employee + other expenses; Altman X4 uses book equity unless `--mcap` given.
 
+## Valuation (`analysis/valuation.py`)
+
+Joins annual financials × `equity_eod` prices. Shares = `EquityShareCapital` ÷
+`FaceValueOfEquityShareCapital`. Market cap is computed **per period from
+contemporaneous shares × that period's price**, which makes P/E and P/B
+bonus/split-invariant and comparable across time.
+
+- `valuation_history(symbol)` — P/E & P/B at each fiscal year-end (price from the
+  nearest trading day ≤ year-end; `ingest_eod_on_or_before` backfills them).
+- `snapshot(symbol, shares_override=…)` — current P/E (TTM), P/B, earnings yield.
+- `market_cap(symbol, shares_override=…)` — feeds **Altman X4** (RELIANCE Z goes
+  2.27 book-equity → **3.94 safe** with real market cap).
+
+Report: `uv run python scripts/valuation_report.py RELIANCE [--shares <crore>]`
+→ e.g. RELIANCE current P/E 49.5 flagged *above* its 2-yr history (35.7–47.8).
+
+**Bonus/split caveat (important):** current shares come from the latest annual
+filing, so a corporate action since then makes the live snapshot stale (RELIANCE
+1:1 bonus Oct-2024 → pass `--shares 1353.2`). The output surfaces this; history
+rows are each internally consistent (contemporaneous shares) and unaffected.
+
 ## Limits / follow-ups
 
-- **Deeper history**: only recent annual filings parse cleanly; older ones may
-  use an earlier XBRL taxonomy (different namespace) — handle to extend history.
-- Valuation: shares-outstanding (`EquityShareCapital` ÷ face value) × `equity_eod`
-  price → market cap / P-E vs own history.
+- **Valuation history depth** follows balance-sheet availability (FY2023+), since
+  per-year shares come from `EquityShareCapital`. P&L trend is 6 years regardless.
+- Auto-adjust current shares for post-filing corporate actions (from
+  `corporate_actions()`), so the live snapshot needs no manual `--shares`.
 - The catalog step is browser-tier; cache filing lists to avoid re-warming.
