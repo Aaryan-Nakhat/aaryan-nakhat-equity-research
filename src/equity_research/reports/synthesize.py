@@ -78,10 +78,21 @@ critical — this is a forensic review, not a summary."""
 
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+_CLIENT: genai.Client | None = None
 
 
 def _client() -> genai.Client:
-    """Vertex (service account / ADC) if configured, else the Developer API key."""
+    """Cached genai client (one per process — creating several can close the
+    shared httpx transport). Vertex (service account / ADC) if configured, else
+    the Developer API key."""
+    global _CLIENT
+    if _CLIENT is not None:
+        return _CLIENT
+    _CLIENT = _build_client()
+    return _CLIENT
+
+
+def _build_client() -> genai.Client:
     if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes"):
         creds = None
         sa_file = (os.environ.get("GCP_SERVICE_ACCOUNT_FILE")

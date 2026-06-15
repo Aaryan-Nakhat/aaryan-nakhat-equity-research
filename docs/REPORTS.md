@@ -79,6 +79,29 @@ only; needs a PDF read.)
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
 
+## Telegram bot (interactive, on-demand)
+
+`scripts/telegram_bot.py` — message a company name, get a deep report back.
+
+```
+You: "Adani Power"  ──►  resolve (Gemini + Google Search) ──►  one match? run it
+                                                          └─► several? buttons → you pick
+   ──►  ensure-ingested (on demand) ──►  deep brief ──►  Gemini forensic ──►  reply (inline + .md file)
+```
+
+- **Resolver** (`reports/resolve.py`): Gemini + Google-Search grounding maps free
+  text → exact NSE symbol(s). Returns **one** when certain, **up to 5 ranked**
+  otherwise (handles small-cap / newly-listed names, not just a fixed universe).
+- **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` —
+  ingests financials on demand for any NSE symbol, builds the brief, runs Gemini.
+- **Security**: only `TELEGRAM_ALLOWED_USERS` (numeric IDs) are served; the bot
+  token lives in `.env`. Add `consolidated` to a message for the group view.
+
+Setup: create a bot via **@BotFather** (`/newbot`) → token; get your ID from
+**@userinfobot**; put both in `.env`; then `uv run python scripts/telegram_bot.py`
+(keep it running, or schedule it). The genai client is a per-process singleton
+(creating several closes the shared httpx transport).
+
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.
