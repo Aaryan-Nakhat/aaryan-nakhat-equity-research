@@ -37,10 +37,12 @@ annual report) is passed inline (`types.Part.from_bytes`) and read alongside the
 brief — this is where management commentary enters the thesis.
 
 **Auth (env, see `.env.example`) — two options:**
-- **Vertex AI** (workplace GCP): `GOOGLE_GENAI_USE_VERTEXAI=true`,
-  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, plus ADC
-  (`gcloud auth application-default login`) or a Vertex express API key in
-  `GOOGLE_API_KEY`.
+- **Vertex AI** (workplace GCP) via a **service account**:
+  `GOOGLE_GENAI_USE_VERTEXAI=true`, `GOOGLE_CLOUD_PROJECT`,
+  `GOOGLE_CLOUD_LOCATION`, and `GCP_SERVICE_ACCOUNT_FILE=./gcp-service-account.json`.
+  The key file is **gitignored** (`gcp-service-account.json` / `*service-account*.json`).
+  Falls back to `GOOGLE_APPLICATION_CREDENTIALS`, then to `gcloud` ADC if neither
+  is set.
 - **Gemini Developer API**: just `GOOGLE_API_KEY` (from aistudio.google.com).
 
 The client auto-selects Vertex when `GOOGLE_GENAI_USE_VERTEXAI` is truthy, else

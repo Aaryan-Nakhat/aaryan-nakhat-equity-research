@@ -45,13 +45,24 @@ Keep it under ~450 words. This is analysis for a personal decision, not advice \
 for the public."""
 
 
+_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+
 def _client() -> genai.Client:
-    """Vertex (project+location / ADC) if configured, else the Developer API key."""
+    """Vertex (service account / ADC) if configured, else the Developer API key."""
     if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes"):
+        creds = None
+        sa_file = (os.environ.get("GCP_SERVICE_ACCOUNT_FILE")
+                   or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+        if sa_file:
+            from google.oauth2 import service_account
+            creds = service_account.Credentials.from_service_account_file(
+                sa_file, scopes=_SCOPES)
         return genai.Client(
             vertexai=True,
             project=os.environ.get("GOOGLE_CLOUD_PROJECT"),
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
+            credentials=creds,   # None -> SDK falls back to ADC (gcloud login)
         )
     return genai.Client()  # reads GOOGLE_API_KEY / GEMINI_API_KEY
 
