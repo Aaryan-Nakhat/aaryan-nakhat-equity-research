@@ -101,6 +101,18 @@ Validated FY24 standalone: Revenue ₹547,942cr · Net ₹42,042cr · **CFO ₹7
 `annual_overview()` adds earnings-quality signals — notably **CFO-vs-PAT**
 (`cfo_to_pat_x`) and the accruals ratio: FY24 CFO/PAT = 1.76 (cash backs profit).
 
+### History depth (taxonomy versions)
+
+The parser is taxonomy-version-agnostic (matches any `…/xbrl/fin/<date>/in-bse-fin`).
+XBRL exists from ~**FY2019** (older filings 404). Caveat: pre-FY2023 result XBRLs
+are `_WEB.xml` variants that carry **P&L (+ often cash flow) but no balance
+sheet** — and they reference the plain headline contexts (`FourD`, `OneI`)
+without defining them, so we keep facts on those by the ID convention.
+
+Net effect on RELIANCE: **6 years of P&L** (FY2019–24) for trend/growth, but
+balance-sheet metrics + the forensic scores remain **FY2023+** (where the balance
+sheet is present).
+
 ## Forensic / quality scores (`analysis/forensic.py`)
 
 All three built and validated on RELIANCE. Each returns the score, its

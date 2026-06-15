@@ -140,7 +140,7 @@ def ingest_annual_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
         except (ScrapeError, ValueError):
             continue
         facts = dict(parsed.facts_by_context.get(nse_financials.CURRENT_YEAR_CTX, {}))
-        facts.update(parsed.instant_facts(f.to_date))   # + year-end balance sheet
+        facts.update(parsed.current_balance_sheet())     # + year-end balance sheet (OneI)
         if not facts:
             continue
         for element, value in facts.items():

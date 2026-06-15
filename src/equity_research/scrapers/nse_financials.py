@@ -15,6 +15,7 @@ context whose start/end match the filing's declared period.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -23,8 +24,21 @@ from lxml import etree
 from equity_research.common.http import fetch_bytes
 from equity_research.scrapers.nse_api import fetch_api
 
-_FIN_NS = "http://www.bseindia.com/xbrl/fin/2020-03-31/in-bse-fin"
 _XBRLI = "http://www.xbrl.org/2003/instance"
+
+
+def _fin_local(tag: object) -> str | None:
+    """Local name if ``tag`` is an in-bse-fin element, else None.
+
+    Matches any taxonomy version (.../xbrl/fin/<date>/in-bse-fin) so older
+    filings (e.g. the 2018-03-31 taxonomy) parse the same as recent ones.
+    """
+    if not isinstance(tag, str) or not tag.startswith("{"):
+        return None
+    uri, local = tag[1:].split("}", 1)
+    if "bseindia.com/xbrl/fin/" in uri and uri.endswith("in-bse-fin"):
+        return local
+    return None
 
 
 @dataclass(frozen=True)
@@ -84,10 +98,19 @@ CURRENT_QUARTER_CTX = "OneD"
 
 # Annual-filing context convention (in addition to the quarterly map above):
 #   FourD = current full year (P&L + cash flow)   FiveD = prior full year
-#   year-end balance sheet = the *instant* context dated at the year-end. Instants
-#   carry reliable single dates (no collision), so we match those by date.
+#   OneI  = current year-end balance sheet         TwoI  = prior year-end
+# We select by context ID, not dates. Older (pre-FY2023) result XBRLs are
+# "_WEB.xml" variants that *reference* these plain headline contexts but define
+# their dates in a companion file — so the contexts look "orphaned" here. Since
+# we go by ID convention anyway, we keep facts on those plain contexts even when
+# undefined. (Those older files carry P&L/cash-flow but no balance sheet.)
 CURRENT_YEAR_CTX = "FourD"
 PRIOR_YEAR_CTX = "FiveD"
+CURRENT_BALANCE_SHEET_CTX = "OneI"
+
+# Plain headline context ids: One..Ten + D (duration) or I (instant), nothing else.
+_PLAIN_CTX = re.compile(
+    r"^(One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten)[DI]$")
 
 
 @dataclass
@@ -101,13 +124,10 @@ class ParsedXBRL:
         """Headline numbers for the quarter being reported (the OneD context)."""
         return self.facts_by_context.get(CURRENT_QUARTER_CTX, {})
 
-    def instant_facts(self, on: date) -> dict[str, float]:
-        """Balance-sheet facts as of the given instant date (matched by date)."""
-        out: dict[str, float] = {}
-        for cid, (_, _, inst) in self.context_meta.items():
-            if inst == on:
-                out.update(self.facts_by_context.get(cid, {}))
-        return out
+    def current_balance_sheet(self) -> dict[str, float]:
+        """Year-end balance-sheet facts (the OneI context). Empty for older
+        result XBRLs, which omit the balance sheet."""
+        return self.facts_by_context.get(CURRENT_BALANCE_SHEET_CTX, {})
 
 
 def parse_result_xbrl(raw: bytes) -> ParsedXBRL:
@@ -135,18 +155,21 @@ def parse_result_xbrl(raw: bytes) -> ParsedXBRL:
     nature: str | None = None
     facts: dict[str, dict[str, float]] = {}
     for el in root.iter():
-        if not isinstance(el.tag, str) or not el.tag.startswith(f"{{{_FIN_NS}}}"):
+        local = _fin_local(el.tag)
+        if local is None:
             continue
-        local = etree.QName(el).localname
         if local == "NatureOfReportStandaloneConsolidated" and el.text:
             nature = el.text.strip()
             continue
         ctx_id = el.get("contextRef")
-        if ctx_id not in meta or el.text is None:
+        if el.text is None:
             continue
-        start, end, inst, has_dims = meta[ctx_id]
-        if has_dims or (end is None and inst is None):  # skip breakdowns + figureless
-            continue
+        if ctx_id in meta:
+            _, end, inst, has_dims = meta[ctx_id]
+            if has_dims or (end is None and inst is None):  # skip breakdowns + figureless
+                continue
+        elif not _PLAIN_CTX.match(ctx_id or ""):
+            continue                          # orphan + not a plain headline ctx
         try:
             value = float(el.text)
         except ValueError:
