@@ -12,6 +12,7 @@ dependencies = [
     "lxml>=5.0",
     "google-genai>=1.0",
     "python-telegram-bot>=21.0",
+    "telegramify-markdown>=1.2.0",
 ]
 
 [project.optional-dependencies]

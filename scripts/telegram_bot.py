@@ -22,6 +22,7 @@ import io
 import logging
 import os
 
+import telegramify_markdown as tmd
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
@@ -53,9 +54,29 @@ def _authorized(update: Update) -> bool:
     return bool(u and u.id in _ALLOWED)
 
 
-def _chunks(text: str):
-    for i in range(0, len(text), _TG_LIMIT):
-        yield text[i:i + _TG_LIMIT]
+def _md_chunks(text: str, limit: int = 3500):
+    """Split markdown on paragraph/heading boundaries into <=limit pieces so each
+    converted chunk is self-contained valid MarkdownV2."""
+    chunks, buf = [], ""
+    for para in text.split("\n\n"):
+        if buf and len(buf) + len(para) + 2 > limit:
+            chunks.append(buf)
+            buf = para
+        else:
+            buf = f"{buf}\n\n{para}" if buf else para
+    if buf:
+        chunks.append(buf)
+    return chunks
+
+
+async def _send_markdown(chat, text: str) -> None:
+    """Send markdown rendered for Telegram (MarkdownV2), with plain-text fallback."""
+    for chunk in _md_chunks(text):
+        try:
+            await chat.send_message(tmd.markdownify(chunk), parse_mode="MarkdownV2")
+        except Exception:  # noqa: BLE001 — bad escape shouldn't drop the report
+            log.warning("MarkdownV2 send failed; falling back to plain text")
+            await chat.send_message(chunk)
 
 
 async def start(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -119,10 +140,9 @@ async def _run(target, symbol: str, consolidated: bool) -> None:
         await chat.send_message(f"❌ Failed for {symbol}: {type(e).__name__}: {e}")
         return
 
-    # Inline: just the analysis section (chunked). File: the full brief + analysis.
+    # Inline: the analysis section, rendered. File: the full brief + analysis.
     analysis = report.split("## Analysis", 1)[-1].strip() if "## Analysis" in report else report
-    for chunk in _chunks(analysis):
-        await chat.send_message(chunk)
+    await _send_markdown(chat, analysis)
     bio = io.BytesIO(report.encode("utf-8"))
     bio.name = f"{symbol}_{label}_report.md"
     await chat.send_document(document=bio, filename=bio.name,
