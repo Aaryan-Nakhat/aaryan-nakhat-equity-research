@@ -273,6 +273,9 @@ async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = min(_ALLOWED)
+    if not await asyncio.to_thread(scan.market_open_today):
+        log.info("market closed today (weekend/holiday) — skipping scheduled scan")
+        return
     log.info("scheduled watchlist scan starting")
     try:
         results, note = await asyncio.to_thread(scan.run_watchlist_scan)
