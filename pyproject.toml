@@ -13,6 +13,7 @@ dependencies = [
     "google-genai>=1.0",
     "python-telegram-bot>=21.0",
     "telegramify-markdown>=1.2.0",
+    "markdown>=3.10.2",
 ]
 
 [project.optional-dependencies]
