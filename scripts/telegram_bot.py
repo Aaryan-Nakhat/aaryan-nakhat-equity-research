@@ -29,6 +29,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
 from equity_research.reports import resolve as resolver
+from equity_research.reports.pdf import report_to_pdf
 from equity_research.reports.pipeline import generate_report
 
 _LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -140,11 +141,17 @@ async def _run(target, symbol: str, consolidated: bool) -> None:
         await chat.send_message(f"❌ Failed for {symbol}: {type(e).__name__}: {e}")
         return
 
-    # Inline: the analysis section, rendered. File: the full brief + analysis.
+    # Inline: the analysis section, rendered. Attachment: the full report as PDF.
     analysis = report.split("## Analysis", 1)[-1].strip() if "## Analysis" in report else report
     await _send_markdown(chat, analysis)
-    bio = io.BytesIO(report.encode("utf-8"))
-    bio.name = f"{symbol}_{label}_report.md"
+    try:
+        pdf = await asyncio.to_thread(report_to_pdf, report, f"{symbol} ({label})")
+        bio = io.BytesIO(pdf)
+        bio.name = f"{symbol}_{label}_report.pdf"
+    except Exception:  # noqa: BLE001 — fall back to the markdown text file
+        log.exception("PDF render failed; sending markdown")
+        bio = io.BytesIO(report.encode("utf-8"))
+        bio.name = f"{symbol}_{label}_report.md"
     await chat.send_document(document=bio, filename=bio.name,
                              caption=f"✅ {symbol} — full report ({label})")
 
