@@ -119,9 +119,14 @@ authorized; the brief/email layers are provider-agnostic.)
 **Remaining (optional):** auto-fetch latest filing PDF from the BSE feed; YoY
 annual-report diffing; live email-path test (needs `SMTP_*`).
 
-### Phase 5 — Triggers / alerting
-Event-driven emails: results day, ratio breaches, pledge increases, rating
-downgrades, technical breakouts.
+### Phase 5 — Watchlist alerts — 🟡 in progress
+**Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`, bot commands; see
+[`ALERTS.md`](ALERTS.md)): daily scan at **18:00 IST** (JobQueue + startup
+catch-up) over a Telegram-managed watchlist, all 15 event types (technical 1-6,
+announcements 7-11 incl. results→report, forensic/valuation 12-14, FII/DII 15),
+with `alert_state` dedup + silent first-sight seeding. Commands `/watch`,
+`/unwatch`, `/watchlist`, `/scan`. Initial 27-stock watchlist populated.
+**Remaining:** live-validate a `/scan` run end-to-end.
 
 ### Later (deferred)
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,

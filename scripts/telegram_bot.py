@@ -21,6 +21,8 @@ import asyncio
 import io
 import logging
 import os
+from datetime import datetime, time as dtime
+from zoneinfo import ZoneInfo
 
 import telegramify_markdown as tmd
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -28,9 +30,15 @@ from telegram.constants import ChatAction
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
+from equity_research import scan, watchlist
+from equity_research.analysis import alerts
+from equity_research.common.db import connect
 from equity_research.reports import resolve as resolver
 from equity_research.reports.pdf import report_to_pdf
 from equity_research.reports.pipeline import generate_report
+
+IST = ZoneInfo("Asia/Kolkata")
+SCAN_TIME = dtime(18, 0, tzinfo=IST)
 
 _LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "data", "processed", "telegram_bot.log")
@@ -80,6 +88,14 @@ async def _send_markdown(chat, text: str) -> None:
             await chat.send_message(chunk)
 
 
+async def _send_md_text(bot, chat_id: int, text: str) -> None:
+    """Send one short markdown message to a chat id (MarkdownV2, plain fallback)."""
+    try:
+        await bot.send_message(chat_id, tmd.markdownify(text), parse_mode="MarkdownV2")
+    except Exception:  # noqa: BLE001
+        await bot.send_message(chat_id, text)
+
+
 async def start(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         await update.message.reply_text("Not authorised.")
@@ -123,7 +139,13 @@ async def on_select(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await q.answer()
     if not _authorized(update):
         return
-    _, symbol, flag = q.data.split("|")
+    parts = q.data.split("|")
+    if parts[0] == "wl":                         # add to watchlist
+        symbol = parts[1]
+        await q.edit_message_text(f"Adding {symbol} to watchlist…")
+        await _do_watch(q.message.chat, symbol, "")
+        return
+    _, symbol, flag = parts                       # analyse now
     await q.edit_message_text(f"Selected {symbol}.")
     await _run(q, symbol, flag == "1")
 
@@ -156,6 +178,118 @@ async def _run(target, symbol: str, consolidated: bool) -> None:
                              caption=f"✅ {symbol} — full report ({label})")
 
 
+# ----------------- watchlist commands -----------------
+async def _do_watch(chat, symbol: str, company: str) -> None:
+    con = connect()
+    try:
+        watchlist.add(con, symbol, company)
+        ok = await asyncio.to_thread(watchlist.ensure_data, con, symbol)
+        await asyncio.to_thread(alerts.scan_symbol, con, symbol, [])   # seed state silently
+    finally:
+        con.close()
+    tail = "" if ok else " (no NSE financials — price/announcement alerts only)"
+    await chat.send_message(f"✅ Watching {symbol}{tail}")
+
+
+async def watch_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    name = " ".join(ctx.args).strip()
+    if not name:
+        await update.message.reply_text("Usage: /watch <company name>")
+        return
+    cands = await asyncio.to_thread(resolver.resolve, name)
+    if not cands:
+        await update.message.reply_text(f"Couldn't resolve “{name}”.")
+        return
+    if len(cands) == 1:
+        await _do_watch(update.message.chat, cands[0].symbol, cands[0].name)
+        return
+    buttons = [[InlineKeyboardButton(f"{c.name} ({c.symbol})", callback_data=f"wl|{c.symbol}")]
+               for c in cands[:5]]
+    await update.message.reply_text("Pick one to watch:",
+                                    reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def unwatch_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    sym = (ctx.args[0].upper() if ctx.args else "")
+    if not sym:
+        await update.message.reply_text("Usage: /unwatch <SYMBOL>")
+        return
+    con = connect()
+    try:
+        watchlist.remove(con, sym)
+    finally:
+        con.close()
+    await update.message.reply_text(f"Removed {sym} from watchlist.")
+
+
+async def watchlist_cmd(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    con = connect()
+    try:
+        ents = watchlist.entries(con)
+    finally:
+        con.close()
+    if not ents:
+        await update.message.reply_text("Watchlist is empty. Add with /watch <name>.")
+        return
+    lines = "\n".join(f"• {s} — {c}" if c else f"• {s}" for s, c in ents)
+    await update.message.reply_text(f"Watchlist ({len(ents)}):\n{lines}")
+
+
+# ----------------- scan + push -----------------
+async def _push_scan(bot, chat_id: int, results: dict, note: str | None) -> None:
+    if note:
+        await _send_md_text(bot, chat_id, note)
+    if not results:
+        await bot.send_message(chat_id, "No new watchlist events.")
+        return
+    for sym, fired in results.items():
+        for al in fired:
+            await _send_md_text(bot, chat_id, al.render())
+            if al.attach_report:
+                try:
+                    report = await asyncio.to_thread(generate_report, sym, deep=True)
+                    pdf = await asyncio.to_thread(report_to_pdf, report, sym)
+                    bio = io.BytesIO(pdf)
+                    bio.name = f"{sym}_report.pdf"
+                    await bot.send_document(chat_id, document=bio, filename=bio.name,
+                                            caption=f"📄 {sym} — results report")
+                except Exception:  # noqa: BLE001
+                    log.exception("report generation failed for %s", sym)
+
+
+async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    await update.message.reply_text("🔎 Running watchlist scan now (may take a few min)…")
+    results, note = await asyncio.to_thread(scan.run_watchlist_scan)
+    await _push_scan(ctx.bot, update.effective_chat.id, results, note)
+
+
+async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = min(_ALLOWED)
+    log.info("scheduled watchlist scan starting")
+    try:
+        results, note = await asyncio.to_thread(scan.run_watchlist_scan)
+    except Exception:  # noqa: BLE001
+        log.exception("scheduled scan failed")
+        return
+    await _push_scan(context.bot, chat_id, results, note)
+
+
+async def catchup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """On startup, run the scan if we're already past the daily slot (laptop was
+    likely off at 18:00). State-based dedup makes a double-run harmless."""
+    if datetime.now(IST).time() >= SCAN_TIME.replace(tzinfo=None):
+        log.info("startup catch-up scan (past 18:00 IST)")
+        await scan_job(context)
+
+
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -164,10 +298,17 @@ def main() -> None:
         raise SystemExit("TELEGRAM_ALLOWED_USERS not set — refusing to run open to everyone")
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(on_select, pattern=r"^an\|"))
+    app.add_handler(CommandHandler("watch", watch_cmd))
+    app.add_handler(CommandHandler("unwatch", unwatch_cmd))
+    app.add_handler(CommandHandler("watchlist", watchlist_cmd))
+    app.add_handler(CommandHandler("scan", scan_cmd))
+    app.add_handler(CallbackQueryHandler(on_select, pattern=r"^(an|wl)\|"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(on_error)
-    log.info("Bot running. Authorised users: %s", sorted(_ALLOWED))
+    # Daily watchlist scan at 18:00 IST + a startup catch-up if we missed it.
+    app.job_queue.run_daily(scan_job, time=SCAN_TIME)
+    app.job_queue.run_once(catchup_job, when=45)
+    log.info("Bot running. Authorised users: %s · daily scan 18:00 IST", sorted(_ALLOWED))
     app.run_polling(drop_pending_updates=True)
 
 
