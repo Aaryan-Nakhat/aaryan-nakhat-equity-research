@@ -3,7 +3,10 @@
 Daily *push*: a scan walks the watchlist, compares today's data against stored
 `alert_state`, and pushes a Telegram alert only on a genuine change. Runs inside
 the always-on bot via `JobQueue.run_daily` at **18:00 IST** (+ a startup
-catch-up if the laptop was off at 18:00). Manual trigger: `/scan`.
+catch-up if the laptop was off at 18:00). **Skips weekends and NSE trading
+holidays** — `scan.market_open_today()` checks the equity (CM) holiday calendar
+fetched from NSE's `holiday-master` and cached in `alert_state` (refreshed
+monthly). Manual `/scan` ignores the gate (always runs).
 
 ## Pieces
 

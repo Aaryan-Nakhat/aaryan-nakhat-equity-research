@@ -135,3 +135,19 @@ def corporate_actions(index: str = "equities") -> Any:
 def option_chain_equity(symbol: str) -> Any:
     """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
     return fetch_api(f"/api/option-chain-equities?symbol={symbol}")
+
+
+def trading_holidays() -> set:
+    """NSE equity (CM segment) trading holidays as a set of ``date`` objects."""
+    from datetime import datetime as _dt
+    out: set = set()
+    try:
+        data = fetch_api("/api/holiday-master?type=trading")
+    except Exception:  # noqa: BLE001
+        return out
+    for r in (data.get("CM") if isinstance(data, dict) else []) or []:
+        try:
+            out.add(_dt.strptime(r["tradingDate"], "%d-%b-%Y").date())
+        except (KeyError, ValueError, TypeError):
+            continue
+    return out

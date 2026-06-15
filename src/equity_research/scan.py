@@ -8,7 +8,8 @@ generates a deep report for any 'results filed' alert.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import duckdb
 
@@ -18,6 +19,56 @@ from equity_research.common.http import ScrapeError
 from equity_research.ingest import ingest_eod
 from equity_research.scrapers import nse_api
 from equity_research import watchlist
+
+
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def _meta(con, key):
+    r = con.execute("SELECT value FROM alert_state WHERE symbol='__meta__' AND key=?", [key]).fetchone()
+    return r[0] if r else None
+
+
+def _set_meta(con, key, value):
+    con.execute("INSERT OR REPLACE INTO alert_state(symbol, key, value, updated_at) "
+                "VALUES ('__meta__', ?, ?, now())", [key, value])
+
+
+def _holidays(con: duckdb.DuckDBPyConnection) -> set[date]:
+    """NSE trading holidays, cached in alert_state; refetched if >30 days stale."""
+    raw, fetched = _meta(con, "holidays"), _meta(con, "holidays_fetched")
+    fresh = False
+    if fetched:
+        try:
+            fresh = (date.today() - date.fromisoformat(fetched)).days <= 30
+        except ValueError:
+            fresh = False
+    if raw and fresh:
+        return {date.fromisoformat(x) for x in raw.split(",") if x}
+    hs = nse_api.trading_holidays()
+    if hs:
+        _set_meta(con, "holidays", ",".join(d.isoformat() for d in sorted(hs)))
+        _set_meta(con, "holidays_fetched", date.today().isoformat())
+        return hs
+    return {date.fromisoformat(x) for x in raw.split(",") if x} if raw else set()  # stale fallback
+
+
+def is_trading_day(con: duckdb.DuckDBPyConnection, d: date) -> bool:
+    """Weekday and not an NSE holiday."""
+    if d.weekday() >= 5:
+        return False
+    return d not in _holidays(con)
+
+
+def market_open_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """Is today (IST) a trading session? Used to skip weekend/holiday scans."""
+    own = con is None
+    con = con or connect()
+    try:
+        return is_trading_day(con, datetime.now(_IST).date())
+    finally:
+        if own:
+            con.close()
 
 
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
