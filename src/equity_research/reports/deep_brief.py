@@ -12,6 +12,8 @@ balance sheet and cash flow are present FY2023+ (older result XBRLs omit them).
 
 from __future__ import annotations
 
+from datetime import date
+
 import duckdb
 import numpy as np
 import pandas as pd
@@ -40,9 +42,10 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
     label = "consolidated" if consolidated else "standalone"
     L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
-         "_All figures ₹ crore unless noted. History depth is data-bound: P&L is "
-         "multi-year; balance sheet & cash flow are present only for years where the "
-         "result XBRL carried them (typically FY2023+)._\n"]
+         f"_Report generated {date.today():%d-%b-%Y}. All figures ₹ crore unless "
+         "noted. History depth is data-bound: P&L is multi-year; balance sheet & "
+         "cash flow are present only for years where the result XBRL carried them "
+         "(typically FY2023+)._\n"]
     if af.empty:
         return "\n".join(L) + "\nNo annual financials ingested for this symbol."
 
