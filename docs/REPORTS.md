@@ -37,10 +37,12 @@ annual report) is passed inline (`types.Part.from_bytes`) and read alongside the
 brief — this is where management commentary enters the thesis.
 
 **Auth (env, see `.env.example`) — two options:**
-- **the provider AI** (a cloud GCP): `LLM_USE_CLOUD=true`,
-  `LLM_PROJECT`, `LLM_REGION`, plus ADC
-  (`gcloud auth application-default login`) or a the provider express API key in
-  `GOOGLE_API_KEY`.
+- **the provider AI** (a cloud GCP) via a **service account**:
+  `LLM_USE_CLOUD=true`, `LLM_PROJECT`,
+  `LLM_REGION`, and `LLM_CREDENTIALS_FILE=./gcp-service-account.json`.
+  The key file is **gitignored** (`gcp-service-account.json` / `*service-account*.json`).
+  Falls back to `LLM_CREDENTIALS`, then to `gcloud` ADC if neither
+  is set.
 - **the LLM Developer API**: just `GOOGLE_API_KEY` (from your provider console).
 
 The client auto-selects the provider when `LLM_USE_CLOUD` is truthy, else

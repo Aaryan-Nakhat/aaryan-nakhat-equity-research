@@ -45,13 +45,24 @@ Keep it under ~450 words. This is analysis for a personal decision, not advice \
 for the public."""
 
 
+_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+
 def _client() -> llm_sdk.Client:
-    """the provider (project+location / ADC) if configured, else the Developer API key."""
+    """the provider (service account / ADC) if configured, else the Developer API key."""
     if os.environ.get("LLM_USE_CLOUD", "").lower() in ("1", "true", "yes"):
+        creds = None
+        sa_file = (os.environ.get("LLM_CREDENTIALS_FILE")
+                   or os.environ.get("LLM_CREDENTIALS"))
+        if sa_file:
+            from google.oauth2 import service_account
+            creds = service_account.Credentials.from_service_account_file(
+                sa_file, scopes=_SCOPES)
         return llm_sdk.Client(
             cloud mode=True,
             project=os.environ.get("LLM_PROJECT"),
             location=os.environ.get("LLM_REGION", "global"),
+            credentials=creds,   # None -> SDK falls back to ADC (gcloud login)
         )
     return llm_sdk.Client()  # reads GOOGLE_API_KEY / LLM_API_KEY
 

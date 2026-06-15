@@ -18,6 +18,10 @@ env/
 .env
 .env.local
 *.key
+# GCP service-account credentials — NEVER commit these
+gcp-service-account.json
+*service-account*.json
+*-credentials.json
 
 # Caches
 .pytest_cache/
