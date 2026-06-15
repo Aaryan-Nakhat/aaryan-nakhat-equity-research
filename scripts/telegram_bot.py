@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -29,8 +30,16 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 from equity_research.reports import resolve as resolver
 from equity_research.reports.pipeline import generate_report
 
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s | %(message)s")
+log = logging.getLogger("equitybot")
+
 _ALLOWED = {int(x) for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "").replace(" ", "").split(",") if x}
 _TG_LIMIT = 4000
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log.exception("handler error: %s", context.error)
 
 
 def _authorized(update: Update) -> bool:
@@ -53,6 +62,8 @@ async def start(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def on_text(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    log.info("message from user %s: %r", update.effective_user.id if update.effective_user else "?",
+             update.message.text)
     if not _authorized(update):
         await update.message.reply_text("Not authorised.")
         return
@@ -122,8 +133,9 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(on_select, pattern=r"^an\|"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    print(f"Bot running. Authorised users: {sorted(_ALLOWED)}")
-    app.run_polling()
+    app.add_error_handler(on_error)
+    log.info("Bot running. Authorised users: %s", sorted(_ALLOWED))
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
