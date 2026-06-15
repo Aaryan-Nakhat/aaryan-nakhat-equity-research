@@ -10,6 +10,7 @@ dependencies = [
     "duckdb>=1.0",
     "pandas>=2.2",
     "lxml>=5.0",
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
