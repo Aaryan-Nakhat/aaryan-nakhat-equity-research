@@ -79,9 +79,52 @@ def fii_dii_activity() -> Any:
     return fetch_api("/api/fiidiiTradeReact")
 
 
-def corporate_announcements(index: str = "equities") -> Any:
-    """Corporate announcements / filings feed (results, transcripts, PPTs)."""
-    return fetch_api(f"/api/corporate-announcements?index={index}")
+def corporate_announcements(index: str = "equities", symbol: str | None = None) -> Any:
+    """Corporate announcements / filings feed (results, transcripts, PPTs).
+
+    With ``symbol`` set, returns that company's recent announcements (the
+    market-wide feed only returns the latest ~20, so per-symbol is needed for
+    watchlist coverage)."""
+    path = f"/api/corporate-announcements?index={index}"
+    if symbol:
+        path += f"&symbol={symbol}"
+    return fetch_api(path)
+
+
+_BATCH_ANN = """async ({paths, retries, delay}) => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    for (const [key, p] of Object.entries(paths)) {
+        let last = null;
+        for (let i = 0; i < retries; i++) {
+            const r = await fetch(p, {headers: {'Accept': 'application/json'}});
+            if (r.status === 200) { last = await r.text(); break; }
+            await sleep(delay);
+        }
+        out[key] = last;
+    }
+    return out;
+}"""
+
+
+def corporate_announcements_batch(symbols: list[str]) -> dict[str, Any]:
+    """Fetch many symbols' announcements in ONE Camoufox session (warm page once,
+    then in-page XHR per symbol). Returns {symbol: parsed-json-or-None}."""
+    paths = {s: f"/api/corporate-announcements?index=equities&symbol={s}" for s in symbols}
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, Any] = {}
+    for sym, body in captured.items():
+        try:
+            out[sym] = json.loads(body) if body else []
+        except (json.JSONDecodeError, TypeError):
+            out[sym] = []
+    return out
 
 
 def corporate_actions(index: str = "equities") -> Any:

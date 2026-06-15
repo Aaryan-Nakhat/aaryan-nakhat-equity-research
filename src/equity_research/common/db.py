@@ -99,6 +99,22 @@ _SCHEMA = [
         PRIMARY KEY (trade_date, client_type)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS watchlist (
+        symbol    VARCHAR PRIMARY KEY,
+        company   VARCHAR,
+        added_at  TIMESTAMP DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS alert_state (
+        symbol      VARCHAR,
+        key         VARCHAR,
+        value       VARCHAR,
+        updated_at  TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol, key)
+    )
+    """,
 ]
 
 
