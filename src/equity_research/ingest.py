@@ -173,6 +173,21 @@ def ingest_eod_on_or_before(d: date, con: duckdb.DuckDBPyConnection, *,
     return None
 
 
+def ingest_sector_map(con: duckdb.DuckDBPyConnection, index: str = "nifty500") -> int:
+    """Land the symbol -> industry map from an NSE index constituent list."""
+    df = nse_archives.fetch_constituents(index)
+    out = df.rename(columns={"Company Name": "company", "Industry": "industry",
+                             "Symbol": "symbol"})[["symbol", "company", "industry"]].copy()
+    out["universe"] = index.upper()
+    con.register("_sec", out)
+    try:
+        con.execute("INSERT OR REPLACE INTO sector_map SELECT symbol, company, "
+                    "industry, universe FROM _sec")
+    finally:
+        con.unregister("_sec")
+    return len(out)
+
+
 def ingest_eod_range(start: date, end: date, con: duckdb.DuckDBPyConnection, *,
                      skip_existing: bool = True) -> dict[str, int]:
     """Backfill daily bhavcopy for every trading day in [start, end] (inclusive).

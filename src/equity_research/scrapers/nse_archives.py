@@ -60,6 +60,16 @@ def fetch_index_closes(d: date) -> pd.DataFrame:
     return _read_csv(raw)
 
 
+_CONSTITUENTS = "https://nsearchives.nseindia.com/content/indices/ind_{index}list.csv"
+
+
+def fetch_constituents(index: str = "nifty500") -> pd.DataFrame:
+    """Index constituents with industry classification (Company Name, Industry,
+    Symbol, Series, ISIN Code). ``index`` e.g. 'nifty500', 'nifty50'."""
+    raw = fetch_bytes(_CONSTITUENTS.format(index=index))
+    return pd.read_csv(io.BytesIO(raw))
+
+
 def fetch_participant_oi(d: date) -> pd.DataFrame:
     """Participant-wise F&O open interest (Client / DII / FII / Pro) for ``d``.
 

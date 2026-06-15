@@ -83,9 +83,14 @@ balance sheet).
 own history (contemporaneous, bonus-invariant); current snapshot + market cap
 feeding Altman X4 (RELIANCE Z 2.27→3.94). Bonus/split staleness surfaced.
 
-**Phase 2 essentially complete.** Remaining (deferrable): valuation **vs sector**
-(needs a peer universe); auto-adjust current shares for post-filing corporate
-actions; cache browser-tier catalog calls.
+**Valuation vs sector done** (`analysis/sector.py` + `sector_report.py`): peers
+from the Nifty-500 `Industry` map (`sector_map`); percentile-rank P/E & P/B vs
+sector. Validated — RELIANCE P/E 49.5 vs Oil & Gas median 9.8 (priciest in peer
+group; Jio/Retail premium).
+
+**Phase 2 complete.** Remaining (deferrable): auto-adjust current shares for
+post-filing corporate actions; cache browser-tier catalog calls; consolidated as
+the valuation default.
 
 ### Phase 3 — Technical analysis — 🟡 in progress
 **Built** (`analysis/technical.py` + `technical_report.py`, see

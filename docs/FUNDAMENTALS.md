@@ -150,6 +150,20 @@ filing, so a corporate action since then makes the live snapshot stale (RELIANCE
 1:1 bonus Oct-2024 → pass `--shares 1353.2`). The output surfaces this; history
 rows are each internally consistent (contemporaneous shares) and unaffected.
 
+## Valuation vs sector (`analysis/sector.py`)
+
+Peers come from `sector_map` — the NSE Nifty-500 constituent list's `Industry`
+tag (one plain-HTTP file; `ingest_sector_map`). RELIANCE → "Oil Gas & Consumable
+Fuels" (17 peers). `sector_valuation(symbol)` computes the target's current P/E &
+P/B (via `valuation.snapshot`) and percentile-ranks it against peers that have
+financials ingested — "cheaper than X% of peers".
+
+Report: `uv run python scripts/sector_report.py RELIANCE [--shares <crore>]`.
+
+Caveats: a peer participates only once its financials are ingested (browser-tier
+catalog per peer); peers assume no corporate action since their last annual
+(the target can be corrected with `--shares`/`target_shares_override`).
+
 ## Limits / follow-ups
 
 - **Valuation history depth** follows balance-sheet availability (FY2023+), since

@@ -71,6 +71,14 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS sector_map (
+        symbol     VARCHAR PRIMARY KEY,
+        company    VARCHAR,
+        industry   VARCHAR,
+        universe   VARCHAR        -- source index, e.g. 'NIFTY500'
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS participant_oi (
         trade_date          DATE,
         client_type         VARCHAR,
