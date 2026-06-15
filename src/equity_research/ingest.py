@@ -173,6 +173,34 @@ def ingest_eod_on_or_before(d: date, con: duckdb.DuckDBPyConnection, *,
     return None
 
 
+def ingest_eod_range(start: date, end: date, con: duckdb.DuckDBPyConnection, *,
+                     skip_existing: bool = True) -> dict[str, int]:
+    """Backfill daily bhavcopy for every trading day in [start, end] (inclusive).
+
+    Idempotent: weekends/holidays 404 and are skipped; dates already in
+    ``equity_eod`` are skipped when ``skip_existing``. Returns a small summary.
+    """
+    from datetime import timedelta
+    have: set = set()
+    if skip_existing:
+        have = {r[0] for r in con.execute(
+            "SELECT DISTINCT trade_date FROM equity_eod WHERE trade_date BETWEEN ? AND ?",
+            [start, end]).fetchall()}
+    ingested = skipped = holidays = 0
+    d = start
+    while d <= end:
+        if d.weekday() >= 5 or d in have:
+            skipped += 1
+        else:
+            try:
+                ingest_bhavcopy(d, con)
+                ingested += 1
+            except ScrapeError:
+                holidays += 1            # no file = market holiday
+        d += timedelta(days=1)
+    return {"ingested": ingested, "skipped": skipped, "holidays_or_missing": holidays}
+
+
 def ingest_eod(d: date, con: duckdb.DuckDBPyConnection) -> dict[str, int]:
     """Ingest the full daily EOD set for trade date ``d``."""
     return {

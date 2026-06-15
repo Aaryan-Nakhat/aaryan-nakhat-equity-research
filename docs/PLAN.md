@@ -87,11 +87,15 @@ feeding Altman X4 (RELIANCE Z 2.27→3.94). Bonus/split staleness surfaced.
 (needs a peer universe); auto-adjust current shares for post-filing corporate
 actions; cache browser-tier catalog calls.
 
-### Phase 3 — Technical analysis
-Computed from EOD OHLCV + delivery %:
-- Trend/momentum (DMAs, MACD, RSI, ADX), volatility (BBands, ATR),
-  volume/delivery conviction, relative strength vs index.
-- Derivatives positioning (OI, PCR, FII deriv stats) where scrapable.
+### Phase 3 — Technical analysis — 🟡 in progress
+**Built** (`analysis/technical.py` + `technical_report.py`, see
+[`TECHNICAL.md`](TECHNICAL.md)): SMA 20/50/200, RSI, MACD, Bollinger, ATR,
+volume + **delivery-% conviction**, 52-wk position, signals. Daily history
+backfilled via `ingest_eod_range` (`backfill_eod.py`) — 373 days. Validated on
+RELIANCE. Relative-strength-vs-Nifty wired (needs `index_close` backfill).
+
+**Remaining (deferrable):** derivatives positioning (OI, PCR, FII deriv stats —
+data already scrapable via `nse_archives`/`nse_api`); ADX.
 
 ### Phase 4 — Claude integration + email reports
 - Claude reads unstructured filings (annual reports, concall transcripts) →
