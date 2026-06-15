@@ -29,7 +29,7 @@ matters.
 ### Phase 0 — Scaffolding ✅ done
 Repo, structure, planning docs.
 
-### Phase 1 — Validate scraping (de-risk first) — 🟡 in progress
+### Phase 1 — Validate scraping (de-risk first) — ✅ done
 Prove `scrapling` can reliably pull before building on top.
 
 **Probe results (2026-06-13) — see [`SCRAPING.md`](SCRAPING.md):**
@@ -58,7 +58,7 @@ verified, re-runs overwrite cleanly).
 moved NSE paths (index constituents, index option chain); land `fo_bhavcopy` at
 contract grain when Phase 3 needs OI.
 
-### Phase 2 — Fundamental analysis — 🟡 in progress
+### Phase 2 — Fundamental analysis — ✅ done
 **Data path built + validated** (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)):
 NSE `corporates-financial-results` (catalog, browser) → XBRL on `nsearchives`
 (plain HTTP) → `in-bse-fin` tags. `scrapers/nse_financials.py` +
@@ -92,12 +92,13 @@ group; Jio/Retail premium).
 post-filing corporate actions; cache browser-tier catalog calls; consolidated as
 the valuation default.
 
-### Phase 3 — Technical analysis — 🟡 in progress
+### Phase 3 — Technical analysis — ✅ done
 **Built** (`analysis/technical.py` + `technical_report.py`, see
 [`TECHNICAL.md`](TECHNICAL.md)): SMA 20/50/200, RSI, MACD, Bollinger, ATR,
 volume + **delivery-% conviction**, 52-wk position, signals. Daily history
-backfilled via `ingest_eod_range` (`backfill_eod.py`) — 373 days. Validated on
-RELIANCE. Relative-strength-vs-Nifty wired (needs `index_close` backfill).
+backfilled via `ingest_eod_range` (`backfill_eod.py`) — 373 days; `index_close`
+also backfilled (~360 days) so relative-strength-vs-Nifty works. Validated on
+RELIANCE.
 
 **Remaining (deferrable):** derivatives positioning (OI, PCR, FII deriv stats —
 data already scrapable via `nse_archives`/`nse_api`); ADX.
@@ -135,7 +136,7 @@ The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
 - Digesting 200-page annual reports & concall transcripts.
 - YoY diffing risk factors / accounting policy / RPTs.
 - Synthesising everything into a readable thesis with a verdict and *reasons*,
-  delivered by email.
+  delivered via Telegram (formatted + PDF) or email.
 
 ## 5. Known risks / open questions
 

@@ -9,6 +9,7 @@ data (dict / `DataFrame`); no storage or analysis here.
 | `bse` | `api.bseindia.com` | plain HTTP | `fetch_scrip_header(scripcode)` → quote/company dict |
 | `nse_archives` | `nsearchives.nseindia.com` | plain HTTP | `fetch_bhavcopy(date)` (incl. `DELIV_PER`); `fetch_index_closes(date)`; `fetch_participant_oi(date)`; `fetch_fo_bhavcopy(date)` |
 | `nse_api` | `www.nseindia.com/api/*` | Camoufox browser | `fetch_api(path)` (generic in-page XHR); `fii_dii_activity()`; `corporate_announcements()`; `corporate_actions()`; `option_chain_equity(symbol)` |
+| `nse_financials` | NSE results API (catalog) + XBRL on `nsearchives` | browser (catalog) + plain HTTP (XBRL) | `list_result_filings(symbol, period)`; `parse_result_xbrl(bytes)` → structured `in-bse-fin` financials (see [`docs/FUNDAMENTALS.md`](../../../docs/FUNDAMENTALS.md)) |
 
 Prefer the plain-HTTP `nse_archives` files wherever they exist (fast, robust);
 the browser tier is only for `/api/` endpoints with no file equivalent.
