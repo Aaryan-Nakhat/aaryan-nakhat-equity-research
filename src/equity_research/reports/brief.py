@@ -7,6 +7,8 @@ synthesis prompt and the emailed report. No LLM here — just the numbers.
 
 from __future__ import annotations
 
+from datetime import date
+
 import duckdb
 import numpy as np
 
@@ -22,7 +24,8 @@ def _fmt(v, nd=2, pct=False, suffix=""):
 def build_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                 consolidated: bool = False, target_shares: float | None = None) -> str:
     """Markdown brief of every quant signal we have for ``symbol``."""
-    L: list[str] = [f"# {symbol} — analytical brief ({'consolidated' if consolidated else 'standalone'})\n"]
+    L: list[str] = [f"# {symbol} — analytical brief ({'consolidated' if consolidated else 'standalone'})",
+                    f"_Report generated {date.today():%d-%b-%Y}._\n"]
 
     # --- Fundamentals: TTM + annual trend ---
     t = fundamentals.ttm(con, symbol, consolidated)
