@@ -48,7 +48,7 @@ def main(argv: list[str]) -> int:
 
     print(brief)
     if dry_run:
-        print("\n[--dry-run: skipping Claude synthesis and email]")
+        print("\n[--dry-run: skipping the LLM synthesis and email]")
         return 0
 
     # Synthesis (needs the LLM/the provider env — see .env.example).
