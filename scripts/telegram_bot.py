@@ -30,8 +30,14 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 from equity_research.reports import resolve as resolver
 from equity_research.reports.pipeline import generate_report
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(name)s | %(message)s")
+_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "data", "processed", "telegram_bot.log")
+os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s | %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(_LOG_PATH, encoding="utf-8")],
+)
 log = logging.getLogger("equitybot")
 
 _ALLOWED = {int(x) for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "").replace(" ", "").split(",") if x}

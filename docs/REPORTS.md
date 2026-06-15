@@ -102,6 +102,23 @@ Setup: create a bot via **@BotFather** (`/newbot`) → token; get your ID from
 (keep it running, or schedule it). The genai client is a per-process singleton
 (creating several closes the shared httpx transport).
 
+### Always-on (Windows Task Scheduler)
+
+`scripts/run_bot.ps1` loads `.env` and runs the bot in an auto-restart loop. It's
+registered as scheduled task **`EquityResearchTelegramBot`** (trigger: at logon;
+restarts on failure). The bot logs to `data/processed/telegram_bot.log`; launcher
+restart markers go to `data/processed/bot_launcher.log`.
+
+```powershell
+Start-ScheduledTask  -TaskName EquityResearchTelegramBot   # start now
+Stop-ScheduledTask   -TaskName EquityResearchTelegramBot   # stop
+Get-ScheduledTask    -TaskName EquityResearchTelegramBot   # state
+Get-Content data\processed\telegram_bot.log -Tail 20 -Wait # live log
+```
+
+Re-register from scratch: see the `Register-ScheduledTask` call in the project
+history, or just run `scripts/run_bot.ps1` manually in a terminal.
+
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.
