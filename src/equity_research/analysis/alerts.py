@@ -197,8 +197,6 @@ _ANN_EVENTS: list[tuple[tuple[str, ...], str, str]] = [
     (("pledge", "encumbr", "creation of charge", "satisfaction of charge"), "Promoter pledge / charge", "red"),
     (("insider", "prohibition of insider", "code of conduct", "(pit)"), "Insider-trading disclosure", "warn"),
     (("credit rating", "rating action", "reaffirm", "rating of"), "Credit rating update", "warn"),
-    (("earnings call", "conference call", "concall", "analyst", "institutional investor",
-      "investor meet", "investor presentation", "investor/analyst"), "Concall / investor meet", "info"),
     (("bagging", "receipt of order", "award of order", "awarding of order", "letter of award",
       "work order", "wins order", "secures order", "bags order", "new order", "purchase order"),
      "Order / contract win", "green"),
@@ -217,10 +215,17 @@ def _categorise(desc: str, text: str, has_xbrl: bool) -> tuple[str | None, str, 
     Returns ``(None, ...)`` for routine compliance noise so the caller skips it.
     """
     blob = f"{desc} {text}".lower()
-    if has_xbrl or "financial result" in blob or ("result" in blob and "board" in blob):
-        return "Results filed", "filing", True
     if any(n in blob for n in _ANN_NOISE):
         return None, "info", False
+    # investor-facing material first — a results-day presentation/transcript is a
+    # concall, not "results" (keeps results from swallowing every XBRL filing).
+    if any(kw in blob for kw in ("earnings call", "conference call", "concall", "analyst meet",
+            "institutional investor", "investor meet", "investor presentation", "investor/analyst",
+            "transcript", "audio recording", "schedule of analyst")):
+        return "Concall / investor meet", "info", False
+    if "financial result" in blob or "unaudited financial" in blob or "audited financial" in blob \
+            or (has_xbrl and "result" in blob):
+        return "Results filed", "filing", True
     for keywords, title, sev in _ANN_EVENTS:
         if any(kw in blob for kw in keywords):
             return title, sev, False
@@ -244,7 +249,8 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
         return [], up
     last_dt = datetime.fromisoformat(last_seen)
     A: list[Alert] = []
-    for a in anns:
+    seen_titles: set[str] = set()
+    for a in anns:                              # newest-first
         adt = dt(a)
         if last_dt is not None and adt <= last_dt:
             break
@@ -252,6 +258,9 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
                                             str(a.get("hasXbrl", "")).lower() == "true")
         if title is None:                       # routine compliance noise — skip
             continue
+        if title in seen_titles:                # collapse repeats of the same event type
+            continue
+        seen_titles.add(title)
         att = (a.get("attchmntFile") or "").strip()
         att = att if att.lower().startswith("http") and att.lower().endswith(".pdf") else ""
         body = (a.get("attchmntText") or a.get("desc") or "")[:180]

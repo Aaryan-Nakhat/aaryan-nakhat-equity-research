@@ -214,14 +214,21 @@ def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 5) -> 
     (results / concall / scheme / etc.), inline. Capped to keep heavy days bounded."""
     candidates = [(sym, al) for sym, fired in results.items() for al in fired
                   if al.attachment and al.title in _ANALYZE_TITLES]
-    prio = {"Results filed": 0, "Concall / investor meet": 1}
+    prio = {"Results filed": 0, "Concall / investor meet": 1, "Scheme / M&A": 2}
     candidates.sort(key=lambda x: prio.get(x[1].title, 5))
     if not candidates:
         return
     from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
-    for sym, al in candidates[:cap]:
+    done, analyzed = 0, set()
+    for sym, al in candidates:
+        if done >= cap:
+            break
+        if sym in analyzed:                # one filing analysed per stock — spread the cap
+            continue
         try:
             al.analysis = synthesize.analyze_filing(fetch_bytes(al.attachment), sym, al.title)
+            analyzed.add(sym)
+            done += 1
         except Exception:  # noqa: BLE001 — a bad doc shouldn't break the scan
             log.exception("filing analysis failed for %s (%s)", sym, al.title)
 
