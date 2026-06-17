@@ -79,6 +79,44 @@ def fii_dii_activity() -> Any:
     return fetch_api("/api/fiidiiTradeReact")
 
 
+def _parse_deals(data: Any, key: str, deal_type: str) -> list[dict]:
+    """Parse one deal array (BULK/BLOCK) from the large-deal snapshot."""
+    out: list[dict] = []
+    rows = data.get(key) if isinstance(data, dict) else None
+    for r in rows or []:
+        def num(field: str) -> float | None:
+            try:
+                return float(str(r.get(field, "")).replace(",", "").strip())
+            except (TypeError, ValueError):
+                return None
+        out.append({
+            "symbol": (r.get("symbol") or "").strip(),
+            "company": (r.get("name") or "").strip(),
+            "deal_type": deal_type,
+            "buy_sell": (r.get("buySell") or "").strip().upper(),
+            "client": (r.get("clientName") or "").strip(),
+            "qty": num("qty"),
+            "price": num("watp"),
+        })
+    return out
+
+
+def large_deals() -> dict[str, list[dict]]:
+    """Today's **bulk** and **block** deals, market-wide (one snapshot call).
+
+    The NSE large-deal snapshot names the counterparty (``clientName``) — FIIs,
+    mutual funds, insurers, HNIs — with buy/sell, quantity and VWAP per stock.
+    Returns ``{'bulk': [...], 'block': [...]}``; callers filter to their symbols.
+    Degrades to empty lists if unavailable.
+    """
+    try:
+        data = fetch_api("/api/snapshot-capital-market-largedeal")
+    except Exception:  # noqa: BLE001 — never break the scan
+        return {"bulk": [], "block": []}
+    return {"bulk": _parse_deals(data, "BULK_DEALS_DATA", "bulk"),
+            "block": _parse_deals(data, "BLOCK_DEALS_DATA", "block")}
+
+
 def corporate_announcements(index: str = "equities", symbol: str | None = None) -> Any:
     """Corporate announcements / filings feed (results, transcripts, PPTs).
 

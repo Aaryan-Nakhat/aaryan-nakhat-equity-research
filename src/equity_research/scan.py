@@ -125,6 +125,40 @@ def fii_dii_note() -> str | None:
     return "📊 FII/DII (cash): " + " · ".join(parts) if parts else None
 
 
+def _fmt_qty(q: float | None) -> str:
+    if q is None:
+        return "?"
+    if q >= 1e7:
+        return f"{q / 1e7:.2f} Cr"
+    if q >= 1e5:
+        return f"{q / 1e5:.1f} L"
+    return f"{q:,.0f}"
+
+
+def _deal_alert(dl: dict) -> alerts.Alert:
+    """A bulk/block-deal Alert (green BUY / red SELL) for a watchlist stock."""
+    sev = "green" if dl.get("buy_sell") == "BUY" else "red"
+    price = f"₹{dl['price']:,.0f}" if dl.get("price") else "?"
+    title = f"{dl['deal_type'].title()} deal — {dl.get('buy_sell', '').title()}"
+    body = f"{dl.get('client', '?')} {dl.get('buy_sell', '').lower()} {_fmt_qty(dl.get('qty'))} sh @ {price}"
+    return alerts.Alert(dl["symbol"], sev, title, body)
+
+
+def watchlist_deals(con: duckdb.DuckDBPyConnection, syms: list[str]) -> dict[str, list[alerts.Alert]]:
+    """Today's bulk/block deals (market-wide, one fetch) filtered to ``syms``."""
+    try:
+        deals = nse_api.large_deals()
+    except Exception:  # noqa: BLE001
+        return {}
+    symset = set(syms)
+    out: dict[str, list[alerts.Alert]] = {}
+    for dl in (deals.get("bulk") or []) + (deals.get("block") or []):
+        sym = dl.get("symbol")
+        if sym in symset and dl.get("client"):
+            out.setdefault(sym, []).append(_deal_alert(dl))
+    return out
+
+
 def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
                        ) -> tuple[dict[str, list[alerts.Alert]], str | None]:
     """Returns ({symbol: [alerts]}, market_note). Ingests latest EOD first."""
@@ -153,7 +187,10 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
                 fired = []
             if fired:
                 results[sym] = fired
-        return results, fii_dii_note()
+        # per-stock bulk/block deals (institutional buy/sell) — merge in
+        for sym, deal_alerts in watchlist_deals(con, syms).items():
+            results.setdefault(sym, []).extend(deal_alerts)
+        return results, None      # market-wide FII/DII note dropped (per-stock now)
     finally:
         if own:
             con.close()

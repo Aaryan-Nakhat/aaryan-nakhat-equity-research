@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
+from equity_research.analysis.alerts import EMOJI  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
@@ -212,35 +213,35 @@ def handle_request(req: EmailRequest) -> None:
 
 
 # ----------------- watchlist push (self-healing daily) -----------------
-def _push_digest(results: dict, note: str | None) -> None:
+def _push_digest(results: dict, note: str | None = None) -> None:
+    """Lines-only daily scan grouped by symbol — institutional deals, corporate
+    events, and forensic/fundamental changes. No PDFs (request a full report by
+    emailing the stock name)."""
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send digest")
         return
-    if not results and not note:
+    if not results:
         log.info("scan produced no events — no digest email sent")
         return
     today = datetime.now(IST).date().isoformat()
     parts = [f"# Watchlist alerts — {today}\n"]
     if note:
         parts.append(note + "\n")
-    attachments: list[tuple[str, bytes]] = []
-    for sym, fired in results.items():
-        for al in fired:
-            parts.append(al.render())
-            if al.attach_report:
-                try:
-                    rep = generate_report(sym, deep=True)
-                    attachments.append((f"{sym}_{today}.pdf", _pdf_with_charts(sym, rep)))
-                except Exception:  # noqa: BLE001
-                    log.exception("digest report generation failed for %s", sym)
-    if not results:
-        parts.append("_No new watchlist events._")
+    for sym in sorted(results):
+        block = [f"### {sym}"]
+        for al in results[sym]:
+            emo = EMOJI.get(al.severity, "🔔")
+            block.append(f"- {emo} **{al.title}**" + (f" — {al.body}" if al.body else ""))
+        parts.append("\n".join(block))
+    parts.append("\n_Bulk/block deals name the counterparty (FIIs, MFs, insurers, HNIs) who "
+                 "crossed the disclosure threshold that day. Reply with a stock name for its "
+                 "full report._")
     md = "\n\n".join(parts)
     emailer.send_report(f"📊 Watchlist alerts — {today}", md, to=to,
-                        html=emailer.body_html(md, "Watchlist alerts"),
-                        attachments=attachments)
-    log.info("digest sent to %s (%d symbols, %d PDFs)", to, len(results), len(attachments))
+                        html=emailer.body_html(md, "Watchlist alerts"))
+    log.info("digest sent to %s (%d symbols, %d events)", to,
+             len(results), sum(len(v) for v in results.values()))
 
 
 def maybe_scan() -> None:

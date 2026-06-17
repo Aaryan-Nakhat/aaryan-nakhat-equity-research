@@ -33,6 +33,12 @@ The pure momentum/trading signals were **dropped** (golden/death cross,
 price-vs-200-DMA, RSI overbought/oversold, volume spike) to keep the watchlist
 fundamental/forensic rather than trading-oriented.
 
+**Institutional deals (per stock, daily):** today's **bulk + block deals** from
+NSE's large-deal snapshot (`nse_api.large_deals` → one market-wide fetch, filtered
+to the watchlist) — names the counterparty (FIIs / MFs / insurers / HNIs) with
+BUY/SELL, qty and VWAP. Green for BUY, red for SELL. (No daily *per-stock* FII/DII
+cash figure exists anywhere — bulk/block deals are the real daily signal.)
+
 **Price context (from `equity_eod`, cheap):** 52-week high/low · **delivery-%
 spike** (>1.5× 20d — institutional conviction) · big single-day move (>6% — a
 "something happened, look for news" trigger).
@@ -41,16 +47,23 @@ spike** (>1.5× 20d — institutional conviction) · big single-day move (>6% �
 > 1 percentage point in **pledged % of promoter holding** (NSE pledge feed); the
 text-based pledge *announcement* alert is kept too.
 
-**Announcements (NSE per-symbol feed, one batched browser session):** new
-**results filed** (→ triggers a full deep report + PDF) · dividend/bonus/split/
-buyback · credit-rating update · promoter pledge / insider (SAST) · other
-disclosures. Categorised from the announcement `desc`/`hasXbrl`.
+**Corporate events — a defined taxonomy** (NSE per-symbol announcement feed, one
+batched browser session; `alerts._categorise`): results · dividend · bonus · stock
+split · **rights issue** · buyback · **QIP / fund-raising / preferential** ·
+**scheme / M&A / demerger** · **open offer / SAST** · acquisition/disposal ·
+**concall / investor meet** · board meeting · AGM/EGM · credit rating · director/
+KMP change · **order / contract win** · pledge/charge · delisting. Routine
+compliance **noise is skipped** (trading-window, newspaper publication, duplicate
+share, investor complaints, Reg-74). Results no longer auto-attach a PDF in the
+email digest — request the full report by replying with the stock name.
 
 **Fundamental / forensic (from ingested `financials`):** forensic flip
 (Altman band drop, Beneish crossing −1.78, Piotroski drop ≥2) · CFO/PAT falling
-below 1 · P/E breaking out of its own historical range.
+below 1 · P/E breaking out of its own historical range. Each line carries a
+plain-English read of what the number means.
 
-**Flows (market-wide):** daily FII/DII cash net note.
+The market-wide FII/DII daily note was **dropped** — per-stock institutional
+activity now comes from the bulk/block deals above.
 
 ## How "new" is decided (no spam)
 
@@ -64,8 +77,11 @@ day-one flood). State-based dedup also makes a double-run harmless.
 ## Cost / limits
 
 - Price + fundamental + accruals detection is DB-only (fast, all symbols, seconds).
-- Announcement and promoter-pledge detection each use **one** Camoufox session for
-  the whole watchlist (batched in-page XHR per symbol) — the slow part of the scan.
+- Announcements + promoter-pledge each use **one** Camoufox session for the whole
+  watchlist (batched in-page XHR per symbol); bulk/block deals are one more single
+  market-wide fetch — these browser calls are the slow part of the scan.
+- The **email digest is lines-only (no PDFs)** → sends in seconds even on heavy
+  results days; grouped by symbol. Telegram still attaches PDFs (parked channel).
 - The bot only runs while the laptop is on; a missed 18:00 slot is covered by the
   startup catch-up. True 24/7 needs a small server.
 - Fundamental/valuation events need financials ingested; symbols without NSE

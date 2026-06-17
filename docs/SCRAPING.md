@@ -91,6 +91,7 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/corporate-announcements?index=equities` | ✅ 200 | `corporate_announcements()` |
 | `/api/corporates-corporateActions?index=equities` | ✅ 200 | `corporate_actions()` |
 | `/api/corporate-pledgedata?index=equities&symbol=…` | ✅ 200 (probed 2026-06-17) | `promoter_pledge[_batch]()` |
+| `/api/snapshot-capital-market-largedeal` | ✅ 200 (bulk/block/short deals, market-wide) | `large_deals()` |
 | `/api/corporate-share-holdings-master?index=equities&symbol=…` | ✅ 200 (full shareholding pattern) | — |
 | `/api/option-chain-equities?symbol=…` | ✅ 200 (empty when closed) | `option_chain_equity()` |
 | `/api/equity-stockIndices?index=NIFTY 50` | ❌ 404 (path moved) | — |
