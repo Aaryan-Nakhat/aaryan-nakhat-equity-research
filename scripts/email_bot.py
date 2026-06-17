@@ -36,7 +36,7 @@ from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import generate_report, report_summary  # noqa: E402
+from equity_research.reports.pipeline import generate_report  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -140,12 +140,11 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes:
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> None:
     log.info("generating report for %s (req from %s)", symbol, req.sender)
     _ack(symbol, req, resolved_name)
-    report_md = generate_report(symbol, deep=True)     # full report -> PDF
-    summary_md = report_summary(symbol)                # concise -> email body
+    report_md = generate_report(symbol, deep=True)     # full report — in the body AND the PDF
     pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
-    body = f"{head}\n\n{summary_md}"
+    body = f"{head}\n\n{report_md}"
     emailer.send_report(
         _re_subject(req.subject),
         body,

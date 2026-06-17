@@ -86,9 +86,7 @@ def main(argv: list[str]) -> int:
 
     if do_email:
         from equity_research.reports.email import body_html, send_report
-        from equity_research.reports.pipeline import report_summary
-        summary = report_summary(symbol, consolidated=consolidated)
-        send_report(f"Research: {symbol}", summary, html=body_html(summary, symbol),
+        send_report(f"Research: {symbol}", report, html=body_html(report, symbol),
                     attachments=[(f"{symbol}.pdf", pdf_bytes)])
         print(f"\n[emailed report for {symbol}]")
     return 0
