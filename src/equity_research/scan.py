@@ -71,6 +71,26 @@ def market_open_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
             con.close()
 
 
+def already_scanned_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_scan_date") == datetime.now(_IST).date().isoformat()
+    finally:
+        if own:
+            con.close()
+
+
+def mark_scanned(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_scan_date", datetime.now(_IST).date().isoformat())
+    finally:
+        if own:
+            con.close()
+
+
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
     """Ingest the latest available trading day's full EOD set (idempotent)."""
     today = date.today()

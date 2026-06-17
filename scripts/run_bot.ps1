@@ -29,6 +29,6 @@ New-Item -ItemType Directory -Force -Path (Split-Path $launchlog) | Out-Null
 while ($true) {
     "$(Get-Date -Format o)  starting bot" | Out-File -Append -FilePath $launchlog -Encoding utf8
     & $uv run python scripts/telegram_bot.py
-    "$(Get-Date -Format o)  bot exited (code $LASTEXITCODE); restarting in 15s" | Out-File -Append -FilePath $launchlog -Encoding utf8
-    Start-Sleep -Seconds 15
+    "$(Get-Date -Format o)  bot exited (code $LASTEXITCODE); restarting in 60s" | Out-File -Append -FilePath $launchlog -Encoding utf8
+    Start-Sleep -Seconds 60
 }
