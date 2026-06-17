@@ -11,6 +11,7 @@ from __future__ import annotations
 import email
 import os
 from dataclasses import dataclass
+from datetime import date, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
@@ -101,15 +102,23 @@ class Inbox:
             self._c.idle_done()
         return bool(responses)
 
-    def fetch_requests(self, allowed: set[str]) -> list[EmailRequest]:
-        """UNSEEN messages from allowlisted senders (excludes the bot's own)."""
+    def fetch_requests(self, allowed: set[str], since_days: int = 1) -> list[EmailRequest]:
+        """UNSEEN messages from allowlisted senders (excludes the bot's own).
+
+        Searches per allowed sender (``UNSEEN FROM <addr> SINCE <recent>``) rather
+        than all UNSEEN — the bot's mailbox is a real inbox that may hold
+        thousands of unread messages; we only ever want recent mail from you.
+        """
         assert self._c is not None
         out: list[EmailRequest] = []
-        uids = self._c.search(["UNSEEN"])
+        since = date.today() - timedelta(days=since_days)
+        uids: set[int] = set()
+        for addr in allowed:
+            uids.update(self._c.search(["UNSEEN", "FROM", addr, "SINCE", since]))
         if not uids:
             return out
         # BODY.PEEK[] so reading doesn't auto-mark Seen — we mark only on success.
-        fetched = self._c.fetch(uids, ["BODY.PEEK[]"])
+        fetched = self._c.fetch(list(uids), ["BODY.PEEK[]"])
         for uid, data in fetched.items():
             raw = data.get(b"BODY[]") or data.get(b"RFC822")
             if not raw:
