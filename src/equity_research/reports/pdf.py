@@ -31,13 +31,21 @@ hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
 """
 
 
-def report_to_pdf(markdown_text: str, title: str = "") -> bytes:
-    """Render a markdown report string to PDF bytes (landscape A4)."""
+def render_html(markdown_text: str, title: str = "") -> str:
+    """Render a markdown report string to a full styled HTML document.
+
+    Shared by the PDF renderer and the email body so both look identical.
+    """
     body = _md.markdown(markdown_text,
                         extensions=["tables", "fenced_code", "sane_lists"])
-    html = (f'<!doctype html><html><head><meta charset="utf-8">'
+    return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<title>{title}</title><style>{_CSS}</style></head>'
             f'<body>{body}</body></html>')
+
+
+def report_to_pdf(markdown_text: str, title: str = "") -> bytes:
+    """Render a markdown report string to PDF bytes (landscape A4)."""
+    html = render_html(markdown_text, title)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:

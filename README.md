@@ -16,14 +16,16 @@ Personal use. Not a hosted product.
   scores, FCFF/FCFE, CFO-quality, valuation vs own history & sector) and
   technical (trend, momentum, volume, delivery-% conviction, relative strength).
 - **Report** — Gemini reads the quant brief (+ optional filing PDF) and writes a
-  forensic thesis, delivered via a **Telegram bot** (formatted inline + styled
-  PDF) or email.
+  forensic thesis, delivered via a **Telegram bot** *or an **email bot*** (chosen
+  by the `CHANNELS` flag) — both interactive (ask for a stock) and push (daily
+  watchlist digest), with formatted inline output + a styled PDF.
 
 ## Status
 
 Working end-to-end (NSE/BSE → DuckDB → fundamentals/forensics/technicals/
-valuation → Gemini report → Telegram bot, always-on). Phases 1–4 done; Phase 5
-(watchlist alerts) pending. Docs:
+valuation → Gemini report → Telegram **or email** bot, always-on). Phases 1–5
+done (on-demand reports + daily watchlist alerts); an email channel mirrors the
+Telegram one for when Telegram is ISP-blocked. Docs:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.

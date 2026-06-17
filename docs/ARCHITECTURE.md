@@ -50,8 +50,9 @@ with PDF reports and holiday-aware scheduling. Per-area detail lives in
                    └───────────────────────────────┬─────────────────────────────┘
                                                    ▼
                           ┌──────────────────────────────────────────┐
-                          │  TELEGRAM BOT  (scripts/telegram_bot.py)  │
-                          │  always-on: run_bot.ps1 + Task Scheduler  │
+                          │  DELIVERY  (CHANNELS env: telegram | email)│
+                          │  telegram_bot.py  ·  email_bot.py (IMAP)   │
+                          │  always-on: run_*.ps1 + Task Scheduler     │
                           └───────────────┬───────────────┬──────────┘
                                           │               │
                               PULL (you ask)        PUSH (scheduled)
@@ -101,4 +102,4 @@ JobQueue 18:00 IST  (+ startup catch-up)
 | **Analyse** | deterministic Python | `analysis/{fundamentals,forensic,valuation,sector,technical,alerts}.py` |
 | **Report** | brief → LLM → format | `reports/{brief,deep_brief,resolve,synthesize,pdf,email,pipeline}.py` |
 | **LLM** | synthesis + name resolution | Gemini 2.5 Pro via **Vertex** (service account) |
-| **Deliver** | bot + daily scan | `scripts/telegram_bot.py`, `scan.py`, `watchlist.py`, `run_bot.ps1` |
+| **Deliver** | bot(s) + daily scan; channel via `CHANNELS` | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
