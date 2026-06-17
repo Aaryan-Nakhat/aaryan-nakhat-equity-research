@@ -31,10 +31,15 @@ def peers(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
 
 def _pctile(values: list[float], x: float) -> float:
     """% of peer values strictly greater than x (so for P/E: % of peers more
-    expensive => higher means the target is cheaper than that many peers)."""
-    if not values:
+    expensive => higher means the target is cheaper than that many peers).
+
+    Robust to missing data: drops None/NaN peers, and returns NaN if the target
+    value ``x`` is itself missing (e.g. banks have no standard P/E from our XBRL —
+    ``None == None`` would otherwise slip past a NaN guard and crash the compare)."""
+    vals = [v for v in values if v is not None and v == v]
+    if not vals or x is None or x != x:
         return float("nan")
-    return 100 * sum(1 for v in values if v > x) / len(values)
+    return 100 * sum(1 for v in vals if v > x) / len(vals)
 
 
 def sector_valuation(con: duckdb.DuckDBPyConnection, symbol: str,
