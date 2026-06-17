@@ -256,33 +256,18 @@ async def watchlist_cmd(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None
 
 
 # ----------------- scan + push -----------------
-async def _push_scan(bot, chat_id: int, results: dict, note: str | None) -> None:
-    if note:
-        await _send_md_text(bot, chat_id, note)
-    if not results:
-        await bot.send_message(chat_id, "No new watchlist events.")
-        return
-    for sym, fired in results.items():
-        for al in fired:
-            await _send_md_text(bot, chat_id, al.render())
-            if al.attach_report:
-                try:
-                    report = await asyncio.to_thread(generate_report, sym, deep=True)
-                    pdf = await asyncio.to_thread(_pdf_with_charts, sym, report, sym)
-                    bio = io.BytesIO(pdf)
-                    bio.name = f"{sym}_report.pdf"
-                    await bot.send_document(chat_id, document=bio, filename=bio.name,
-                                            caption=f"📄 {sym} — results report")
-                except Exception:  # noqa: BLE001
-                    log.exception("report generation failed for %s", sym)
+async def _push_scan(bot, chat_id: int, results: dict, movers: list) -> None:
+    today = datetime.now(IST).date().isoformat()
+    md = scan.format_digest(today, results, movers or [])
+    await _send_md_text(bot, chat_id, md)
 
 
 async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
     await update.message.reply_text("🔎 Running watchlist scan now (may take a few min)…")
-    results, note = await asyncio.to_thread(scan.run_watchlist_scan)
-    await _push_scan(ctx.bot, update.effective_chat.id, results, note)
+    results, movers = await asyncio.to_thread(scan.run_watchlist_scan)
+    await _push_scan(ctx.bot, update.effective_chat.id, results, movers)
 
 
 async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -290,11 +275,11 @@ async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = min(_ALLOWED)
     log.info("watchlist scan starting")
     try:
-        results, note = await asyncio.to_thread(scan.run_watchlist_scan)
+        results, movers = await asyncio.to_thread(scan.run_watchlist_scan)
     except Exception:  # noqa: BLE001
         log.exception("scan failed")
         return
-    await _push_scan(context.bot, chat_id, results, note)
+    await _push_scan(context.bot, chat_id, results, movers)
     await asyncio.to_thread(scan.mark_scanned)
 
 
