@@ -210,3 +210,48 @@ def beneish_m(con: duckdb.DuckDBPyConnection, symbol: str, *,
          + 0.115 * depi - 0.172 * sgai + 4.679 * tata - 0.327 * lvgi)
     return Score("Beneish M", m, comps,
                  note="SG&A~=employee+other; COGS~=materials+purchases+inv-change")
+
+
+# --------------------------------------------------------------------------- #
+# Accruals (earnings quality): balance-sheet Sloan ratio + cash-flow accruals.
+# --------------------------------------------------------------------------- #
+def accruals(con: duckdb.DuckDBPyConnection, symbol: str, *,
+             consolidated: bool = False) -> Score:
+    """Sloan balance-sheet accruals ratio (+ the cash-flow accruals for context).
+
+    Sloan = [Δ(non-cash current assets) − Δ(non-debt current liabilities) − D&A]
+    / average total assets. High positive accruals = profit not backed by cash =
+    a classic earnings-quality red flag (low-accrual firms historically outperform).
+    """
+    a = load_annual(con, symbol, consolidated)
+    if len(a) < 2:
+        return Score("Sloan accruals %", None, missing=["<need 2 years>"])
+    cur, pri = _row_getter(a, a.index[-1]), _row_getter(a, a.index[-2])
+    missing: list[str] = []
+
+    def both(name):
+        c, p = cur(name), pri(name)
+        if c is None or p is None:
+            missing.append(name)
+        return c, p
+
+    ca_c, ca_p = both("CurrentAssets")
+    cash_c, cash_p = both("CashAndCashEquivalents")
+    cl_c, cl_p = both("CurrentLiabilities")
+    dep_c, _ = both("DepreciationDepletionAndAmortisationExpense")
+    ta_c, ta_p = both("Assets")
+    std_c, std_p = cur("BorrowingsCurrent") or 0.0, pri("BorrowingsCurrent") or 0.0
+    if missing:
+        return Score("Sloan accruals %", None, missing=missing,
+                     note="needs current + prior-year balance sheet")
+    d_nwc = (ca_c - cash_c - (ca_p - cash_p)) - ((cl_c - std_c) - (cl_p - std_p))
+    accr = d_nwc - dep_c
+    avg_ta = (ta_c + ta_p) / 2
+    if not avg_ta:
+        return Score("Sloan accruals %", None, note="zero average assets")
+    comps = {"sloan_%": 100 * accr / avg_ta, "delta_nwc": d_nwc, "depreciation": dep_c}
+    ni_c, cfo_c = cur("ProfitLossForPeriod"), cur("CashFlowsFromUsedInOperatingActivities")
+    if ni_c is not None and cfo_c is not None and ta_c:
+        comps["cashflow_accruals_%"] = 100 * (ni_c - cfo_c) / ta_c
+    return Score("Sloan accruals %", 100 * accr / avg_ta, comps,
+                 note="high positive => aggressive (profit not cash-backed)")

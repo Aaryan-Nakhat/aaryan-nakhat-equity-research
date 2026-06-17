@@ -16,7 +16,7 @@ import duckdb
 from equity_research.analysis import alerts
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError
-from equity_research.ingest import ingest_eod
+from equity_research.ingest import ingest_eod, store_pledge
 from equity_research.scrapers import nse_api
 from equity_research import watchlist
 
@@ -138,10 +138,17 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
             anns_by_sym = nse_api.corporate_announcements_batch(syms) if syms else {}
         except Exception:  # noqa: BLE001
             anns_by_sym = {}
+        # one more batched session for promoter-pledge snapshots (persist + alert)
+        try:
+            pledge_by_sym = nse_api.promoter_pledge_batch(syms) if syms else {}
+            store_pledge(con, pledge_by_sym)
+        except Exception:  # noqa: BLE001
+            pledge_by_sym = {}
         results: dict[str, list[alerts.Alert]] = {}
         for sym in syms:
             try:
-                fired = alerts.scan_symbol(con, sym, anns_by_sym.get(sym, []))
+                fired = alerts.scan_symbol(con, sym, anns_by_sym.get(sym, []),
+                                           pledge_by_sym.get(sym))
             except Exception:  # noqa: BLE001 — one bad symbol shouldn't kill the scan
                 fired = []
             if fired:

@@ -18,7 +18,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from equity_research.analysis import forensic, fundamentals, sector, technical, valuation
+from equity_research.analysis import forensic, fundamentals, quant, sector, technical, valuation
 from equity_research.analysis.fundamentals import load_annual
 
 CR = 1e7
@@ -262,6 +262,22 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         L.append("  - components: " + ", ".join(f"{k}={_f(v,3)}" for k, v in m.components.items()))
         if m.note:
             L.append(f"  - note: {m.note}")
+    acc = forensic.accruals(con, symbol, consolidated=consolidated)
+    if acc.value is not None:
+        L.append(f"**Sloan accruals = {_f(acc.value, 1, pct=True)}** of avg assets "
+                 f"(cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}) "
+                 "— high positive ⇒ earnings not backed by cash.")
+    p = con.execute(
+        "SELECT period_end, promoter_holding_pct, pledged_pct_of_promoter, pledged_pct_of_total "
+        "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
+    if p:
+        L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
+                 f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of promoter holding pledged** "
+                 f"({_f(p[3], 1, pct=True)} of total shares).")
+    else:
+        L.append("**Promoter pledge:** n/a (no shareholding snapshot ingested).")
+    L.append("- **Contingent liabilities / related-party transactions** live in the annual-report "
+             "notes (not in structured XBRL) — supply the filing PDF to fold these in.")
     L.append("")
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
@@ -281,14 +297,70 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     if sec.get("peers_with_data"):
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
+    # ===================== QUANT VALUATION (Monte-Carlo DCF) =====================
+    inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
+    L += ["## 11. Quant valuation (Monte-Carlo DCF)"]
+    if inp.is_financial:
+        L.append("- FCFF-DCF is not meaningful for a lender/financial; skipped."
+                 + (f" {inp.note}" if inp.note else ""))
+    elif not inp.usable:
+        L.append(f"- DCF inputs unavailable: {', '.join(inp.missing) or inp.note or 'n/a'}.")
+    else:
+        mc = quant.monte_carlo_dcf(inp)
+        rev = quant.reverse_dcf(inp)
+        sc = quant.scenario_dcf(inp)
+        L.append(f"- Drivers: revenue ₹{_f(inp.rev0 / CR, 0)} cr · growth "
+                 f"{_f(100 * inp.growth, 1, pct=True)} (σ {_f(100 * inp.growth_sigma, 1)}) · "
+                 f"EBIT margin {_f(100 * inp.ebit_margin, 1, pct=True)} · WACC "
+                 f"{_f(100 * inp.wacc, 1, pct=True)} (β {_f(inp.beta, 2)}) · terminal g "
+                 f"{_f(100 * inp.terminal_growth, 1, pct=True)} · net debt ₹{_f(inp.net_debt / CR, 0)} cr")
+        if mc.median and mc.price:
+            if mc.price <= mc.median:
+                mos = f"margin of safety {_f(100 * (mc.median - mc.price) / mc.median, 0)}%"
+            else:
+                mos = f"price is {_f(mc.price / mc.median, 1)}x the DCF median (no margin of safety)"
+            L.append(f"- **Intrinsic value/share ₹{_f(mc.median, 0)} (median)**, p10–p90 "
+                     f"₹{_f(mc.p10, 0)}–{_f(mc.p90, 0)}; price ₹{_f(mc.price, 0)} → {mos}; "
+                     f"P(undervalued) {_f(100 * mc.prob_undervalued, 0)}%.")
+        L.append(f"- Scenario fair value — bear ₹{_f(sc.get('bear'), 0)} · base "
+                 f"₹{_f(sc.get('base'), 0)} · bull ₹{_f(sc.get('bull'), 0)}.")
+        if rev.get("implied_growth") is not None:
+            L.append(f"- Reverse-DCF: today's price implies ~{_f(100 * rev['implied_growth'], 1, pct=True)} "
+                     f"revenue growth (vs {_f(100 * (rev.get('historical_growth') or 0), 1, pct=True)} "
+                     f"historical) — {'plausible' if rev.get('plausible') else 'demanding'}.")
+        elif rev.get("note"):
+            L.append(f"- Reverse-DCF: {rev['note']}.")
+        if inp.note:
+            L.append(f"- _{inp.note.strip()}_")
+    L.append("- _DCF is assumption-driven — read the distribution/range, not a point estimate._")
+    L.append("")
+
+    # ===================== STATISTICAL FORENSICS =====================
+    L += ["## 12. Statistical forensics"]
+    bf = quant.benford(con, symbol)
+    if bf.get("mad") is not None:
+        L.append(f"- Benford first-digit conformity: MAD {_f(bf['mad'], 4)} → **{bf['verdict']}** "
+                 f"(n={bf['n']})" + (" — ⚠ possible manipulation/rounding" if bf.get("flag") else "") + ".")
+    else:
+        L.append(f"- Benford: {bf.get('note', 'n/a')}.")
+    zs = quant.sector_zscores(con, symbol, consolidated)
+    if zs.get("ratios"):
+        rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _f(v["z"], 2)]
+                for k, v in zs["ratios"].items()]
+        L += [f"- Sector-relative z-scores ({zs.get('industry', '?')}, vs {len(rows)} ratios over peers):",
+              _table(["Ratio", "Value", "Peer mean", "z"], rows)]
+    else:
+        L.append(f"- Sector z-scores: {zs.get('note', 'n/a')}.")
+    L.append("")
+
     ts = technical.snapshot(con, symbol)
     if ts:
-        L += ["## 11. Technical snapshot",
+        L += ["## 13. Technical snapshot",
               f"- Close ₹{_f(ts['close'],2)} · SMA20/50/200 {_f(ts['sma20'],0)}/{_f(ts['sma50'],0)}/{_f(ts['sma200'],0)} · "
               f"RSI {_f(ts['rsi14'],0)} · {_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
               f"- Signals: {', '.join(ts['signals'])}"]
 
-    L += ["", "## 12. Notes",
+    L += ["", "## 14. Notes",
           "- **Order book / backlog** is not in the structured XBRL filings and is "
           "only relevant to order-driven businesses (EPC / capital goods / IT services); "
           "n/a for this company type. It would need separate extraction from the annual "

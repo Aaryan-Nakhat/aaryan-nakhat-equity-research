@@ -90,6 +90,8 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/fiidiiTradeReact` | ✅ 200 | `nse_api.fii_dii_activity()` |
 | `/api/corporate-announcements?index=equities` | ✅ 200 | `corporate_announcements()` |
 | `/api/corporates-corporateActions?index=equities` | ✅ 200 | `corporate_actions()` |
+| `/api/corporate-pledgedata?index=equities&symbol=…` | ✅ 200 (probed 2026-06-17) | `promoter_pledge[_batch]()` |
+| `/api/corporate-share-holdings-master?index=equities&symbol=…` | ✅ 200 (full shareholding pattern) | — |
 | `/api/option-chain-equities?symbol=…` | ✅ 200 (empty when closed) | `option_chain_equity()` |
 | `/api/equity-stockIndices?index=NIFTY 50` | ❌ 404 (path moved) | — |
 | `/api/option-chain-indices?symbol=NIFTY` | ❌ 404 (path moved) | — |

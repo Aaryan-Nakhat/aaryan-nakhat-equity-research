@@ -107,6 +107,20 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS shareholding (
+        symbol                   VARCHAR,
+        period_end               DATE,      -- shareholding-pattern 'as of' date
+        promoter_holding_pct     DOUBLE,
+        pledged_pct_of_promoter  DOUBLE,    -- pledged shares / promoter holding
+        pledged_pct_of_total     DOUBLE,    -- pledged shares / total issued
+        num_shares_pledged       DOUBLE,
+        broadcast_dt             VARCHAR,
+        source_url               VARCHAR,
+        updated_at               TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol, period_end)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS alert_state (
         symbol      VARCHAR,
         key         VARCHAR,
