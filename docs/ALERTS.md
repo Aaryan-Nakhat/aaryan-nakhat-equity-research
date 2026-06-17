@@ -27,6 +27,18 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
   (buttons if several match).
 - `/unwatch <SYMBOL>` · `/watchlist` · `/scan` (run now).
 
+## The digest
+
+Sent by **company name** (ticker in parens — symbols like `RAMASTEEL` are
+cryptic), in two parts, lines-only (no PDFs):
+- **Movers (always present):** a per-stock daily snapshot for the whole watchlist
+  — close, day %change, delivery%, 52-week position — sorted biggest-move first
+  (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
+  the digest substantive even on quiet event days.
+- **Events (when they happen):** the alerts below, grouped under each company.
+
+Built by `scan.format_digest` (shared by the email + Telegram channels).
+
 ## Events
 
 The pure momentum/trading signals were **dropped** (golden/death cross,

@@ -31,7 +31,6 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
-from equity_research.analysis.alerts import EMOJI  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
@@ -213,35 +212,22 @@ def handle_request(req: EmailRequest) -> None:
 
 
 # ----------------- watchlist push (self-healing daily) -----------------
-def _push_digest(results: dict, note: str | None = None) -> None:
-    """Lines-only daily scan grouped by symbol — institutional deals, corporate
-    events, and forensic/fundamental changes. No PDFs (request a full report by
-    emailing the stock name)."""
+def _push_digest(results: dict, movers: list | None = None) -> None:
+    """Daily digest: a per-stock MOVERS snapshot + EVENTS (deals / corporate events
+    / forensic changes), by company name. No PDFs — reply with a name for the full
+    report."""
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send digest")
         return
-    if not results:
-        log.info("scan produced no events — no digest email sent")
+    if not results and not movers:
+        log.info("nothing to report — no digest email sent")
         return
     today = datetime.now(IST).date().isoformat()
-    parts = [f"# Watchlist alerts — {today}\n"]
-    if note:
-        parts.append(note + "\n")
-    for sym in sorted(results):
-        block = [f"### {sym}"]
-        for al in results[sym]:
-            emo = EMOJI.get(al.severity, "🔔")
-            block.append(f"- {emo} **{al.title}**" + (f" — {al.body}" if al.body else ""))
-        parts.append("\n".join(block))
-    parts.append("\n_Bulk/block deals name the counterparty (FIIs, MFs, insurers, HNIs) who "
-                 "crossed the disclosure threshold that day. Reply with a stock name for its "
-                 "full report._")
-    md = "\n\n".join(parts)
-    emailer.send_report(f"📊 Watchlist alerts — {today}", md, to=to,
-                        html=emailer.body_html(md, "Watchlist alerts"))
-    log.info("digest sent to %s (%d symbols, %d events)", to,
-             len(results), sum(len(v) for v in results.values()))
+    md = scan.format_digest(today, results, movers or [])
+    emailer.send_report(f"📊 Watchlist — {today}", md, to=to,
+                        html=emailer.body_html(md, "Watchlist"))
+    log.info("digest sent to %s (%d movers, %d event-symbols)", to, len(movers or []), len(results))
 
 
 def maybe_scan() -> None:
@@ -257,11 +243,11 @@ def maybe_scan() -> None:
         return
     log.info("self-healing daily scan firing")
     try:
-        results, note = scan.run_watchlist_scan()
+        results, movers = scan.run_watchlist_scan()
     except Exception:  # noqa: BLE001
         log.exception("scan failed")
         return
-    _push_digest(results, note)
+    _push_digest(results, movers)
     scan.mark_scanned()
 
 

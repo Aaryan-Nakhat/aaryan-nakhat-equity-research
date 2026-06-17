@@ -159,9 +159,80 @@ def watchlist_deals(con: duckdb.DuckDBPyConnection, syms: list[str]) -> dict[str
     return out
 
 
+def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
+    """Per-stock daily snapshot: close, day %change, delivery%, 52-week position.
+
+    The always-populated skeleton of the digest (price/volume are the only things
+    that change every day). Sorted biggest-move first. Carries the company name.
+    """
+    names = dict(watchlist.entries(con))
+    out: list[dict] = []
+    for sym in watchlist.symbols(con):
+        row = con.execute(
+            "SELECT trade_date, close, prev_close, deliv_per FROM equity_eod "
+            "WHERE symbol = ? AND series = 'EQ' ORDER BY trade_date DESC LIMIT 1", [sym]).fetchone()
+        if not row or row[1] is None:
+            continue
+        d, close, prev, deliv = row
+        hl = con.execute(
+            "SELECT max(high), min(low) FROM equity_eod WHERE symbol = ? AND series = 'EQ' "
+            "AND trade_date >= ?", [sym, d - timedelta(days=365)]).fetchone()
+        hi, lo = (hl or (None, None))
+        chg = (close / prev - 1) * 100 if prev else None
+        pos = (close - lo) / (hi - lo) * 100 if hi and lo and hi > lo else None
+        out.append({"symbol": sym, "company": names.get(sym) or sym, "close": close,
+                    "chg_pct": chg, "deliv": deliv, "pos_52w": pos})
+    out.sort(key=lambda m: abs(m["chg_pct"]) if m["chg_pct"] is not None else 0, reverse=True)
+    return out
+
+
+def _fmt_price(p: float | None) -> str:
+    if p is None:
+        return "n/a"
+    return f"{p:,.2f}" if p < 100 else f"{p:,.0f}"   # decimals for low-priced/penny stocks
+
+
+def _pos_label(pos: float | None) -> str:
+    if pos is None:
+        return ""
+    if pos >= 90:
+        return "near 52w-high"
+    if pos <= 10:
+        return "near 52w-low"
+    return f"{pos:.0f}% of 52w range"
+
+
+def format_digest(date_str: str, results: dict[str, list[alerts.Alert]], movers: list[dict]) -> str:
+    """Build the digest markdown: a per-stock MOVERS snapshot + EVENTS, by company
+    name (ticker in parens). Shared by the email and Telegram channels."""
+    names = {m["symbol"]: m["company"] for m in movers}
+    parts = [f"# Watchlist — {date_str}"]
+    if movers:
+        rows = ["## Movers (today)"]
+        for m in movers:
+            chg = f"{m['chg_pct']:+.1f}%" if m["chg_pct"] is not None else "n/a"
+            deliv = f"deliv {m['deliv']:.0f}%" if m["deliv"] is not None else "deliv n/a"
+            tail = f" · {_pos_label(m['pos_52w'])}" if _pos_label(m["pos_52w"]) else ""
+            rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · {chg} · {deliv}{tail}")
+        parts.append("\n".join(rows))
+    if results:
+        ev = ["## Events (today)"]
+        for sym in sorted(results, key=lambda s: names.get(s, s)):
+            block = [f"**{names.get(sym) or sym}** ({sym})"]
+            for al in results[sym]:
+                emo = alerts.EMOJI.get(al.severity, "🔔")
+                block.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
+            ev.append("\n".join(block))
+        parts.append("\n\n".join(ev))
+    else:
+        parts.append("_No corporate events, institutional deals, or forensic changes today._")
+    parts.append("_Reply with a company name to get its full report._")
+    return "\n\n".join(parts)
+
+
 def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
-                       ) -> tuple[dict[str, list[alerts.Alert]], str | None]:
-    """Returns ({symbol: [alerts]}, market_note). Ingests latest EOD first."""
+                       ) -> tuple[dict[str, list[alerts.Alert]], list[dict]]:
+    """Returns ({symbol: [alerts]}, movers). Ingests latest EOD first."""
     own = con is None
     con = con or connect()
     try:
@@ -190,7 +261,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
         # per-stock bulk/block deals (institutional buy/sell) — merge in
         for sym, deal_alerts in watchlist_deals(con, syms).items():
             results.setdefault(sym, []).extend(deal_alerts)
-        return results, None      # market-wide FII/DII note dropped (per-stock now)
+        return results, watchlist_movers(con)
     finally:
         if own:
             con.close()
