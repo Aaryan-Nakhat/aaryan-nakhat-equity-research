@@ -172,23 +172,55 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
     return A, up
 
 
-def _categorise(desc: str, text: str, has_xbrl: bool) -> tuple[str, str, bool]:
-    """(title, severity, is_result) from an announcement's desc/text."""
+# Routine/compliance noise we don't want cluttering the daily scan.
+_ANN_NOISE = ("trading window", "newspaper publication", "newspaper advertisement",
+              "duplicate share", "loss of share", "issue of duplicate",
+              "investor complaint", "investor grievance", "compliance certificate",
+              "regulation 74", "reg. 74", "regulation 7(3)", "advertisement in")
+
+# Defined corporate-event taxonomy, checked in priority order (first match wins).
+# Each: (keyword tuple, title, severity). Phrases match NSE's announcement subjects.
+_ANN_EVENTS: list[tuple[tuple[str, ...], str, str]] = [
+    (("rights issue",), "Rights issue", "info"),
+    (("qualified institution", "qip"), "QIP / fund raising", "info"),
+    (("preferential issue", "preferential allotment", "convertible warrant"), "Preferential issue", "info"),
+    (("scheme of arrangement", "amalgamation", "de-merger", "demerger", "merger"), "Scheme / M&A", "warn"),
+    (("open offer", "substantial acquisition", "(sast)", "takeover"), "Open offer / SAST", "warn"),
+    (("buy back", "buy-back", "buyback"), "Buyback", "info"),
+    (("bonus",), "Bonus issue", "info"),
+    (("stock split", "sub-division", "subdivision", "face value split", "split of equity"), "Stock split", "info"),
+    (("dividend",), "Dividend", "info"),
+    (("raising of fund", "fund raising", "fund-raising"), "Fund raising", "info"),
+    (("acquisition", "acquire", "investment in", "stake in", "disposal"), "Acquisition / disposal", "info"),
+    (("pledge", "encumbr", "creation of charge", "satisfaction of charge"), "Promoter pledge / charge", "red"),
+    (("insider", "prohibition of insider", "code of conduct", "(pit)"), "Insider-trading disclosure", "warn"),
+    (("credit rating", "rating action", "reaffirm", "rating of"), "Credit rating update", "warn"),
+    (("earnings call", "conference call", "concall", "analyst", "institutional investor",
+      "investor meet", "investor presentation", "investor/analyst"), "Concall / investor meet", "info"),
+    (("bagging", "receipt of order", "award of order", "awarding of order", "letter of award",
+      "work order", "wins order", "secures order", "bags order", "new order", "purchase order"),
+     "Order / contract win", "green"),
+    (("board meeting", "outcome of board", "meeting of the board"), "Board meeting", "info"),
+    (("annual general meeting", "extraordinary general", "postal ballot", "general meeting",
+      " agm", " egm"), "Shareholder meeting", "info"),
+    (("change in director", "key managerial", "resignation", "appointment", "cessation",
+      "change in kmp", "auditor"), "Director / KMP change", "info"),
+    (("delisting",), "Delisting", "warn"),
+]
+
+
+def _categorise(desc: str, text: str, has_xbrl: bool) -> tuple[str | None, str, bool]:
+    """(title, severity, is_result) from an announcement's desc/text.
+
+    Returns ``(None, ...)`` for routine compliance noise so the caller skips it.
+    """
     blob = f"{desc} {text}".lower()
     if has_xbrl or "financial result" in blob or ("result" in blob and "board" in blob):
         return "Results filed", "filing", True
-    for kw, title, sev in [
-        ("pledge", "Promoter pledge update", "red"),
-        ("encumbr", "Promoter encumbrance update", "red"),
-        ("insider", "Insider trading disclosure", "red"),
-        ("acquisition of shares", "SAST disclosure", "red"),
-        ("rating", "Credit rating update", "warn"),
-        ("dividend", "Dividend announced", "info"),
-        ("bonus", "Bonus issue", "info"),
-        ("split", "Stock split", "info"),
-        ("buyback", "Buyback", "info"),
-    ]:
-        if kw in blob:
+    if any(n in blob for n in _ANN_NOISE):
+        return None, "info", False
+    for keywords, title, sev in _ANN_EVENTS:
+        if any(kw in blob for kw in keywords):
             return title, sev, False
     return "Announcement", "info", False
 
@@ -216,6 +248,8 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
             break
         title, sev, is_result = _categorise(a.get("desc", ""), a.get("attchmntText", ""),
                                             str(a.get("hasXbrl", "")).lower() == "true")
+        if title is None:                       # routine compliance noise — skip
+            continue
         body = (a.get("attchmntText") or a.get("desc") or "")[:180]
         A.append(Alert(symbol, sev, title, body, attach_report=is_result))
     return A, up
