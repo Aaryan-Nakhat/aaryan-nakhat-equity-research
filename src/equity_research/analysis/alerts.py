@@ -37,6 +37,8 @@ class Alert:
     title: str
     body: str = ""
     attach_report: bool = False     # True => orchestrator generates & attaches deep report
+    attachment: str = ""            # filing PDF URL (for auto doc-analysis)
+    analysis: str = ""              # Gemini's inline read of the attached filing
 
     def render(self) -> str:
         head = f"{EMOJI.get(self.severity, '🔔')} **{self.symbol}** — {self.title}"
@@ -250,8 +252,10 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
                                             str(a.get("hasXbrl", "")).lower() == "true")
         if title is None:                       # routine compliance noise — skip
             continue
+        att = (a.get("attchmntFile") or "").strip()
+        att = att if att.lower().startswith("http") and att.lower().endswith(".pdf") else ""
         body = (a.get("attchmntText") or a.get("desc") or "")[:180]
-        A.append(Alert(symbol, sev, title, body, attach_report=is_result))
+        A.append(Alert(symbol, sev, title, body, attach_report=is_result, attachment=att))
     return A, up
 
 

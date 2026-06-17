@@ -30,14 +30,24 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 ## The digest
 
 Sent by **company name** (ticker in parens — symbols like `RAMASTEEL` are
-cryptic), in two parts, lines-only (no PDFs):
+cryptic), lines-only (no PDFs), in three parts:
+- **📅 Upcoming:** the watchlist's events in the next ~35 days — board-meeting /
+  results dates, ex-dividend / split / bonus dates, AGM / fund-raising
+  (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
+  corporate-actions feeds, fetched with a date range).
 - **Movers (always present):** a per-stock daily snapshot for the whole watchlist
   — close, day %change, delivery%, 52-week position — sorted biggest-move first
   (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
   the digest substantive even on quiet event days.
-- **Events (when they happen):** the alerts below, grouped under each company.
+- **Events (when they happen):** the alerts below, grouped under each company. For
+  notable **document-bearing** events (results / concall / scheme / rights / QIP),
+  the attached filing PDF is **auto-downloaded and read by Gemini** — a concise
+  investor analysis (guidance, key numbers, contingent-liability / related-party
+  flags) is shown **inline** as a quote block (`scan._enrich_event_docs` →
+  `synthesize.analyze_filing`; capped at 5/scan). No PDFs attached.
 
-Built by `scan.format_digest` (shared by the email + Telegram channels).
+Built by `scan.format_digest`; all market-wide feeds come from `nse_api.market_feeds`
+in one browser session. Shared by the email + Telegram channels.
 
 ## Events
 

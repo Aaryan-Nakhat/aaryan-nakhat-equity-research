@@ -256,9 +256,9 @@ async def watchlist_cmd(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None
 
 
 # ----------------- scan + push -----------------
-async def _push_scan(bot, chat_id: int, results: dict, movers: list) -> None:
+async def _push_scan(bot, chat_id: int, sr) -> None:
     today = datetime.now(IST).date().isoformat()
-    md = scan.format_digest(today, results, movers or [])
+    md = scan.format_digest(today, sr)
     await _send_md_text(bot, chat_id, md)
 
 
@@ -266,8 +266,8 @@ async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
     await update.message.reply_text("🔎 Running watchlist scan now (may take a few min)…")
-    results, movers = await asyncio.to_thread(scan.run_watchlist_scan)
-    await _push_scan(ctx.bot, update.effective_chat.id, results, movers)
+    sr = await asyncio.to_thread(scan.run_watchlist_scan)
+    await _push_scan(ctx.bot, update.effective_chat.id, sr)
 
 
 async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -275,11 +275,11 @@ async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = min(_ALLOWED)
     log.info("watchlist scan starting")
     try:
-        results, movers = await asyncio.to_thread(scan.run_watchlist_scan)
+        sr = await asyncio.to_thread(scan.run_watchlist_scan)
     except Exception:  # noqa: BLE001
         log.exception("scan failed")
         return
-    await _push_scan(context.bot, chat_id, results, movers)
+    await _push_scan(context.bot, chat_id, sr)
     await asyncio.to_thread(scan.mark_scanned)
 
 

@@ -8,6 +8,8 @@ generates a deep report for any 'results filed' alert.
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -15,13 +17,25 @@ import duckdb
 
 from equity_research.analysis import alerts
 from equity_research.common.db import connect
-from equity_research.common.http import ScrapeError
+from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import ingest_eod, store_pledge
 from equity_research.scrapers import nse_api
 from equity_research import watchlist
 
 
 _IST = ZoneInfo("Asia/Kolkata")
+log = logging.getLogger("equity_research.scan")
+
+# Event types whose attached filing PDF is worth an inline Gemini read.
+_ANALYZE_TITLES = {"Results filed", "Concall / investor meet", "Scheme / M&A",
+                   "Open offer / SAST", "Rights issue", "QIP / fund raising"}
+
+
+@dataclass
+class ScanResult:
+    results: dict[str, list[alerts.Alert]] = field(default_factory=dict)
+    movers: list[dict] = field(default_factory=list)
+    upcoming: list[dict] = field(default_factory=list)
 
 
 def _meta(con, key):
@@ -144,12 +158,8 @@ def _deal_alert(dl: dict) -> alerts.Alert:
     return alerts.Alert(dl["symbol"], sev, title, body)
 
 
-def watchlist_deals(con: duckdb.DuckDBPyConnection, syms: list[str]) -> dict[str, list[alerts.Alert]]:
-    """Today's bulk/block deals (market-wide, one fetch) filtered to ``syms``."""
-    try:
-        deals = nse_api.large_deals()
-    except Exception:  # noqa: BLE001
-        return {}
+def watchlist_deals(syms: list[str], deals: dict) -> dict[str, list[alerts.Alert]]:
+    """Bulk/block deals (pre-fetched, market-wide) filtered to ``syms``."""
     symset = set(syms)
     out: dict[str, list[alerts.Alert]] = {}
     for dl in (deals.get("bulk") or []) + (deals.get("block") or []):
@@ -157,6 +167,63 @@ def watchlist_deals(con: duckdb.DuckDBPyConnection, syms: list[str]) -> dict[str
         if sym in symset and dl.get("client"):
             out.setdefault(sym, []).append(_deal_alert(dl))
     return out
+
+
+def _parse_dt(s) -> date | None:
+    try:
+        return datetime.strptime(s.strip(), "%d-%b-%Y").date()
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30) -> list[dict]:
+    """Upcoming events for the watchlist (next ``days``): board meetings (with
+    purpose), results / fund-raising / AGM (event calendar), and ex-dividend /
+    split / bonus dates (corporate actions). Returns [{symbol, date, what}]."""
+    symset = set(syms)
+    today = datetime.now(_IST).date()
+    horizon = today + timedelta(days=days)
+    seen: set = set()
+    out: list[dict] = []
+
+    def add(sym, d, what):
+        if not sym or sym not in symset or d is None or d < today or d > horizon:
+            return
+        key = (sym, d, what.lower()[:24])
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({"symbol": sym, "date": d, "what": what})
+
+    for r in feeds.get("board_meetings") or []:
+        desc = (r.get("bm_desc") or "")
+        purpose = (desc.split("consider", 1)[1].strip().rstrip(".")
+                   if "consider" in desc.lower() else (r.get("bm_purpose") or "meeting"))
+        add(r.get("bm_symbol"), _parse_dt(r.get("bm_date")), f"Board meeting — {purpose}"[:70])
+    for r in feeds.get("event_calendar") or []:
+        add(r.get("symbol"), _parse_dt(r.get("date")), r.get("purpose") or "Event")
+    for r in feeds.get("corp_actions") or []:
+        add(r.get("symbol"), _parse_dt(r.get("exDate")),
+            f"{(r.get('subject') or 'Corporate action')} (ex-date)")
+    out.sort(key=lambda u: u["date"])
+    return out
+
+
+def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 5) -> None:
+    """Download + Gemini-analyse the attached filing for notable doc-bearing events
+    (results / concall / scheme / etc.), inline. Capped to keep heavy days bounded."""
+    candidates = [(sym, al) for sym, fired in results.items() for al in fired
+                  if al.attachment and al.title in _ANALYZE_TITLES]
+    prio = {"Results filed": 0, "Concall / investor meet": 1}
+    candidates.sort(key=lambda x: prio.get(x[1].title, 5))
+    if not candidates:
+        return
+    from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
+    for sym, al in candidates[:cap]:
+        try:
+            al.analysis = synthesize.analyze_filing(fetch_bytes(al.attachment), sym, al.title)
+        except Exception:  # noqa: BLE001 — a bad doc shouldn't break the scan
+            log.exception("filing analysis failed for %s (%s)", sym, al.title)
 
 
 def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
@@ -202,11 +269,21 @@ def _pos_label(pos: float | None) -> str:
     return f"{pos:.0f}% of 52w range"
 
 
-def format_digest(date_str: str, results: dict[str, list[alerts.Alert]], movers: list[dict]) -> str:
-    """Build the digest markdown: a per-stock MOVERS snapshot + EVENTS, by company
-    name (ticker in parens). Shared by the email and Telegram channels."""
+def format_digest(date_str: str, sr: ScanResult) -> str:
+    """Build the digest markdown — Upcoming events, a per-stock Movers snapshot,
+    and Events (with any inline filing analysis), all by company name (ticker in
+    parens). Shared by the email and Telegram channels."""
+    results, movers, upcoming = sr.results, sr.movers, sr.upcoming
     names = {m["symbol"]: m["company"] for m in movers}
     parts = [f"# Watchlist — {date_str}"]
+
+    if upcoming:
+        rows = ["## 📅 Upcoming"]
+        for u in upcoming:
+            nm = names.get(u["symbol"]) or u["symbol"]
+            rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
+        parts.append("\n".join(rows))
+
     if movers:
         rows = ["## Movers (today)"]
         for m in movers:
@@ -215,24 +292,29 @@ def format_digest(date_str: str, results: dict[str, list[alerts.Alert]], movers:
             tail = f" · {_pos_label(m['pos_52w'])}" if _pos_label(m["pos_52w"]) else ""
             rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · {chg} · {deliv}{tail}")
         parts.append("\n".join(rows))
+
     if results:
         ev = ["## Events (today)"]
         for sym in sorted(results, key=lambda s: names.get(s, s)):
-            block = [f"**{names.get(sym) or sym}** ({sym})"]
+            lines = [f"**{names.get(sym) or sym}** ({sym})"]
             for al in results[sym]:
                 emo = alerts.EMOJI.get(al.severity, "🔔")
-                block.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
-            ev.append("\n".join(block))
+                lines.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
+                if al.analysis:                       # inline filing read, as a quote block
+                    lines.append("")
+                    lines += [f"> {ln}" for ln in al.analysis.splitlines() if ln.strip()]
+                    lines.append("")
+            ev.append("\n".join(lines))
         parts.append("\n\n".join(ev))
     else:
         parts.append("_No corporate events, institutional deals, or forensic changes today._")
+
     parts.append("_Reply with a company name to get its full report._")
     return "\n\n".join(parts)
 
 
-def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
-                       ) -> tuple[dict[str, list[alerts.Alert]], list[dict]]:
-    """Returns ({symbol: [alerts]}, movers). Ingests latest EOD first."""
+def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResult:
+    """Scan the watchlist → ScanResult(results, movers, upcoming). Ingests EOD first."""
     own = con is None
     con = con or connect()
     try:
@@ -249,6 +331,11 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
             store_pledge(con, pledge_by_sym)
         except Exception:  # noqa: BLE001
             pledge_by_sym = {}
+        # one session for all market-wide feeds: deals + upcoming events
+        try:
+            feeds = nse_api.market_feeds() if syms else {}
+        except Exception:  # noqa: BLE001
+            feeds = {}
         results: dict[str, list[alerts.Alert]] = {}
         for sym in syms:
             try:
@@ -259,9 +346,10 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None
             if fired:
                 results[sym] = fired
         # per-stock bulk/block deals (institutional buy/sell) — merge in
-        for sym, deal_alerts in watchlist_deals(con, syms).items():
+        for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}).items():
             results.setdefault(sym, []).extend(deal_alerts)
-        return results, watchlist_movers(con)
+        _enrich_event_docs(results)                         # inline Gemini read of filings
+        return ScanResult(results, watchlist_movers(con), watchlist_upcoming(syms, feeds))
     finally:
         if own:
             con.close()
