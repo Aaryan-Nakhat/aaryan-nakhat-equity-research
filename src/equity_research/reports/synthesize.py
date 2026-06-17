@@ -154,3 +154,34 @@ def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None
         if chunk.text:
             out.append(chunk.text)
     return "".join(out).strip()
+
+
+_FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
+filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
+transcript, an investor presentation, an annual report, or a corporate-action \
+document. In ~150-250 words give an investor the key takeaways:
+- the headline decision / numbers (what was filed or decided);
+- management guidance, commentary and outlook (if a transcript / presentation);
+- growth drivers and any margin / cash / order-book trends mentioned;
+- risks and red flags, plus any **contingent liabilities** or **related-party \
+transactions** disclosed.
+Cite specific figures from the document. If it is routine/administrative with \
+little investor relevance, say so in one line. Never invent anything not in it."""
+
+
+def analyze_filing(pdf_bytes: bytes, symbol: str, event_title: str,
+                   *, model: str = MODEL) -> str:
+    """Focused investor read of a single filing PDF (for inline digest analysis)."""
+    client = _client()
+    parts = [
+        types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+        types.Part.from_text(text=f"Filing for {symbol} — event: {event_title}. "
+                             "Give the investor takeaways."),
+    ]
+    config = types.GenerateContentConfig(system_instruction=_FILING_SYS,
+                                         max_output_tokens=1200)
+    out: list[str] = []
+    for chunk in client.models.generate_content_stream(model=model, contents=parts, config=config):
+        if chunk.text:
+            out.append(chunk.text)
+    return "".join(out).strip()

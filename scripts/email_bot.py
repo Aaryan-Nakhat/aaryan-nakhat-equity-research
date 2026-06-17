@@ -212,22 +212,23 @@ def handle_request(req: EmailRequest) -> None:
 
 
 # ----------------- watchlist push (self-healing daily) -----------------
-def _push_digest(results: dict, movers: list | None = None) -> None:
-    """Daily digest: a per-stock MOVERS snapshot + EVENTS (deals / corporate events
-    / forensic changes), by company name. No PDFs — reply with a name for the full
-    report."""
+def _push_digest(sr: "scan.ScanResult") -> None:
+    """Daily digest: upcoming events + per-stock movers + events (deals / corporate
+    events / forensic changes, with inline filing analysis), by company name. No
+    PDFs — reply with a name for the full report."""
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send digest")
         return
-    if not results and not movers:
+    if not sr.results and not sr.movers and not sr.upcoming:
         log.info("nothing to report — no digest email sent")
         return
     today = datetime.now(IST).date().isoformat()
-    md = scan.format_digest(today, results, movers or [])
+    md = scan.format_digest(today, sr)
     emailer.send_report(f"📊 Watchlist — {today}", md, to=to,
                         html=emailer.body_html(md, "Watchlist"))
-    log.info("digest sent to %s (%d movers, %d event-symbols)", to, len(movers or []), len(results))
+    log.info("digest sent to %s (%d movers, %d event-symbols, %d upcoming)",
+             to, len(sr.movers), len(sr.results), len(sr.upcoming))
 
 
 def maybe_scan() -> None:
@@ -243,11 +244,11 @@ def maybe_scan() -> None:
         return
     log.info("self-healing daily scan firing")
     try:
-        results, movers = scan.run_watchlist_scan()
+        sr = scan.run_watchlist_scan()
     except Exception:  # noqa: BLE001
         log.exception("scan failed")
         return
-    _push_digest(results, movers)
+    _push_digest(sr)
     scan.mark_scanned()
 
 

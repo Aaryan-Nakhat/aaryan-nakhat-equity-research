@@ -117,6 +117,54 @@ def large_deals() -> dict[str, list[dict]]:
             "block": _parse_deals(data, "BLOCK_DEALS_DATA", "block")}
 
 
+def fetch_api_multi(paths: dict[str, str], *, retries: int = 3, delay_ms: int = 1200) -> dict[str, Any]:
+    """Fetch several market-wide ``/api/`` paths in ONE Camoufox session.
+
+    ``paths`` maps a key -> API path; returns {key: parsed-json-or-None}. Warming
+    the browser is the slow part, so batching avoids one launch per endpoint.
+    """
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": retries, "delay": delay_ms}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, Any] = {}
+    for k, body in captured.items():
+        try:
+            out[k] = json.loads(body) if body else None
+        except (json.JSONDecodeError, TypeError):
+            out[k] = None
+    return out
+
+
+def market_feeds(horizon_days: int = 35) -> dict[str, Any]:
+    """All market-wide event feeds in one session: bulk/block deals, upcoming
+    board meetings, the event calendar, and corporate actions (ex-dates).
+
+    Board/calendar/actions take a date range (else NSE returns only the latest
+    ~20 rows) — today → +``horizon_days`` so we see upcoming events, not just the
+    last few announced."""
+    from datetime import date, timedelta
+    f = date.today().strftime("%d-%m-%Y")
+    t = (date.today() + timedelta(days=horizon_days)).strftime("%d-%m-%Y")
+    raw = fetch_api_multi({
+        "largedeal": "/api/snapshot-capital-market-largedeal",
+        "board": f"/api/corporate-board-meetings?index=equities&from_date={f}&to_date={t}",
+        "calendar": f"/api/event-calendar?from_date={f}&to_date={t}",
+        "actions": f"/api/corporates-corporateActions?index=equities&from_date={f}&to_date={t}",
+    })
+    ld = raw.get("largedeal") or {}
+    return {
+        "deals": {"bulk": _parse_deals(ld, "BULK_DEALS_DATA", "bulk"),
+                  "block": _parse_deals(ld, "BLOCK_DEALS_DATA", "block")},
+        "board_meetings": raw.get("board") or [],
+        "event_calendar": raw.get("calendar") or [],
+        "corp_actions": raw.get("actions") or [],
+    }
+
+
 def corporate_announcements(index: str = "equities", symbol: str | None = None) -> Any:
     """Corporate announcements / filings feed (results, transcripts, PPTs).
 
