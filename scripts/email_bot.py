@@ -111,8 +111,22 @@ def _selection(body: str) -> int | None:
 
 
 # ----------------- delivery -----------------
+def _ack(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> None:
+    """Instant 'got it, working on it' reply so you know it's processing."""
+    name = f" ({resolved_name})" if resolved_name else ""
+    md = (f"📩 Got it — building the deep report for **{symbol}**{name}.\n\n"
+          "This takes ~2–3 minutes; the full analysis + PDF will land in this thread shortly.")
+    try:
+        emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                            html=emailer.body_html(md),
+                            in_reply_to=req.message_id, references=req.references or req.message_id)
+    except Exception:  # noqa: BLE001 — an ack failure shouldn't block the real report
+        log.exception("ack send failed for %s", symbol)
+
+
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> None:
     log.info("generating report for %s (req from %s)", symbol, req.sender)
+    _ack(symbol, req, resolved_name)
     report_md = generate_report(symbol, deep=True)
     pdf = report_to_pdf(report_md, symbol)
     today = datetime.now(IST).date().isoformat()
