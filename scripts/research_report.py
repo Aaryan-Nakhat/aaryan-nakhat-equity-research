@@ -1,4 +1,4 @@
-"""End-to-end research report: assemble brief -> Claude thesis -> email.
+"""End-to-end research report: assemble brief -> Gemini thesis -> PDF / email.
 
     # just the quant brief (no API/email needed):
     uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2
@@ -9,7 +9,10 @@
     # + attach a concall transcript / annual report PDF for the model to read:
     uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf
 
-    # + email it (needs SMTP_* env, see .env.example):
+    # + write the full report (with fundamental charts) to a PDF file:
+    uv run python scripts/research_report.py RELIANCE --deep --out reliance.pdf
+
+    # + email it (summary in the body, full charted PDF attached; needs SMTP_* env):
     uv run python scripts/research_report.py RELIANCE --email
 """
 
@@ -30,8 +33,8 @@ def main(argv: list[str]) -> int:
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")  # ₹ / arrows on Windows console
     if not argv:
-        print("usage: research_report.py SYMBOL [--dry-run] [--consolidated] "
-              "[--shares CR] [--pdf PATH] [--email]")
+        print("usage: research_report.py SYMBOL [--dry-run] [--deep] [--consolidated] "
+              "[--shares CR] [--pdf PATH] [--out PATH] [--email]")
         return 2
 
     symbol = argv[0].upper()
@@ -40,6 +43,7 @@ def main(argv: list[str]) -> int:
     do_email = "--email" in argv
     deep = "--deep" in argv
     pdf = _arg(argv, "--pdf")
+    out = _arg(argv, "--out")
     shares = float(_arg(argv, "--shares")) * 1e7 if "--shares" in argv else None
 
     con = connect()
@@ -62,9 +66,30 @@ def main(argv: list[str]) -> int:
     print(thesis)
 
     report = f"{brief}\n\n{'=' * 60}\n## Thesis\n\n{thesis}"
+
+    # Build the charted PDF once if we'll write or email it.
+    pdf_bytes = None
+    if out or do_email:
+        from equity_research.reports import charts
+        from equity_research.reports.pdf import report_to_pdf
+        con2 = connect()
+        try:
+            images = charts.report_charts(con2, symbol, consolidated)
+        finally:
+            con2.close()
+        pdf_bytes = report_to_pdf(report, symbol, images=images)
+
+    if out:
+        with open(out, "wb") as fh:
+            fh.write(pdf_bytes)
+        print(f"\n[wrote {out} ({len(pdf_bytes):,} bytes, {len(images)} charts)]")
+
     if do_email:
-        from equity_research.reports.email import send_report
-        send_report(f"Research: {symbol}", report)
+        from equity_research.reports.email import body_html, send_report
+        from equity_research.reports.pipeline import report_summary
+        summary = report_summary(symbol, consolidated=consolidated)
+        send_report(f"Research: {symbol}", summary, html=body_html(summary, symbol),
+                    attachments=[(f"{symbol}.pdf", pdf_bytes)])
         print(f"\n[emailed report for {symbol}]")
     return 0
 

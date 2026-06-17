@@ -33,9 +33,23 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 from equity_research import scan, watchlist
 from equity_research.analysis import alerts
 from equity_research.common.db import connect
+from equity_research.reports import charts
 from equity_research.reports import resolve as resolver
 from equity_research.reports.pdf import report_to_pdf
 from equity_research.reports.pipeline import generate_report
+
+
+def _pdf_with_charts(symbol: str, report: str, title: str, consolidated: bool = False) -> bytes:
+    """Full report PDF with fundamental charts embedded (charts best-effort)."""
+    con = connect()
+    try:
+        images = charts.report_charts(con, symbol, consolidated)
+    except Exception:  # noqa: BLE001 — a chart should never block the report
+        log.exception("charts failed for %s", symbol)
+        images = []
+    finally:
+        con.close()
+    return report_to_pdf(report, title, images=images)
 
 IST = ZoneInfo("Asia/Kolkata")
 SCAN_TIME = dtime(18, 0, tzinfo=IST)
@@ -167,7 +181,7 @@ async def _run(target, symbol: str, consolidated: bool) -> None:
     analysis = report.split("## Analysis", 1)[-1].strip() if "## Analysis" in report else report
     await _send_markdown(chat, analysis)
     try:
-        pdf = await asyncio.to_thread(report_to_pdf, report, f"{symbol} ({label})")
+        pdf = await asyncio.to_thread(_pdf_with_charts, symbol, report, f"{symbol} ({label})", consolidated)
         bio = io.BytesIO(pdf)
         bio.name = f"{symbol}_{label}_report.pdf"
     except Exception:  # noqa: BLE001 — fall back to the markdown text file
@@ -254,7 +268,7 @@ async def _push_scan(bot, chat_id: int, results: dict, note: str | None) -> None
             if al.attach_report:
                 try:
                     report = await asyncio.to_thread(generate_report, sym, deep=True)
-                    pdf = await asyncio.to_thread(report_to_pdf, report, sym)
+                    pdf = await asyncio.to_thread(_pdf_with_charts, sym, report, sym)
                     bio = io.BytesIO(pdf)
                     bio.name = f"{sym}_report.pdf"
                     await bot.send_document(chat_id, document=bio, filename=bio.name,

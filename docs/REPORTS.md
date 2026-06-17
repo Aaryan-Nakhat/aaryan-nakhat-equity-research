@@ -65,7 +65,8 @@ uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2   # 
 uv run python scripts/research_report.py RELIANCE --shares 1353.2             # + Gemini thesis
 uv run python scripts/research_report.py RELIANCE --deep --shares 1353.2      # full forensic deep-dive
 uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf        # + read a filing
-uv run python scripts/research_report.py RELIANCE --email                     # + email it
+uv run python scripts/research_report.py RELIANCE --deep --out reliance.pdf   # write charted PDF
+uv run python scripts/research_report.py RELIANCE --email                     # summary body + charted PDF
 ```
 
 ### Deep mode (`--deep`)
@@ -110,6 +111,20 @@ The PDF embeds **fundamental** charts (matplotlib → PNG → base64 `<img>`):
 revenue/PAT + margin, **CFO-vs-PAT** (cash quality), ROE/ROCE/ROIC, leverage +
 interest cover, FCF/FCFF, and the **Monte-Carlo fair-value histogram**.
 `pdf.report_to_pdf(md, images=…)` appends them as a Charts section.
+
+### Self-explaining numbers (`reports/glossary.py`)
+
+Every headline metric is annotated so the report stands on its own:
+- **Inline band tags** on forensic/quant/pledge lines (e.g. `ROCE 9.5% — weak`,
+  `pledge 2.4% — good`, `margin of safety 19% — some`) via `glossary.read/label`.
+- A **§15 Metric guide** appendix in every deep brief — for each metric: *what it
+  is*, *typical/benchmark values*, and *how to read it* (with a sector caveat where
+  the normal range shifts, e.g. capital-heavy or financial businesses).
+- The Gemini prompt is told to explain each metric it cites and judge it **for this
+  company's sector/business model** (a vanilla DCF understates a true compounder;
+  utilities run lower ROCE; etc.).
+- **Alert bodies** carry the same plain-English reading (what the number means +
+  the threshold that matters).
 
 ## Telegram bot (interactive, on-demand)
 

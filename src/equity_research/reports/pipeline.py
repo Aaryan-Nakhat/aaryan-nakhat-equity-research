@@ -10,6 +10,7 @@ import duckdb
 
 from equity_research.analysis import forensic, fundamentals, quant, valuation
 from equity_research.common.db import connect
+from equity_research.reports import glossary
 from equity_research.ingest import (ingest_annual_financials, ingest_financials,
                                     ingest_shareholding)
 from equity_research.reports.brief import build_brief
@@ -109,9 +110,11 @@ def report_summary(symbol: str, *, consolidated: bool = False) -> str:
             L.append("- DCF: skipped (financial/lender)")
         L.append(f"- Quality: ROA {_f(ov['roa_%'].iloc[-1] if not ov.empty else None, 1, pct=True)} "
                  f"· net margin {_f(t.get('ttm_net_margin_%'), 1, pct=True)} · CFO/PAT {_f(cfo_pat, 2)}x")
-        L.append(f"- Forensic: Altman Z {_f(z.value, 2)} · Piotroski {_f(fsc.value, 0)}/9 · "
-                 f"Beneish M {_f(m.value, 2)} · Sloan accruals {_f(acc.value, 1, pct=True)} · "
-                 f"pledge {_f(pledge, 1, pct=True)} of promoter")
+        L.append(f"- Forensic: Altman Z {_f(z.value, 2)} ({glossary.label('Altman Z', z.value) or 'n/a'}) · "
+                 f"Piotroski {_f(fsc.value, 0)}/9 · Beneish M {_f(m.value, 2)} · "
+                 f"Sloan accruals {_f(acc.value, 1, pct=True)} · "
+                 f"pledge {_f(pledge, 1, pct=True)} of promoter "
+                 f"({glossary.label('Pledge%', pledge) or 'n/a'})")
 
         flags = []
         if m.value is not None and m.value > -1.78:
@@ -129,7 +132,8 @@ def report_summary(symbol: str, *, consolidated: bool = False) -> str:
         L.append("- **Red flags:** " + ("; ".join(flags) if flags else "none from the quant screens"))
         L.append("")
         L.append("_Full analysis — multi-year statements, forensic deep-dive, quant valuation "
-                 "and charts — is in the attached PDF._")
+                 "and charts — is in the attached PDF, which ends with a **Metric guide** "
+                 "explaining what each number means, its typical range, and how to read it._")
         return "\n".join(L)
     finally:
         con.close()

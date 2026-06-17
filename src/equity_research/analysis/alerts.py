@@ -121,18 +121,23 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
         if state.get("altman_band") and state["altman_band"] != zb and \
                 ["distress", "grey", "safe"].index(zb) < ["distress", "grey", "safe"].index(state["altman_band"]):
             A.append(Alert(symbol, "red", "Altman Z deteriorated",
-                           f"{state['altman_band']} → {zb} (Z {z.value:.2f})"))
+                           f"{state['altman_band']} → {zb} (Z {z.value:.2f}). Altman Z gauges "
+                           "bankruptcy distance (>2.99 safe · <1.81 distress) — check leverage "
+                           "& working capital."))
         up["altman_band"] = zb
     if m.value is not None and m.value == m.value:
         flagged = m.value > -1.78
         if state.get("beneish_flag") == "0" and flagged:
             A.append(Alert(symbol, "red", "Beneish M crossed −1.78",
-                           f"now {m.value:.2f} — possible earnings-manipulation flag"))
+                           f"now {m.value:.2f}. Beneish M is a statistical earnings-manipulation "
+                           "screen (> −1.78 flags risk) — scrutinise receivables, margins & "
+                           "accruals vs cash (a screen, not proof)."))
         up["beneish_flag"] = "1" if flagged else "0"
     if f.value is not None and f.value == f.value:
         if state.get("piotroski") and f.value <= _num(state["piotroski"]) - 2:
             A.append(Alert(symbol, "warn", "Piotroski F dropped",
-                           f"{state['piotroski']} → {f.value:.0f}/9"))
+                           f"{state['piotroski']} → {f.value:.0f}/9. Piotroski F is a 9-point "
+                           "fundamental-strength score (8–9 strong, 0–2 weak) — weakening quality."))
         up["piotroski"] = f.value
 
     # 13) CFO-vs-PAT deterioration (latest annual)
@@ -142,7 +147,9 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
         if cfo_pat == cfo_pat:
             if state.get("cfo_pat_ok") == "1" and cfo_pat < 1.0:
                 A.append(Alert(symbol, "red", "CFO/PAT fell below 1",
-                               f"now {cfo_pat:.2f}x — cash no longer backs profit"))
+                               f"now {cfo_pat:.2f}x. CFO/PAT compares operating cash to reported "
+                               "profit; <1 means earnings aren't backed by cash — an "
+                               "earnings-quality flag (read the multi-year trend, can be lumpy)."))
             up["cfo_pat_ok"] = "1" if cfo_pat >= 1.0 else "0"
 
     # 14) valuation P/E breakout vs own history
@@ -155,10 +162,12 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
             status = "above" if pe > pes.max() else "below" if pe < pes.min() else "within"
             if state.get("pe_band") in ("within", None, "") and status == "above":
                 A.append(Alert(symbol, "warn", "P/E above historical range",
-                               f"P/E {pe:.1f} > prior max {pes.max():.1f}"))
+                               f"P/E {pe:.1f} > prior max {pes.max():.1f} — market paying more than "
+                               "it ever has for this stock; justified only by stronger growth/quality."))
             elif state.get("pe_band") in ("within", None, "") and status == "below":
                 A.append(Alert(symbol, "green", "P/E below historical range",
-                               f"P/E {pe:.1f} < prior min {pes.min():.1f}"))
+                               f"P/E {pe:.1f} < prior min {pes.min():.1f} — cheap vs its own history "
+                               "(value opportunity, or the market pricing in deterioration)."))
             up["pe_band"] = status
     return A, up
 
@@ -226,7 +235,9 @@ def _pledge(symbol, state, pledge) -> tuple[list[Alert], dict]:
     A: list[Alert] = []
     if cur > _num(last) + PLEDGE_RISE_PP:
         A.append(Alert(symbol, "red", "Promoter pledge rose",
-                       f"{_num(last):.1f}% → {cur:.1f}% of promoter holding pledged"))
+                       f"{_num(last):.1f}% → {cur:.1f}% of promoter holding pledged. "
+                       "Pledge = promoter shares posted as loan collateral; a rise can signal "
+                       "promoter cash/leverage stress, and >50% is a serious red flag (forced-sale risk)."))
     return A, up
 
 
