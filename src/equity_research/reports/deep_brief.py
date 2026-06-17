@@ -20,6 +20,7 @@ import pandas as pd
 
 from equity_research.analysis import forensic, fundamentals, quant, sector, technical, valuation
 from equity_research.analysis.fundamentals import load_annual
+from equity_research.reports import glossary
 
 CR = 1e7
 
@@ -265,15 +266,18 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     acc = forensic.accruals(con, symbol, consolidated=consolidated)
     if acc.value is not None:
         L.append(f"**Sloan accruals = {_f(acc.value, 1, pct=True)}** of avg assets "
-                 f"(cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}) "
-                 "— high positive ⇒ earnings not backed by cash.")
+                 f"({glossary.label('Sloan accruals%', acc.value) or 'n/a'}; cash-flow accruals "
+                 f"{_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}) — near-zero/negative "
+                 "is good; high positive ⇒ earnings not cash-backed.")
     p = con.execute(
         "SELECT period_end, promoter_holding_pct, pledged_pct_of_promoter, pledged_pct_of_total "
         "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
     if p:
         L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
-                 f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of promoter holding pledged** "
-                 f"({_f(p[3], 1, pct=True)} of total shares).")
+                 f"{_f(p[1], 1, pct=True)} ({glossary.label('Promoter holding%', p[1])}); "
+                 f"**pledged {_f(p[2], 1, pct=True)} of promoter holding** "
+                 f"({glossary.label('Pledge%', p[2]) or 'n/a'}; {_f(p[3], 1, pct=True)} of total "
+                 "shares) — 0% ideal, >50% a serious red flag.")
     else:
         L.append("**Promoter pledge:** n/a (no shareholding snapshot ingested).")
     L.append("- **Contingent liabilities / related-party transactions** live in the annual-report "
@@ -316,12 +320,14 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  f"{_f(100 * inp.terminal_growth, 1, pct=True)} · net debt ₹{_f(inp.net_debt / CR, 0)} cr")
         if mc.median and mc.price:
             if mc.price <= mc.median:
-                mos = f"margin of safety {_f(100 * (mc.median - mc.price) / mc.median, 0)}%"
+                mos = ("margin of safety "
+                       + glossary.read("Margin of safety%", 100 * (mc.median - mc.price) / mc.median,
+                                       nd=0, pct=True))
             else:
                 mos = f"price is {_f(mc.price / mc.median, 1)}x the DCF median (no margin of safety)"
             L.append(f"- **Intrinsic value/share ₹{_f(mc.median, 0)} (median)**, p10–p90 "
                      f"₹{_f(mc.p10, 0)}–{_f(mc.p90, 0)}; price ₹{_f(mc.price, 0)} → {mos}; "
-                     f"P(undervalued) {_f(100 * mc.prob_undervalued, 0)}%.")
+                     f"P(undervalued) {glossary.read('P(undervalued)%', 100 * mc.prob_undervalued, nd=0, pct=True)}.")
         L.append(f"- Scenario fair value — bear ₹{_f(sc.get('bear'), 0)} · base "
                  f"₹{_f(sc.get('base'), 0)} · bull ₹{_f(sc.get('bull'), 0)}.")
         if rev.get("implied_growth") is not None:
@@ -348,7 +354,10 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _f(v["z"], 2)]
                 for k, v in zs["ratios"].items()]
         L += [f"- Sector-relative z-scores ({zs.get('industry', '?')}, vs {len(rows)} ratios over peers):",
-              _table(["Ratio", "Value", "Peer mean", "z"], rows)]
+              _table(["Ratio", "Value", "Peer mean", "z"], rows),
+              "  _z = standard deviations from the peer mean: |z|<1 in line with peers, >2 an "
+              "outlier. High z is **good** for ROE/ROCE/margins, **expensive** for P/E·P/B, "
+              "**more levered** for D/E._"]
     else:
         L.append(f"- Sector z-scores: {zs.get('note', 'n/a')}.")
     L.append("")
@@ -369,4 +378,11 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
           "- COGS, EBITDA and FCFF/FCFE use documented approximations "
           "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "
           "FCFF adds back after-tax interest; FCFE adds net borrowing)."]
+
+    L += ["", glossary.guide([
+        "P/E", "P/B", "ROE%", "ROCE%", "ROIC%", "NetMargin%", "EBITDA margin%",
+        "D/E", "Net debt/EBITDA", "Interest cover", "Current ratio", "CCC (days)",
+        "CFO/PAT", "CFO/EBITDA%", "Sloan accruals%", "Altman Z", "Piotroski F",
+        "Beneish M", "Benford MAD", "Margin of safety%", "P(undervalued)%",
+        "Implied growth%", "Promoter holding%", "Pledge%", "Sector z-score"])]
     return "\n".join(L)

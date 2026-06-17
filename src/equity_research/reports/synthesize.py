@@ -80,6 +80,13 @@ as a distribution/range, not a point estimate; for banks/NBFCs it is skipped.
 7. **Verdict** — Buy / Accumulate / Hold / Reduce / Avoid, the key reasons, the \
 main risks/red flags, and concrete things to watch.
 
+**Explain as you go:** for every metric you cite, briefly say *what it measures*, \
+what a *typical/healthy* value looks like, and what *this* value means **for this \
+specific company given its sector and business model** — a capital-heavy, \
+financial, or hyper-growth business has very different 'normal' ranges (e.g. lower \
+ROCE/higher leverage can be fine for utilities; a vanilla DCF understates a true \
+compounder). Write so a non-expert can follow, but stay rigorous.
+
 Respect any n/a or caveat in the brief; never invent data. Be specific and \
 critical — this is a forensic review, not a summary."""
 
