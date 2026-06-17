@@ -296,7 +296,7 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
     if results:
         ev = ["## Events (today)"]
         for sym in sorted(results, key=lambda s: names.get(s, s)):
-            lines = [f"**{names.get(sym) or sym}** ({sym})"]
+            lines = [f"**{names.get(sym) or sym}** ({sym})", ""]   # blank line → bullets form a list
             for al in results[sym]:
                 emo = alerts.EMOJI.get(al.severity, "🔔")
                 lines.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
