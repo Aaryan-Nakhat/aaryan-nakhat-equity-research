@@ -50,9 +50,13 @@ the Developer API key.
 
 ## Email (`reports/email.py`)
 
-`send_report(subject, body)` over SMTP STARTTLS. Config via env
-(`SMTP_HOST/PORT/USER/PASS`, `REPORT_FROM`, `REPORT_TO`) — see `.env.example`.
-Gmail needs an App Password.
+`send_report(subject, body, *, to, html, attachments, in_reply_to, references)`
+over SMTP STARTTLS — supports an HTML alternative (`body_html()` reuses the PDF's
+markdown→HTML so email and PDF look identical), PDF **attachments**, and
+**threading** headers so replies thread under the request. Every sent message
+carries an `X-EquityBot` header so the inbound reader skips the bot's own mail.
+Config via env (`SMTP_HOST/PORT/USER/PASS`, `REPORT_FROM`, `REPORT_TO`) — see
+`.env.example`. Gmail needs an App Password.
 
 ## Usage
 
@@ -123,6 +127,39 @@ Get-Content data\processed\telegram_bot.log -Tail 20 -Wait # live log
 
 Re-register from scratch: see the `Register-ScheduledTask` call in the project
 history, or just run `scripts/run_bot.ps1` manually in a terminal.
+
+## Email channel (`scripts/email_bot.py`) — Telegram-blocked fallback
+
+When Telegram is unreachable (some Indian ISPs IP-block `api.telegram.org`), the
+**email channel** delivers the exact same brains over email instead. Selected by
+the **`CHANNELS`** env flag (`email` | `telegram` | `telegram,email`); the
+Telegram code stays intact and revives with `CHANNELS=telegram`.
+
+```
+PULL  you email a stock name (Subject) from an allowlisted address
+        │  IMAP IDLE wakes the bot (reports/inbox.py — no polling)
+        ▼  resolve → one match runs; several → "which one?" reply, you reply a number
+        ▼  generate_report (deep) → reply in-thread: HTML body + PDF attached
+PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email
+        (deep-report PDFs attached for 'results filed'; holiday/weekend-skipped)
+```
+
+- **Inbound** (`reports/inbox.py`): one Gmail account both sends and reads. IMAP
+  **IDLE** waits for mail (no minute-by-minute polling); on arrival it fetches
+  UNSEEN messages, keeps only those `From:` an address in `EMAIL_ALLOWED_SENDERS`
+  (auth), and skips its own (`X-EquityBot`) replies. IDLE is re-armed each loop
+  (Gmail drops it ~29 min), which also serves as the daily-scan heartbeat.
+- **Disambiguation** is *ask-first*: ambiguous names get a numbered reply; your
+  numeric reply is matched to the pending candidates (stored in `alert_state`
+  under `__email__`, 24h TTL) and the chosen report is sent.
+- **Config**: `CHANNELS`, `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
+  `REPORT_FROM` / `REPORT_TO`, and `EMAIL_ALLOWED_SENDERS`. Send requests *from*
+  a different address you own (e.g. work) *to* the bot's Gmail, so requests never
+  blur with notes-to-self.
+
+Always-on: `scripts/run_email_bot.ps1` (auto-restart loop, mirrors the Telegram
+launcher) → scheduled task **`EquityResearchEmailBot`**. Bot logs to
+`data/processed/email_bot.log`; launcher markers to `email_launcher.log`.
 
 ## Status / follow-ups
 
