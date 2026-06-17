@@ -255,21 +255,30 @@ def main() -> None:
         try:
             inbox.connect()
             log.info("IMAP connected (%s) — waiting for mail via IDLE", inbox.user)
+            _drain(inbox)            # catch anything that arrived while we were down
             while True:
                 activity = inbox.wait(timeout=IDLE_TIMEOUT)
                 if activity:
-                    for req in inbox.fetch_requests(ALLOWED):
-                        try:
-                            handle_request(req)
-                        except Exception:  # noqa: BLE001 — one bad request shouldn't kill the loop
-                            log.exception("failed handling request from %s", req.sender)
-                        inbox.mark_seen([req.uid])
-                maybe_scan()  # heartbeat: fires at most once/day
+                    _drain(inbox)
+                maybe_scan()         # heartbeat: fires at most once/day
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")
         finally:
             inbox.logout()
         time.sleep(15)
+
+
+def _drain(inbox: Inbox) -> None:
+    """Handle every pending request from allowlisted senders, then mark them seen."""
+    reqs = inbox.fetch_requests(ALLOWED)
+    if reqs:
+        log.info("got %d request(s): %s", len(reqs), [r.subject for r in reqs])
+    for req in reqs:
+        try:
+            handle_request(req)
+        except Exception:  # noqa: BLE001 — one bad request shouldn't kill the loop
+            log.exception("failed handling request from %s", req.sender)
+        inbox.mark_seen([req.uid])
 
 
 if __name__ == "__main__":
