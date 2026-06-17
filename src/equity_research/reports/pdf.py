@@ -14,25 +14,27 @@ from playwright.sync_api import sync_playwright
 
 _CSS = """
 * { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
-body { font-size: 10px; color: #1b1b1b; line-height: 1.45; }
-h1 { font-size: 19px; margin: 0 0 6px; border-bottom: 2px solid #222; padding-bottom: 4px; }
-h2 { font-size: 14px; color: #0a6b3b; margin: 16px 0 4px; border-bottom: 1px solid #d0d0d0; padding-bottom: 2px; }
-h3 { font-size: 12px; margin: 12px 0 3px; }
-p, li { font-size: 10px; }
-em { color: #555; }
-strong { color: #111; }
-table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; font-size: 8.6px; }
-th, td { border: 1px solid #bcbcbc; padding: 2px 6px; text-align: right; white-space: nowrap; }
-th { background: #eef2f0; text-align: center; font-weight: 600; }
-td:first-child, th:first-child { text-align: left; }
-tr:nth-child(even) td { background: #fafafa; }
-code, pre { font-family: 'Consolas', 'Courier New', monospace; font-size: 8.6px; }
-pre { background: #f5f6f7; padding: 8px; border: 1px solid #e3e3e3; border-radius: 4px;
+body { font-size: 12.5px; color: #161616; line-height: 1.5; }
+h1 { font-size: 23px; margin: 0 0 8px; border-bottom: 3px solid #0a5c34; padding-bottom: 5px; color: #0a3d24; }
+h2 { font-size: 17px; color: #0a5c34; margin: 20px 0 6px; border-bottom: 1px solid #b8b8b8; padding-bottom: 3px; }
+h3 { font-size: 14px; margin: 14px 0 4px; color: #111; }
+p, li { font-size: 12.5px; color: #161616; }
+em { color: #3a3a3a; }
+strong { color: #000; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 11px; }
+th, td { border: 1px solid #8c8c8c; padding: 4px 8px; text-align: right; white-space: nowrap; color: #161616; }
+th { background: #d9e8e0; text-align: center; font-weight: 700; color: #0a3d24; }
+td:first-child, th:first-child { text-align: left; font-weight: 600; }
+tr:nth-child(even) td { background: #f1f5f3; }
+code, pre { font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; }
+pre { background: #f3f5f4; padding: 9px; border: 1px solid #d2d2d2; border-radius: 4px;
       white-space: pre; overflow-x: auto; }
-hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
-figure.chart { margin: 8px 0 14px; page-break-inside: avoid; text-align: center; }
-figure.chart img { max-width: 100%; height: auto; border: 1px solid #e3e3e3; }
-figure.chart figcaption { font-size: 9px; color: #555; margin-top: 2px; }
+hr { border: none; border-top: 1px solid #b0b0b0; margin: 16px 0; }
+blockquote { border-left: 4px solid #0a6b3b; margin: 8px 0; padding: 4px 12px;
+             background: #f4f8f6; color: #2a2a2a; }
+figure.chart { margin: 10px 0 16px; page-break-inside: avoid; text-align: center; }
+figure.chart img { max-width: 100%; height: auto; border: 1px solid #cfcfcf; }
+figure.chart figcaption { font-size: 11px; color: #3a3a3a; margin-top: 3px; font-weight: 600; }
 """
 
 
