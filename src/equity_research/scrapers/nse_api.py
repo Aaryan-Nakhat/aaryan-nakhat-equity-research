@@ -132,6 +132,64 @@ def corporate_actions(index: str = "equities") -> Any:
     return fetch_api(f"/api/corporates-corporateActions?index={index}")
 
 
+def _parse_pledge(data: Any) -> dict | None:
+    """Latest promoter-pledge snapshot from /api/corporate-pledgedata.
+
+    Returns promoter holding %, pledged % of total shares, and the investor-
+    relevant **pledged % of promoter holding** (numSharesPledged/totPromoterHolding).
+    NSE returns numbers as space-padded strings.
+    """
+    rows = data.get("data") if isinstance(data, dict) else None
+    if not rows:
+        return None
+    r = rows[0]
+
+    def num(k: str) -> float | None:
+        try:
+            return float(str(r.get(k, "")).strip())
+        except (TypeError, ValueError):
+            return None
+
+    prom_hold, pledged = num("totPromoterHolding"), num("numSharesPledged")
+    return {
+        "as_of": (r.get("shp") or "").strip() or None,
+        "promoter_holding_pct": num("percPromoterHolding"),
+        "pledged_pct_of_total": num("percSharesPledged"),
+        "pledged_pct_of_promoter": (100 * pledged / prom_hold)
+        if prom_hold and pledged is not None else None,
+        "num_shares_pledged": pledged,
+        "broadcast_dt": (r.get("broadcastDt") or "").strip() or None,
+    }
+
+
+def promoter_pledge(symbol: str) -> dict | None:
+    """Latest promoter share-pledge snapshot for ``symbol`` (None if unavailable)."""
+    try:
+        data = fetch_api(f"/api/corporate-pledgedata?index=equities&symbol={symbol}")
+    except Exception:  # noqa: BLE001 — degrade to n/a, never break the report
+        return None
+    return _parse_pledge(data)
+
+
+def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
+    """Pledge snapshot for many symbols in ONE Camoufox session (warm once)."""
+    paths = {s: f"/api/corporate-pledgedata?index=equities&symbol={s}" for s in symbols}
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, dict | None] = {}
+    for sym, body in captured.items():
+        try:
+            out[sym] = _parse_pledge(json.loads(body)) if body else None
+        except (json.JSONDecodeError, TypeError):
+            out[sym] = None
+    return out
+
+
 def option_chain_equity(symbol: str) -> Any:
     """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
     return fetch_api(f"/api/option-chain-equities?symbol={symbol}")

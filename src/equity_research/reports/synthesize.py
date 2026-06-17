@@ -67,9 +67,16 @@ payable days and the cash conversion cycle.
 4. **Growth & momentum** — multi-year revenue/PAT trajectory and the recent \
 quarterly trend; is growth decelerating or re-accelerating?
 5. **Forensic assessment** — interpret Altman/Piotroski/Beneish *and their \
-components*; flag aggressive accounting, other-income dependence, tax-rate \
-anomalies, related-party / receivables concerns the numbers hint at.
-6. **Valuation** — current multiples vs own history and sector; what is priced in.
+components*, the **Sloan accruals** ratio (cash-backing of earnings), the \
+**Benford** first-digit conformity, and **promoter-pledge** level; flag \
+aggressive accounting, other-income dependence, tax-rate anomalies. If a filing \
+PDF is supplied, also extract **contingent liabilities** (as % of net worth) and \
+material **related-party transactions** and weigh them as red flags.
+6. **Valuation** — current multiples vs own history and **sector z-scores**; then \
+the **Monte-Carlo DCF**: state the intrinsic-value range (median + p10–p90), the \
+margin of safety (or premium) at the current price and P(undervalued), and the \
+**reverse-DCF** implied growth vs history (is the price demanding?). Treat the DCF \
+as a distribution/range, not a point estimate; for banks/NBFCs it is skipped.
 7. **Verdict** — Buy / Accumulate / Hold / Reduce / Avoid, the key reasons, the \
 main risks/red flags, and concrete things to watch.
 

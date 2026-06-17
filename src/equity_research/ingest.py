@@ -6,14 +6,14 @@ Each function fetches via ``scrapers``, renames columns to the schema in
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import duckdb
 import pandas as pd
 
 from equity_research.common.db import replace_for_date
 from equity_research.common.http import ScrapeError, fetch_bytes
-from equity_research.scrapers import nse_archives, nse_financials
+from equity_research.scrapers import nse_api, nse_archives, nse_financials
 
 # Source-column -> schema-column maps (schema order preserved on write).
 _EOD_MAP = {
@@ -171,6 +171,59 @@ def ingest_eod_on_or_before(d: date, con: duckdb.DuckDBPyConnection, *,
         except ScrapeError:
             continue
     return None
+
+
+def _pledge_row(symbol: str, p: dict | None) -> dict | None:
+    if not p or not p.get("as_of"):
+        return None
+    try:
+        period_end = datetime.strptime(p["as_of"], "%d-%b-%Y").date()
+    except (TypeError, ValueError):
+        return None
+    return {
+        "symbol": symbol, "period_end": period_end,
+        "promoter_holding_pct": p.get("promoter_holding_pct"),
+        "pledged_pct_of_promoter": p.get("pledged_pct_of_promoter"),
+        "pledged_pct_of_total": p.get("pledged_pct_of_total"),
+        "num_shares_pledged": p.get("num_shares_pledged"),
+        "broadcast_dt": p.get("broadcast_dt"),
+        "source_url": f"nse:/api/corporate-pledgedata?symbol={symbol}",
+    }
+
+
+def _write_shareholding(con: duckdb.DuckDBPyConnection, rows: list[dict | None]) -> int:
+    rows = [r for r in rows if r]
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows, columns=["symbol", "period_end", "promoter_holding_pct",
+                                     "pledged_pct_of_promoter", "pledged_pct_of_total",
+                                     "num_shares_pledged", "broadcast_dt", "source_url"])
+    con.register("_shp", df)
+    try:
+        con.execute(
+            "INSERT OR REPLACE INTO shareholding (symbol, period_end, promoter_holding_pct, "
+            "pledged_pct_of_promoter, pledged_pct_of_total, num_shares_pledged, "
+            "broadcast_dt, source_url) SELECT * FROM _shp")
+    finally:
+        con.unregister("_shp")
+    return len(df)
+
+
+def ingest_shareholding(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
+    """Land the latest promoter-pledge snapshot for ``symbol`` (best-effort)."""
+    return _write_shareholding(con, [_pledge_row(symbol, nse_api.promoter_pledge(symbol))])
+
+
+def ingest_shareholding_batch(symbols: list[str], con: duckdb.DuckDBPyConnection) -> int:
+    """Land pledge snapshots for many symbols in one browser session (for the scan)."""
+    data = nse_api.promoter_pledge_batch(symbols)
+    return _write_shareholding(con, [_pledge_row(s, data.get(s)) for s in symbols])
+
+
+def store_pledge(con: duckdb.DuckDBPyConnection, data: dict[str, dict | None]) -> int:
+    """Persist already-fetched pledge data ({symbol: parsed-dict}) — avoids a
+    second browser session when the scan has already fetched it."""
+    return _write_shareholding(con, [_pledge_row(s, p) for s, p in data.items()])
 
 
 def ingest_sector_map(con: duckdb.DuckDBPyConnection, index: str = "nifty500") -> int:

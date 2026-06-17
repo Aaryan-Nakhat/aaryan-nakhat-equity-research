@@ -129,6 +129,24 @@ Report: `uv run python scripts/forensic_report.py RELIANCE [--mcap <crore>]`.
 Approximations (noted in output): COGS ≈ materials + purchases + Δinventory;
 SG&A ≈ employee + other expenses; Altman X4 uses book equity unless `--mcap` given.
 
+### Accruals & promoter pledge (added)
+
+- **Sloan (balance-sheet) accruals** — `forensic.accruals()`:
+  `[Δ(non-cash current assets) − Δ(non-debt current liabilities) − D&A] / avg
+  assets`. High positive ⇒ profit not cash-backed (classic earnings-quality
+  flag). Reported alongside the existing cash-flow accruals `(PAT−CFO)/assets`.
+- **Promoter pledge** — NSE `/api/corporate-pledgedata` (browser tier;
+  `nse_api.promoter_pledge[_batch]`) → `shareholding` table
+  (`ingest.ingest_shareholding`). Surfaces **pledged % of promoter holding**
+  (the investor-relevant figure) + promoter holding %, and feeds a watchlist
+  pledge-rise alert. Degrades to `n/a` if the feed is unavailable.
+- **Contingent liabilities & related-party transactions** are **not** in the
+  structured XBRL (no such tags) — they live in annual-report notes; supply a
+  filing PDF and the Gemini step extracts them.
+
+For the **Monte-Carlo DCF / reverse-DCF / Benford / sector z-scores** quant layer
+(`analysis/quant.py`), see [`REPORTS.md`](REPORTS.md).
+
 ## Valuation (`analysis/valuation.py`)
 
 Joins annual financials × `equity_eod` prices. Shares = `EquityShareCapital` ÷

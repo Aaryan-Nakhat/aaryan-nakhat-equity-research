@@ -1,17 +1,20 @@
 """Watchlist event detectors (Phase 5).
 
 Per-symbol detectors that compare *today's* data against stored `alert_state`
-(what we knew last run) and emit an Alert only on a genuine change. Three groups:
-  - technical/price  (events 1-6) — from `equity_eod`, cheap, daily
-  - fundamental      (events 12-14) — from ingested `financials`
-  - announcements    (events 7-11) — from the NSE per-symbol announcement feed
+(what we knew last run) and emit an Alert only on a genuine change. Groups:
+  - price context    — 52-week extreme, delivery-% spike, big single-day move
+    (the pure momentum signals — RSI / MA-cross / volume spike — were dropped to
+    keep the focus fundamental/forensic, not trading)
+  - fundamental      — forensic-score flips, CFO/PAT, P/E-vs-history
+  - promoter pledge  — rise in pledged % of promoter holding (from `shareholding`)
+  - announcements    — from the NSE per-symbol announcement feed
 First sighting of a symbol seeds state silently (no day-one alert flood).
-Market-wide FII/DII (15) is handled by the scan orchestrator, not here.
+Market-wide FII/DII is handled by the scan orchestrator, not here.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 import duckdb
@@ -20,10 +23,9 @@ import numpy as np
 from equity_research.analysis import forensic, fundamentals, technical, valuation
 
 # Thresholds
-VOL_SPIKE = 2.0          # today vol / 20d avg
 DELIV_SPIKE = 1.5        # today deliv% / 20d avg
 BIG_MOVE = 0.06          # |1-day return|
-RSI_OB, RSI_OS = 70, 30
+PLEDGE_RISE_PP = 1.0     # promoter-pledge rise (percentage points of promoter holding) to alert on
 
 EMOJI = {"red": "🔴", "green": "🟢", "warn": "⚠️", "info": "🔔", "filing": "📄"}
 
@@ -84,44 +86,12 @@ def _technical(con, symbol, state) -> tuple[list[Alert], dict]:
             A.append(Alert(symbol, "red", "New 52-week low", f"₹{c:,.2f}"))
         up["last_52w_low"] = cur["low_52w"]
 
-    # 2) golden / death cross (50 vs 200 DMA)
-    if all(x == x for x in (cur["sma50"], cur["sma200"], prev["sma50"], prev["sma200"])):
-        now_sign = cur["sma50"] >= cur["sma200"]
-        prev_sign = prev["sma50"] >= prev["sma200"]
-        if now_sign != prev_sign:
-            if now_sign:
-                A.append(Alert(symbol, "green", "Golden cross",
-                               f"50-DMA ({cur['sma50']:,.0f}) crossed above 200-DMA ({cur['sma200']:,.0f})"))
-            else:
-                A.append(Alert(symbol, "red", "Death cross",
-                               f"50-DMA ({cur['sma50']:,.0f}) crossed below 200-DMA ({cur['sma200']:,.0f})"))
-
-    # 3) 200-DMA cross by price
-    if all(x == x for x in (c, pc, cur["sma200"], prev["sma200"])):
-        if (c >= cur["sma200"]) != (pc >= prev["sma200"]):
-            above = c >= cur["sma200"]
-            A.append(Alert(symbol, "info",
-                           f"Price crossed {'above' if above else 'below'} 200-DMA",
-                           f"₹{c:,.2f} vs 200-DMA ₹{cur['sma200']:,.0f}"))
-
-    # 4) RSI extreme (on entry)
-    if cur["rsi14"] == cur["rsi14"] and prev["rsi14"] == prev["rsi14"]:
-        if cur["rsi14"] > RSI_OB and prev["rsi14"] <= RSI_OB:
-            A.append(Alert(symbol, "warn", "RSI overbought", f"RSI {cur['rsi14']:.0f} (>70)"))
-        elif cur["rsi14"] < RSI_OS and prev["rsi14"] >= RSI_OS:
-            A.append(Alert(symbol, "warn", "RSI oversold", f"RSI {cur['rsi14']:.0f} (<30)"))
-
-    # 5) volume spike
-    if cur["vol_avg20"] == cur["vol_avg20"] and cur["vol_avg20"] > 0 and cur["volume"] > VOL_SPIKE * cur["vol_avg20"]:
-        A.append(Alert(symbol, "info", "Volume spike",
-                       f"{cur['volume']/cur['vol_avg20']:.1f}x the 20-day average"))
-
-    # 6) delivery-% spike (NSE conviction)
+    # 2) delivery-% spike (NSE conviction — kept: a fundamental-flavoured signal)
     if cur["deliv_avg20"] == cur["deliv_avg20"] and cur["deliv_avg20"] > 0 and cur["deliv_per"] > DELIV_SPIKE * cur["deliv_avg20"]:
         A.append(Alert(symbol, "info", "Delivery% spike",
                        f"{cur['deliv_per']:.0f}% vs 20d avg {cur['deliv_avg20']:.0f}% (institutional conviction)"))
 
-    # 6b) big single-day move
+    # 3) big single-day move (a 'something happened — look for news' trigger)
     if c == c and pc == pc and pc > 0:
         chg = c / pc - 1
         if abs(chg) > BIG_MOVE:
@@ -242,13 +212,33 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
     return A, up
 
 
-def scan_symbol(con: duckdb.DuckDBPyConnection, symbol: str, anns: list | None = None) -> list[Alert]:
+def _pledge(symbol, state, pledge) -> tuple[list[Alert], dict]:
+    """Rise in pledged % of promoter holding (structured `shareholding` data)."""
+    if not pledge:
+        return [], {}
+    cur = pledge.get("pledged_pct_of_promoter")
+    if cur is None or cur != cur:
+        return [], {}
+    up = {"pledge_pct": f"{cur:.2f}"}
+    last = state.get("pledge_pct")
+    if last is None:                       # first sighting: seed silently
+        return [], up
+    A: list[Alert] = []
+    if cur > _num(last) + PLEDGE_RISE_PP:
+        A.append(Alert(symbol, "red", "Promoter pledge rose",
+                       f"{_num(last):.1f}% → {cur:.1f}% of promoter holding pledged"))
+    return A, up
+
+
+def scan_symbol(con: duckdb.DuckDBPyConnection, symbol: str, anns: list | None = None,
+                pledge: dict | None = None) -> list[Alert]:
     """Run all per-symbol detectors. Seeds state silently on first sighting."""
     state = load_state(con, symbol)
     first_sight = "last_eod_date" not in state
     alerts, updates = [], {}
     for fn_alerts, fn_up in (_technical(con, symbol, state),
                              _fundamental(con, symbol, state),
+                             _pledge(symbol, state, pledge),
                              _announcements(symbol, anns or [], state)):
         alerts += fn_alerts
         updates.update(fn_up)

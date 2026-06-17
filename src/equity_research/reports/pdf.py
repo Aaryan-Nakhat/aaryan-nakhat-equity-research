@@ -7,6 +7,8 @@ Landscape A4 so the wide financial tables fit.
 
 from __future__ import annotations
 
+import base64
+
 import markdown as _md
 from playwright.sync_api import sync_playwright
 
@@ -28,24 +30,42 @@ code, pre { font-family: 'Consolas', 'Courier New', monospace; font-size: 8.6px;
 pre { background: #f5f6f7; padding: 8px; border: 1px solid #e3e3e3; border-radius: 4px;
       white-space: pre; overflow-x: auto; }
 hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
+figure.chart { margin: 8px 0 14px; page-break-inside: avoid; text-align: center; }
+figure.chart img { max-width: 100%; height: auto; border: 1px solid #e3e3e3; }
+figure.chart figcaption { font-size: 9px; color: #555; margin-top: 2px; }
 """
 
 
-def render_html(markdown_text: str, title: str = "") -> str:
+def _charts_html(images: list[tuple[str, bytes]]) -> str:
+    """Embed (caption, png-bytes) charts as inline base64 <img> blocks."""
+    if not images:
+        return ""
+    figs = []
+    for caption, data in images:
+        b64 = base64.b64encode(data).decode("ascii")
+        figs.append(f'<figure class="chart"><img src="data:image/png;base64,{b64}"/>'
+                    f'<figcaption>{caption}</figcaption></figure>')
+    return '<h2>Charts</h2>' + "".join(figs)
+
+
+def render_html(markdown_text: str, title: str = "",
+                images: list[tuple[str, bytes]] | None = None) -> str:
     """Render a markdown report string to a full styled HTML document.
 
     Shared by the PDF renderer and the email body so both look identical.
+    ``images`` (caption, png-bytes) are appended as a Charts section.
     """
     body = _md.markdown(markdown_text,
                         extensions=["tables", "fenced_code", "sane_lists"])
     return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<title>{title}</title><style>{_CSS}</style></head>'
-            f'<body>{body}</body></html>')
+            f'<body>{body}{_charts_html(images or [])}</body></html>')
 
 
-def report_to_pdf(markdown_text: str, title: str = "") -> bytes:
+def report_to_pdf(markdown_text: str, title: str = "",
+                  images: list[tuple[str, bytes]] | None = None) -> bytes:
     """Render a markdown report string to PDF bytes (landscape A4)."""
-    html = render_html(markdown_text, title)
+    html = render_html(markdown_text, title, images)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:

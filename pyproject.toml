@@ -15,6 +15,7 @@ dependencies = [
     "telegramify-markdown>=1.2.0",
     "markdown>=3.10.2",
     "imapclient>=3.0",
+    "matplotlib>=3.9",
 ]
 
 [project.optional-dependencies]

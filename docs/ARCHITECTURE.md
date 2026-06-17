@@ -99,7 +99,7 @@ JobQueue 18:00 IST  (+ startup catch-up)
 | **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 7 tables | `common/db.py` → `data/processed/equity.duckdb` |
-| **Analyse** | deterministic Python | `analysis/{fundamentals,forensic,valuation,sector,technical,alerts}.py` |
-| **Report** | brief → LLM → format | `reports/{brief,deep_brief,resolve,synthesize,pdf,email,pipeline}.py` |
+| **Analyse** | deterministic Python (incl. quant: MC-DCF, reverse-DCF, Benford, sector-z) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts}.py` |
+| **Report** | brief (+ quant + charts) → LLM → format/PDF | `reports/{brief,deep_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline}.py` |
 | **LLM** | synthesis + name resolution | Gemini 2.5 Pro via **Vertex** (service account) |
 | **Deliver** | bot(s) + daily scan; channel via `CHANNELS` | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

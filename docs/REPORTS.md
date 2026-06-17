@@ -83,6 +83,34 @@ only; needs a PDF read.)
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
 
+### Quant valuation & statistical forensics (`analysis/quant.py`)
+
+The deep brief also carries a quant layer (numpy-only, assumption-driven):
+- **Monte-Carlo DCF** — samples revenue growth, EBIT margin, WACC and terminal
+  growth (anchored to the company's own history; WACC via CAPM with beta from
+  `equity_eod` vs Nifty 50) over ~20k FCFF paths → an intrinsic-value/share
+  **distribution**: median, p10–p90, **margin of safety** and **P(undervalued)**.
+  Growth fades to terminal and `wacc−tg` is floored, so terminal value can't
+  explode. **Skipped for banks/NBFCs** (FCFF-DCF inappropriate — flagged).
+- **Reverse DCF** — the growth today's price implies (bisection), vs history.
+- **Scenario DCF** — bear/base/bull point values.
+- **Benford's law** — first-digit conformity (MAD) of all reported figures, a
+  manipulation/rounding tell.
+- **Sector z-scores** — target P/E, P/B, ROE, ROCE, net margin, D/E vs peer
+  mean/std (peers sanity-bounded so outliers don't distort).
+
+Plus new forensic metrics in the brief: **Sloan (balance-sheet) accruals** and
+**promoter-pledge %** (NSE pledge feed → `shareholding` table). Contingent
+liabilities / related-party transactions aren't in XBRL — supply a filing PDF and
+Gemini extracts them.
+
+### Charts in the PDF (`reports/charts.py`)
+
+The PDF embeds **fundamental** charts (matplotlib → PNG → base64 `<img>`):
+revenue/PAT + margin, **CFO-vs-PAT** (cash quality), ROE/ROCE/ROIC, leverage +
+interest cover, FCF/FCFF, and the **Monte-Carlo fair-value histogram**.
+`pdf.report_to_pdf(md, images=…)` appends them as a Charts section.
+
 ## Telegram bot (interactive, on-demand)
 
 `scripts/telegram_bot.py` — message a company name, get a deep report back.
@@ -139,7 +167,8 @@ Telegram code stays intact and revives with `CHANNELS=telegram`.
 PULL  you email a stock name (Subject) from an allowlisted address
         │  IMAP IDLE wakes the bot (reports/inbox.py — no polling)
         ▼  resolve → one match runs; several → "which one?" reply, you reply a number
-        ▼  generate_report (deep) → reply in-thread: HTML body + PDF attached
+        ▼  instant ack → reply in-thread: concise SUMMARY in the body
+           + the full deep report (tables + charts) as the attached PDF
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email
         (deep-report PDFs attached for 'results filed'; holiday/weekend-skipped)
 ```

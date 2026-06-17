@@ -31,12 +31,12 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
-from equity_research.analysis import alerts  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
+from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import generate_report  # noqa: E402
+from equity_research.reports.pipeline import generate_report, report_summary  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -124,18 +124,33 @@ def _ack(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> No
         log.exception("ack send failed for %s", symbol)
 
 
+def _pdf_with_charts(symbol: str, report_md: str) -> bytes:
+    """Full report PDF with the fundamental charts embedded (charts best-effort)."""
+    con = connect()
+    try:
+        images = charts.report_charts(con, symbol)
+    except Exception:  # noqa: BLE001 — a chart should never block the report
+        log.exception("charts failed for %s", symbol)
+        images = []
+    finally:
+        con.close()
+    return report_to_pdf(report_md, symbol, images=images)
+
+
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> None:
     log.info("generating report for %s (req from %s)", symbol, req.sender)
     _ack(symbol, req, resolved_name)
-    report_md = generate_report(symbol, deep=True)
-    pdf = report_to_pdf(report_md, symbol)
+    report_md = generate_report(symbol, deep=True)     # full report -> PDF
+    summary_md = report_summary(symbol)                # concise -> email body
+    pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
+    body = f"{head}\n\n{summary_md}"
     emailer.send_report(
         _re_subject(req.subject),
-        f"{head}\n\n{report_md}",
+        body,
         to=req.sender,
-        html=emailer.body_html(report_md, symbol),
+        html=emailer.body_html(body, symbol),
         attachments=[(f"{symbol}_{today}.pdf", pdf)],
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
@@ -216,7 +231,7 @@ def _push_digest(results: dict, note: str | None) -> None:
             if al.attach_report:
                 try:
                     rep = generate_report(sym, deep=True)
-                    attachments.append((f"{sym}_{today}.pdf", report_to_pdf(rep, sym)))
+                    attachments.append((f"{sym}_{today}.pdf", _pdf_with_charts(sym, rep)))
                 except Exception:  # noqa: BLE001
                     log.exception("digest report generation failed for %s", sym)
     if not results:
