@@ -66,7 +66,7 @@ uv run python scripts/research_report.py RELIANCE --shares 1353.2             # 
 uv run python scripts/research_report.py RELIANCE --deep --shares 1353.2      # full forensic deep-dive
 uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf        # + read a filing
 uv run python scripts/research_report.py RELIANCE --deep --out reliance.pdf   # write charted PDF
-uv run python scripts/research_report.py RELIANCE --email                     # summary body + charted PDF
+uv run python scripts/research_report.py RELIANCE --email                     # full report in body + charted PDF
 ```
 
 ### Deep mode (`--deep`)
@@ -182,10 +182,12 @@ Telegram code stays intact and revives with `CHANNELS=telegram`.
 PULL  you email a stock name (Subject) from an allowlisted address
         │  IMAP IDLE wakes the bot (reports/inbox.py — no polling)
         ▼  resolve → one match runs; several → "which one?" reply, you reply a number
-        ▼  instant ack → reply in-thread: concise SUMMARY in the body
-           + the full deep report (tables + charts) as the attached PDF
-PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email
-        (deep-report PDFs attached for 'results filed'; holiday/weekend-skipped)
+        ▼  instant ack → reply in-thread: the FULL deep report in the body
+           + the same report (tables + charts) as the attached PDF
+PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
+        Upcoming events + per-stock Movers + Events (deals / corporate events /
+        forensic changes, with inline filing analysis). Lines-only, NO PDFs.
+        Holiday/weekend-skipped.
 ```
 
 - **Inbound** (`reports/inbox.py`): one Gmail account both sends and reads. IMAP

@@ -105,6 +105,7 @@ day-one flood). State-based dedup also makes a double-run harmless.
 - The **email digest is lines-only (no PDFs)** → sends in seconds even on heavy
   results days; grouped by symbol. Telegram still attaches PDFs (parked channel).
 - The bot only runs while the laptop is on; a missed 18:00 slot is covered by the
-  startup catch-up. True 24/7 needs a small server.
+  self-healing heartbeat (fires once the bot is next up after 18:00). True 24/7
+  needs a small server.
 - Fundamental/valuation events need financials ingested; symbols without NSE
   financials still get price/announcement alerts.
