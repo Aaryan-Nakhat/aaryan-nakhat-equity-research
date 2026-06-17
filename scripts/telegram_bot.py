@@ -272,25 +272,33 @@ async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Run the watchlist scan + push + mark today done. (Gating is in maybe_scan.)"""
     chat_id = min(_ALLOWED)
-    if not await asyncio.to_thread(scan.market_open_today):
-        log.info("market closed today (weekend/holiday) — skipping scheduled scan")
-        return
-    log.info("scheduled watchlist scan starting")
+    log.info("watchlist scan starting")
     try:
         results, note = await asyncio.to_thread(scan.run_watchlist_scan)
     except Exception:  # noqa: BLE001
-        log.exception("scheduled scan failed")
+        log.exception("scan failed")
         return
     await _push_scan(context.bot, chat_id, results, note)
+    await asyncio.to_thread(scan.mark_scanned)
 
 
-async def catchup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """On startup, run the scan if we're already past the daily slot (laptop was
-    likely off at 18:00). State-based dedup makes a double-run harmless."""
-    if datetime.now(IST).time() >= SCAN_TIME.replace(tzinfo=None):
-        log.info("startup catch-up scan (past 18:00 IST)")
-        await scan_job(context)
+async def maybe_scan(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Self-healing daily gate (runs every 30 min). Fires the scan once per
+    trading day, the first time the bot is up at/after 18:00 IST — robust to
+    sleep, restarts, and late starts. Skips weekends/holidays."""
+    now = datetime.now(IST)
+    if now.hour < SCAN_TIME.hour:                       # before 18:00 IST
+        return
+    if await asyncio.to_thread(scan.already_scanned_today):
+        return
+    if not await asyncio.to_thread(scan.market_open_today):
+        await asyncio.to_thread(scan.mark_scanned)       # holiday/weekend: mark, no push
+        log.info("market closed today — skipping scan (marked done)")
+        return
+    log.info("self-healing daily scan firing")
+    await scan_job(context)
 
 
 def main() -> None:
@@ -308,10 +316,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(on_select, pattern=r"^(an|wl)\|"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(on_error)
-    # Daily watchlist scan at 18:00 IST + a startup catch-up if we missed it.
-    app.job_queue.run_daily(scan_job, time=SCAN_TIME)
-    app.job_queue.run_once(catchup_job, when=45)
-    log.info("Bot running. Authorised users: %s · daily scan 18:00 IST", sorted(_ALLOWED))
+    # Self-healing daily scan: a check every 30 min runs it once per trading day
+    # the first time the bot is up at/after 18:00 IST (robust to sleep/restart).
+    app.job_queue.run_repeating(maybe_scan, interval=1800, first=15)
+    log.info("Bot running. Authorised users: %s · daily scan ~18:00 IST (self-healing)", sorted(_ALLOWED))
     app.run_polling(drop_pending_updates=True)
 
 
