@@ -76,20 +76,23 @@ You ▶ Telegram: "Adani Power"  (or "Reliance consolidated")
 ## Flow B — Push: watchlist alerts (daily 18:00 IST)
 
 ```
-JobQueue 18:00 IST  (+ startup catch-up)
+self-healing gate: first heartbeat >=18:00 IST, once per trading day (already_scanned_today)
         │
-        ▼  market_open_today()?  ── weekend / NSE holiday ──▶ SKIP (no ping)
+        ▼  market_open_today()?  ── weekend / NSE holiday ──▶ SKIP
         │ trading day
-        ▼  scan.run_watchlist_scan():
+        ▼  scan.run_watchlist_scan() → ScanResult(results, movers, upcoming):
               1. refresh today's EOD (bhavcopy + index + OI)
-              2. batched 1-session browser → each symbol's announcements
-              3. per symbol → alerts.scan_symbol():  compare today vs alert_state
-                    technical(1-6) · fundamental/forensic(12-14) · announcements(7-11)
-              4. + FII/DII market note (15)
-        │   (alert_state dedup → only real changes fire; 1st-sight seeds silently)
+              2. browser sessions: per-symbol announcements · promoter pledge ·
+                 market_feeds (bulk/block deals + board meetings + event calendar + corp actions)
+              3. per symbol → alerts.scan_symbol():  today vs alert_state
+                    price-context · fundamental/forensic · pledge · announcements (deduped)
+              4. + bulk/block deal alerts · upcoming events · per-stock movers
+              5. _enrich_event_docs(): download + Gemini-read notable filings (inline, capped 5)
+        │   (alert_state dedup → only new events fire; 1st-sight seeds silently)
         ▼
-   push to Telegram:  🔴/🟢/⚠️/🔔 one line per event
-        └─ "results filed" 📄 ──▶ auto-generate full deep report + PDF
+   digest (email | telegram), by company name, lines-only, NO PDFs:
+        📅 Upcoming  ·  Movers (all stocks)  ·  Events (with inline filing analysis)
+        └─ reply with a company name → full on-demand deep report
 ```
 
 ## Component → file map

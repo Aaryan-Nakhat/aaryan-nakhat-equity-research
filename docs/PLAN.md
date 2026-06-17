@@ -116,17 +116,29 @@ an optional concall/annual-report PDF) → delivered via:
 (LLM provider is Gemini — reuses an existing workplace Vertex key, employer-
 authorized; the brief/email layers are provider-agnostic.)
 
-**Remaining (optional):** auto-fetch latest filing PDF from the BSE feed; YoY
-annual-report diffing; live email-path test (needs `SMTP_*`).
+**Remaining (optional):** YoY annual-report diffing.
 
-### Phase 5 — Watchlist alerts — 🟡 in progress
-**Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`, bot commands; see
-[`ALERTS.md`](ALERTS.md)): daily scan at **18:00 IST** (JobQueue + startup
-catch-up) over a Telegram-managed watchlist, all 15 event types (technical 1-6,
-announcements 7-11 incl. results→report, forensic/valuation 12-14, FII/DII 15),
-with `alert_state` dedup + silent first-sight seeding. Commands `/watch`,
-`/unwatch`, `/watchlist`, `/scan`. Initial 27-stock watchlist populated.
-**Remaining:** live-validate a `/scan` run end-to-end.
+### Phase 5 — Watchlist alerts — ✅ done
+**Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`; see [`ALERTS.md`](ALERTS.md)):
+a **self-healing daily scan** (fires once per trading day at the first heartbeat
+≥18:00 IST; weekend/holiday-skipped) over the 27-stock watchlist, delivered as a
+**company-name digest** (email or Telegram, lines-only, **no PDFs**):
+- **📅 Upcoming** — board-meeting/results dates, ex-dividend/split/bonus, AGM/fund-raising.
+- **Movers** — per-stock close · day %chg · delivery% · 52-week position (always present).
+- **Events** — bulk/block **institutional deals**, a defined **corporate-event taxonomy**
+  (results · dividend · split · rights · QIP · scheme/M&A · open offer · concall ·
+  board meeting · AGM · credit rating · order win · pledge …), and **forensic/fundamental
+  flips** (Altman/Beneish/Piotroski/CFO-PAT/pledge) — with `alert_state` dedup +
+  first-sight seeding, and **inline Gemini analysis** of notable filing PDFs (capped 5).
+Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populated.
+
+### Phase 6 — depth, quant & the email channel — ✅ done
+- **Email channel** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP), selected by the
+  `CHANNELS` flag — runs while Telegram is ISP-blocked; same brains, full report in body + PDF.
+- **Quant suite** (`analysis/quant.py`): Monte-Carlo DCF (margin of safety, P(undervalued)),
+  reverse DCF, scenario DCF, Benford's-law, sector z-scores.
+- **Fundamental charts** in the PDF (`reports/charts.py`); **promoter-pledge** + **Sloan
+  accruals** forensics; **self-explaining metrics** + a Metric-guide appendix (`reports/glossary.py`).
 
 ### Later (deferred)
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
