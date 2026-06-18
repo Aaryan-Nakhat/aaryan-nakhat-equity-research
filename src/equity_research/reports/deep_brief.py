@@ -314,6 +314,20 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     if sec.get("peers_with_data"):
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
+
+    # peer comparison table (target ◄ vs sector peers that have data)
+    pcols = ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"]
+    prows = []
+    for ps in [symbol, *sector.peers(con, symbol)]:
+        r = quant._ratios(con, ps, consolidated)
+        if not r:
+            continue
+        prows.append([ps + (" ◄" if ps == symbol else "")] + [_f(r.get(c), 1) for c in pcols])
+        if len(prows) >= 8:
+            break
+    if len(prows) >= 2:
+        L += ["### Peer comparison", _table(["Company"] + pcols, prows)]
+
     # ===================== QUANT VALUATION (Monte-Carlo DCF) =====================
     inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
     L += ["## 11. Quant valuation (Monte-Carlo DCF)"]

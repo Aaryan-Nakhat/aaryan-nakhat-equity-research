@@ -6,18 +6,56 @@ on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from datetime import datetime
+
 import duckdb
 
 from equity_research.analysis import forensic, fundamentals, quant, valuation
+from equity_research.analysis.alerts import _categorise
 from equity_research.common.db import connect
+from equity_research.common.http import fetch_bytes
 from equity_research.reports import glossary
 from equity_research.ingest import (ingest_annual_financials, ingest_financials,
                                     ingest_shareholding)
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import synthesize_thesis
+from equity_research.scrapers import nse_api
 
 CR = 1e7
+
+
+def _latest_filing_pdf(symbol: str) -> str | None:
+    """Newest results/concall filing PDF for ``symbol``, downloaded to a temp file
+    so the report's Gemini call can read management commentary, guidance, and the
+    contingent-liability / related-party notes. Returns the path, or None."""
+    try:
+        anns = nse_api.corporate_announcements_batch([symbol]).get(symbol) or []
+    except Exception:  # noqa: BLE001
+        return None
+
+    def _dt(a):
+        try:
+            return datetime.strptime(a.get("an_dt", "")[:20].strip(), "%d-%b-%Y %H:%M:%S")
+        except ValueError:
+            return datetime.min
+
+    for a in sorted(anns, key=_dt, reverse=True):
+        att = (a.get("attchmntFile") or "").strip()
+        title, _, _ = _categorise(a.get("desc", ""), a.get("attchmntText", ""),
+                                  str(a.get("hasXbrl", "")).lower() == "true")
+        if att.lower().endswith(".pdf") and title in ("Results filed", "Concall / investor meet"):
+            try:
+                data = fetch_bytes(att)
+            except Exception:  # noqa: BLE001
+                return None
+            fd, path = tempfile.mkstemp(suffix=".pdf")
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+            return path
+    return None
 
 
 def _f(v, nd=0, pct=False) -> str:
@@ -64,7 +102,17 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool = Fals
                 "NSE-listed, or the symbol is wrong.\n\n" + brief)
     if not synthesize:
         return brief
-    thesis = synthesize_thesis(brief, symbol, pdf_path=pdf_path, deep=deep)
+    tmp = None
+    if pdf_path is None:                       # auto-fetch the latest results/concall filing
+        pdf_path = tmp = _latest_filing_pdf(symbol)
+    try:
+        thesis = synthesize_thesis(brief, symbol, pdf_path=pdf_path, deep=deep)
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     return f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
 
 

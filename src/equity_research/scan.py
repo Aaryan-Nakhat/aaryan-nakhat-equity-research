@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 
-from equity_research.analysis import alerts
+from equity_research.analysis import alerts, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import ingest_eod, store_pledge
@@ -36,6 +36,24 @@ class ScanResult:
     results: dict[str, list[alerts.Alert]] = field(default_factory=dict)
     movers: list[dict] = field(default_factory=list)
     upcoming: list[dict] = field(default_factory=list)
+    market: str = ""
+
+
+def market_context(con: duckdb.DuckDBPyConnection) -> str:
+    """One-line market header (Nifty 50 + Nifty 500 latest close + day move) so a
+    stock's move can be read against the market."""
+    rows = con.execute(
+        "SELECT index_name, close, pct_change FROM index_close "
+        "WHERE index_name IN ('Nifty 50', 'Nifty 500') "
+        "AND trade_date = (SELECT max(trade_date) FROM index_close)").fetchall()
+    order = {"Nifty 50": 0, "Nifty 500": 1}
+    parts = []
+    for name, close, chg in sorted(rows, key=lambda r: order.get(r[0], 9)):
+        if close is None:
+            continue
+        parts.append(f"{name} {close:,.0f} ({chg:+.1f}%)" if chg is not None
+                     else f"{name} {close:,.0f}")
+    return "📈 Market: " + " · ".join(parts) if parts else ""
 
 
 def _meta(con, key):
@@ -254,8 +272,19 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
         hi, lo = (hl or (None, None))
         chg = (close / prev - 1) * 100 if prev else None
         pos = (close - lo) / (hi - lo) * 100 if hi and lo and hi > lo else None
+        # valuation lens: current P/E vs the stock's own positive-P/E history median
+        snap = valuation.snapshot(con, sym)
+        pe = snap.get("pe_ttm")
+        pe = float(pe) if (pe is not None and pe == pe and pe > 0) else None
+        pe_med = None
+        if pe is not None:
+            h = valuation.valuation_history(con, sym)
+            if not h.empty and "pe" in h:
+                pos_pe = h["pe"].dropna()
+                pos_pe = pos_pe[pos_pe > 0]
+                pe_med = float(pos_pe.median()) if len(pos_pe) else None
         out.append({"symbol": sym, "company": names.get(sym) or sym, "close": close,
-                    "chg_pct": chg, "deliv": deliv, "pos_52w": pos})
+                    "chg_pct": chg, "deliv": deliv, "pos_52w": pos, "pe": pe, "pe_median": pe_med})
     out.sort(key=lambda m: abs(m["chg_pct"]) if m["chg_pct"] is not None else 0, reverse=True)
     return out
 
@@ -283,6 +312,8 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
     results, movers, upcoming = sr.results, sr.movers, sr.upcoming
     names = {m["symbol"]: m["company"] for m in movers}
     parts = [f"# Watchlist — {date_str}"]
+    if sr.market:
+        parts.append(sr.market)
 
     if upcoming:
         rows = ["## 📅 Upcoming"]
@@ -297,7 +328,15 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
             chg = f"{m['chg_pct']:+.1f}%" if m["chg_pct"] is not None else "n/a"
             deliv = f"deliv {m['deliv']:.0f}%" if m["deliv"] is not None else "deliv n/a"
             tail = f" · {_pos_label(m['pos_52w'])}" if _pos_label(m["pos_52w"]) else ""
-            rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · {chg} · {deliv}{tail}")
+            val = ""
+            if m.get("pe"):
+                val = f" · P/E {m['pe']:.0f}"
+                if m.get("pe_median"):
+                    med = m["pe_median"]
+                    rel = "below" if m["pe"] < med * 0.9 else "above" if m["pe"] > med * 1.1 else "~"
+                    val += f" ({rel} 5y-med {med:.0f})"
+            rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
+                        f"{chg} · {deliv}{tail}{val}")
         parts.append("\n".join(rows))
 
     if results:
@@ -356,7 +395,8 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}).items():
             results.setdefault(sym, []).extend(deal_alerts)
         _enrich_event_docs(results)                         # inline Gemini read of filings
-        return ScanResult(results, watchlist_movers(con), watchlist_upcoming(syms, feeds))
+        return ScanResult(results, watchlist_movers(con), watchlist_upcoming(syms, feeds),
+                          market_context(con))
     finally:
         if own:
             con.close()

@@ -97,13 +97,18 @@ The deep brief also carries a quant layer (numpy-only, assumption-driven):
 - **Scenario DCF** — bear/base/bull point values.
 - **Benford's law** — first-digit conformity (MAD) of all reported figures, a
   manipulation/rounding tell.
-- **Sector z-scores** — target P/E, P/B, ROE, ROCE, net margin, D/E vs peer
-  mean/std (peers sanity-bounded so outliers don't distort).
+- **Sector z-scores** + a **peer-comparison table** — target ◄ vs sector peers on
+  P/E, P/B, ROE, ROCE, net margin, D/E (all sanity-bounded in `quant._ratios`, so
+  holding-co distortions like a >100% standalone net margin show `n/a`).
 
 Plus new forensic metrics in the brief: **Sloan (balance-sheet) accruals** and
-**promoter-pledge %** (NSE pledge feed → `shareholding` table). Contingent
-liabilities / related-party transactions aren't in XBRL — supply a filing PDF and
-Gemini extracts them.
+**promoter-pledge %** (NSE pledge feed → `shareholding` table; pledge-of-promoter
+is `n/a` for no-promoter firms where it would be meaningless).
+
+**Auto filing read:** `generate_report` now auto-fetches the **latest results /
+concall PDF** for the symbol (`pipeline._latest_filing_pdf`) and feeds it to
+Gemini, so every on-demand report folds in management guidance + contingent-
+liability / related-party notes — no manual `--pdf` needed.
 
 ### Charts in the PDF (`reports/charts.py`)
 

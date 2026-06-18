@@ -357,7 +357,13 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
             out["NetMargin%"] = 100 * pat / rev
         if eq:
             out["D/E"] = debt / eq
-    return {k: v for k, v in out.items() if v is not None and v == v}
+    # plausible bounds — drop implausible values (e.g. holding-co standalone net
+    # margin >100% when 'revenue from operations' excludes investment income, or a
+    # negative/blown-up P/E) so peer tables and z-scores aren't distorted.
+    bounds = {"P/E": (0, 500), "P/B": (0, 100), "ROE%": (-200, 300),
+              "ROCE%": (-200, 300), "NetMargin%": (-100, 100), "D/E": (0, 50)}
+    return {k: v for k, v in out.items()
+            if v is not None and v == v and bounds[k][0] <= v <= bounds[k][1]}
 
 
 # Plausible per-ratio bounds — drop pathological peers (e.g. holding cos with

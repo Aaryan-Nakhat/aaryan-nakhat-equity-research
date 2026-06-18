@@ -30,13 +30,15 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 ## The digest
 
 Sent by **company name** (ticker in parens — symbols like `RAMASTEEL` are
-cryptic), lines-only (no PDFs), in three parts:
+cryptic), lines-only (no PDFs), with a **market-context header** (Nifty 50 +
+Nifty 500 day move, `scan.market_context`) then three parts:
 - **📅 Upcoming:** the watchlist's events in the next ~35 days — board-meeting /
   results dates, ex-dividend / split / bonus dates, AGM / fund-raising
   (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
   corporate-actions feeds, fetched with a date range).
 - **Movers (always present):** a per-stock daily snapshot for the whole watchlist
-  — close, day %change, delivery%, 52-week position — sorted biggest-move first
+  — close, day %change, delivery%, 52-week position, and **P/E vs the stock's own
+  5-yr median** (cheap/rich lens) — sorted biggest-move first
   (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
   the digest substantive even on quiet event days.
 - **Events (when they happen):** the alerts below, grouped under each company. For
