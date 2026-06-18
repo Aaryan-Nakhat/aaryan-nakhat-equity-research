@@ -172,16 +172,25 @@ def label(key: str, value: float | None) -> str:
     return (_band(m, value) or "") if (m and value is not None) else ""
 
 
-def guide(keys: list[str]) -> str:
-    """Markdown 'Metric guide' — what each metric is, typical values, how to read."""
-    seen, lines = set(), ["## 15. Metric guide",
-                          "_What each number means, typical values, and how to read it "
-                          "(judge sector-relative where noted)._\n"]
-    for k in keys:
-        m = GLOSSARY.get(k)
-        if not m or k in seen:
-            continue
-        seen.add(k)
+def guide_markdown() -> str:
+    """The full Metric guide (every metric) as a standalone Markdown document —
+    what each is, typical values, and how to read it."""
+    lines = ["# Metric guide",
+             "_What each metric in the reports means, its typical/benchmark values, and how "
+             "to read it — judge sector-relative where noted._\n"]
+    for k, m in GLOSSARY.items():
         note = f" _Sector:_ {m.sector_note}" if m.sector_note else ""
         lines.append(f"- **{k}** — {m.what} _Typical:_ {m.typical}{note}")
     return "\n".join(lines)
+
+
+_GUIDE_PDF: bytes | None = None
+
+
+def guide_pdf() -> bytes:
+    """The Metric guide as a constant PDF (built once, cached — it never changes)."""
+    global _GUIDE_PDF
+    if _GUIDE_PDF is None:
+        from equity_research.reports.pdf import report_to_pdf
+        _GUIDE_PDF = report_to_pdf(guide_markdown(), "Metric guide")
+    return _GUIDE_PDF

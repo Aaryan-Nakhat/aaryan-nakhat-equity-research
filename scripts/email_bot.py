@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from equity_research import scan  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
+from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
@@ -101,8 +102,21 @@ def _re_subject(subject: str, suffix: str = "") -> str:
 
 
 def _clean_query(subject: str) -> str:
-    """Strip a leading 'Re:' so a reply's subject still resolves if needed."""
-    return re.sub(r"^\s*re:\s*", "", subject, flags=re.I).strip()
+    """Strip a leading 'Re:' and any consolidated/standalone keyword from the query."""
+    q = re.sub(r"^\s*re:\s*", "", subject, flags=re.I)
+    q = re.sub(r"\b(consolidated|standalone|cons)\b", "", q, flags=re.I)
+    return q.strip()
+
+
+def _basis(subject: str) -> bool | None:
+    """Reporting basis from the subject: True=consolidated, False=standalone,
+    None=auto (let the pipeline decide)."""
+    s = subject.lower()
+    if "consolidated" in s or re.search(r"\bcons\b", s):
+        return True
+    if "standalone" in s:
+        return False
+    return None
 
 
 def _selection(body: str) -> int | None:
@@ -137,10 +151,12 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes:
     return report_to_pdf(report_md, symbol, images=images)
 
 
-def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> None:
-    log.info("generating report for %s (req from %s)", symbol, req.sender)
+def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
+                 consolidated: bool | None = None) -> None:
+    log.info("generating report for %s (req from %s, basis=%s)", symbol, req.sender,
+             {True: "consolidated", False: "standalone"}.get(consolidated, "auto"))
     _ack(symbol, req, resolved_name)
-    report_md = generate_report(symbol, deep=True)     # full report — in the body AND the PDF
+    report_md = generate_report(symbol, deep=True, consolidated=consolidated)  # full report — body + PDF
     pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
@@ -150,7 +166,8 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
         body,
         to=req.sender,
         html=emailer.body_html(body, symbol),
-        attachments=[(f"{symbol}_{today}.pdf", pdf)],
+        attachments=[(f"{symbol}_{today}.pdf", pdf),
+                     ("Metric_guide.pdf", glossary.guide_pdf())],
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
     )
@@ -181,13 +198,14 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 # ----------------- request handling -----------------
 def handle_request(req: EmailRequest) -> None:
+    basis = _basis(req.subject)                 # consolidated / standalone / auto (from the subject)
     # 1) is this a numbered reply to a pending "which one?" question?
     pending = _get_pending(req.sender)
     sel = _selection(req.body) if req.body and len(req.body.strip()) <= 4 else None
     if pending and sel is not None and 1 <= sel <= len(pending):
         symbol, name = pending[sel - 1]
         _clear_pending(req.sender)
-        _send_report(symbol, req, resolved_name=name)
+        _send_report(symbol, req, resolved_name=name, consolidated=basis)
         return
 
     # 2) fresh query from the subject
@@ -204,7 +222,7 @@ def handle_request(req: EmailRequest) -> None:
     if not cands:
         _reply_text(req, f"Couldn't resolve '{query}' to an NSE symbol. Try the exact name.")
     elif len(cands) == 1:
-        _send_report(cands[0].symbol, req, resolved_name=cands[0].name)
+        _send_report(cands[0].symbol, req, resolved_name=cands[0].name, consolidated=basis)
     else:
         _set_pending(req.sender, query, cands)
         _send_choices(query, cands, req)

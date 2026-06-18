@@ -105,10 +105,18 @@ Plus new forensic metrics in the brief: **Sloan (balance-sheet) accruals** and
 **promoter-pledge %** (NSE pledge feed → `shareholding` table; pledge-of-promoter
 is `n/a` for no-promoter firms where it would be meaningless).
 
-**Auto filing read:** `generate_report` now auto-fetches the **latest results /
-concall PDF** for the symbol (`pipeline._latest_filing_pdf`) and feeds it to
-Gemini, so every on-demand report folds in management guidance + contingent-
-liability / related-party notes — no manual `--pdf` needed.
+**Auto multi-filing read:** `generate_report` auto-fetches **all the company's
+meaningful filings since the last fiscal year-end (plus the latest results)** —
+results, concall transcripts, investor presentations, ratings, M&A, etc.
+(`pipeline._filings_for_analysis`, richest-first, capped ~12 docs / 15 MB to stay
+under Gemini's inline limit) and feeds them all to Gemini, so every on-demand
+report folds in management guidance + contingent-liability / related-party notes.
+Generic — works for any NSE symbol (new or famous). No manual `--pdf` needed.
+
+**Consolidated vs standalone:** `generate_report(consolidated=None)` auto-picks
+**consolidated** when it exists and subsidiaries add materially (consolidated
+revenue/PAT ≥25% larger — RIL's Jio/Retail, etc.), else standalone. Override by
+putting **"consolidated"/"standalone"** in the email subject (`email_bot._basis`).
 
 ### Charts in the PDF (`reports/charts.py`)
 
@@ -122,9 +130,9 @@ interest cover, FCF/FCFF, and the **Monte-Carlo fair-value histogram**.
 Every headline metric is annotated so the report stands on its own:
 - **Inline band tags** on forensic/quant/pledge lines (e.g. `ROCE 9.5% — weak`,
   `pledge 2.4% — good`, `margin of safety 19% — some`) via `glossary.read/label`.
-- A **§15 Metric guide** appendix in every deep brief — for each metric: *what it
-  is*, *typical/benchmark values*, and *how to read it* (with a sector caveat where
-  the normal range shifts, e.g. capital-heavy or financial businesses).
+- A standalone **Metric guide** — what each metric is, typical values, how to read
+  it (sector caveats). Built once and cached (`glossary.guide_pdf`) and attached to
+  report emails as a **separate `Metric_guide.pdf`** (not in the report body/PDF).
 - The Gemini prompt is told to explain each metric it cites and judge it **for this
   company's sector/business model** (a vanilla DCF understates a true compounder;
   utilities run lower ROCE; etc.).

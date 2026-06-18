@@ -255,46 +255,46 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     z = forensic.altman_z(con, symbol, consolidated=consolidated, market_cap=mcap)
     fsc = forensic.piotroski_f(con, symbol, consolidated=consolidated)
     m = forensic.beneish_m(con, symbol, consolidated=consolidated)
-    L += ["## 9. Forensic deep-dive"]
-    L.append(f"**Altman Z = {_f(z.value,2)}** (>2.99 safe · 1.81–2.99 grey · <1.81 distress)"
-             + (f" — {z.note}" if z.note else ""))
-    if z.components:
-        L.append("  - components: " + ", ".join(f"{k}={_f(v,3)}" for k, v in z.components.items()))
-    L.append(f"**Piotroski F = {_f(fsc.value,0)}/9** (8–9 strong · 0–2 weak)"
-             + (f" — missing {fsc.missing}" if fsc.missing else ""))
-    if fsc.components:
-        passed = [k for k, v in fsc.components.items() if v]
-        L.append(f"  - passed ({len(passed)}/9): {', '.join(passed) or 'none'}")
-        L.append(f"  - failed: {', '.join(k for k,v in fsc.components.items() if not v) or 'none'}")
-    L.append(f"**Beneish M = {_f(m.value,2)}** (> −1.78 ⇒ possible earnings manipulation)"
-             + (f" — missing {m.missing}" if m.missing else ""))
-    if m.components:
-        L.append("  - components: " + ", ".join(f"{k}={_f(v,3)}" for k, v in m.components.items()))
-        if m.note:
-            L.append(f"  - note: {m.note}")
     acc = forensic.accruals(con, symbol, consolidated=consolidated)
-    if acc.value is not None:
-        L.append(f"**Sloan accruals = {_f(acc.value, 1, pct=True)}** of avg assets "
-                 f"({glossary.label('Sloan accruals%', acc.value) or 'n/a'}; cash-flow accruals "
-                 f"{_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}) — near-zero/negative "
-                 "is good; high positive ⇒ earnings not cash-backed.")
     p = con.execute(
         "SELECT period_end, promoter_holding_pct, pledged_pct_of_promoter, pledged_pct_of_total "
         "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
-    if p and p[2] is not None:                      # has a meaningful promoter pledge
-        L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
-                 f"{_f(p[1], 1, pct=True)} ({glossary.label('Promoter holding%', p[1])}); "
-                 f"**pledged {_f(p[2], 1, pct=True)} of promoter holding** "
-                 f"({glossary.label('Pledge%', p[2]) or 'n/a'}; {_f(p[3], 1, pct=True)} of total "
-                 "shares) — 0% ideal, >50% a serious red flag.")
-    elif p:                                         # no meaningful promoter (e.g. ITC)
-        L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
-                 f"{_f(p[1], 1, pct=True)} — no significant promoter, so 'pledge of promoter "
-                 f"holding' is n/a; **{_f(p[3], 1, pct=True)} of total shares encumbered**.")
+    zband = ("n/a" if z.value is None else "safe" if z.value > 2.99
+             else "distress" if z.value < 1.81 else "grey zone")
+    fband = ("n/a" if fsc.value is None else "strong" if fsc.value >= 8
+             else "weak" if fsc.value <= 2 else "middling")
+    mflag = ("n/a" if m.value is None else
+             "⚠ above −1.78 (possible manipulation)" if m.value > -1.78 else "clean (≤ −1.78)")
+    L += ["## 9. Forensic deep-dive", ""]
+    L.append(f"- **Altman Z = {_f(z.value, 2)} — {zband}.** Bankruptcy-distance score "
+             "(>2.99 safe · 1.81–2.99 grey · <1.81 distress); calibrated for manufacturers, so "
+             "asset-heavy giants can read low." + (f" _{z.note}_" if z.note else ""))
+    if fsc.value is not None and fsc.components:
+        passed = [k for k, v in fsc.components.items() if v]
+        failed = [k for k, v in fsc.components.items() if not v]
+        L.append(f"- **Piotroski F = {_f(fsc.value, 0)}/9 — {fband}.** 9-point fundamental-strength "
+                 f"checklist. Passed: {', '.join(passed) or 'none'}. Failed: {', '.join(failed) or 'none'}.")
     else:
-        L.append("**Promoter pledge:** n/a (no shareholding snapshot ingested).")
-    L.append("- **Contingent liabilities / related-party transactions** live in the annual-report "
-             "notes (not in structured XBRL) — supply the filing PDF to fold these in.")
+        L.append(f"- **Piotroski F:** n/a (missing {fsc.missing}).")
+    L.append(f"- **Beneish M = {_f(m.value, 2)} — {mflag}.** Statistical earnings-manipulation "
+             "screen (a flag to dig, not proof — corroborate with accruals/receivables/cash).")
+    if acc.value is not None:
+        L.append(f"- **Sloan accruals = {_f(acc.value, 1, pct=True)} of avg assets — "
+                 f"{glossary.label('Sloan accruals%', acc.value) or 'n/a'}.** Non-cash part of "
+                 f"earnings (cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}); "
+                 "near-zero/negative = earnings cash-backed, high positive = aggressive.")
+    if p and p[2] is not None:
+        L.append(f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
+                 f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of that is pledged** "
+                 f"({glossary.label('Pledge%', p[2]) or 'n/a'}) — 0% ideal, >50% a serious red flag.")
+    elif p:
+        L.append(f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
+                 f"{_f(p[1], 1, pct=True)} — no significant promoter; {_f(p[3], 1, pct=True)} of "
+                 "total shares encumbered.")
+    else:
+        L.append("- **Promoter pledge:** n/a (no shareholding snapshot).")
+    L.append("- **Contingent liabilities / related-party transactions:** read from the company's "
+             "filings (see the Analysis section); not in the structured XBRL.")
     L.append("")
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
@@ -405,11 +405,4 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
           "- COGS, EBITDA and FCFF/FCFE use documented approximations "
           "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "
           "FCFF adds back after-tax interest; FCFE adds net borrowing)."]
-
-    L += ["", glossary.guide([
-        "P/E", "P/B", "ROE%", "ROCE%", "ROIC%", "NetMargin%", "EBITDA margin%",
-        "D/E", "Net debt/EBITDA", "Interest cover", "Current ratio", "CCC (days)",
-        "CFO/PAT", "CFO/EBITDA%", "Sloan accruals%", "Altman Z", "Piotroski F",
-        "Beneish M", "Benford MAD", "Margin of safety%", "P(undervalued)%",
-        "Implied growth%", "Promoter holding%", "Pledge%", "Sector z-score"])]
     return "\n".join(L)

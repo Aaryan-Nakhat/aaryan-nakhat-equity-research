@@ -6,9 +6,7 @@ on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 
 from __future__ import annotations
 
-import os
-import tempfile
-from datetime import datetime
+from datetime import date, datetime
 
 import duckdb
 
@@ -27,35 +25,86 @@ from equity_research.scrapers import nse_api
 CR = 1e7
 
 
-def _latest_filing_pdf(symbol: str) -> str | None:
-    """Newest results/concall filing PDF for ``symbol``, downloaded to a temp file
-    so the report's Gemini call can read management commentary, guidance, and the
-    contingent-liability / related-party notes. Returns the path, or None."""
+def _last_fy_end() -> date:
+    """Most recent fiscal year-end (31-Mar) on or before today."""
+    today = date.today()
+    yr = today.year if today >= date(today.year, 3, 31) else today.year - 1
+    return date(yr, 3, 31)
+
+
+def _doc_score(title: str, blob: str, is_result: bool) -> int:
+    """Content richness 1-5 — used to prioritise which filings to read under the cap."""
+    if "transcript" in blob:
+        return 5
+    if any(k in blob for k in ("investor presentation", "earnings presentation",
+                               "results presentation", "analyst presentation")):
+        return 4
+    if "annual report" in blob:
+        return 4
+    if is_result or "financial result" in blob:
+        return 3
+    if title in ("Scheme / M&A", "Open offer / SAST", "Rights issue", "QIP / fund raising",
+                 "Credit rating update", "Order / contract win", "Acquisition / disposal"):
+        return 2
+    return 1
+
+
+def _filings_for_analysis(symbol: str, *, max_docs: int = 12,
+                          max_bytes: int = 15_000_000) -> list[tuple[str, bytes]]:
+    """All meaningful filing PDFs for ``symbol`` since the last fiscal year-end
+    (plus the latest results, even if older), richest-first, capped by count and
+    total size. Returns [(label, pdf-bytes)] for the report's Gemini call. Generic
+    — works for any NSE-listed symbol; never raises."""
     try:
         anns = nse_api.corporate_announcements_batch([symbol]).get(symbol) or []
     except Exception:  # noqa: BLE001
-        return None
+        return []
 
     def _dt(a):
         try:
             return datetime.strptime(a.get("an_dt", "")[:20].strip(), "%d-%b-%Y %H:%M:%S")
-        except ValueError:
+        except (ValueError, TypeError):
             return datetime.min
 
-    for a in sorted(anns, key=_dt, reverse=True):
+    anns = sorted(anns, key=_dt, reverse=True)          # newest first
+    fy = _last_fy_end()
+    cands: list[tuple[int, datetime, str, str]] = []    # (score, dt, label, url)
+    latest_results = None
+    for a in anns:
         att = (a.get("attchmntFile") or "").strip()
-        title, _, _ = _categorise(a.get("desc", ""), a.get("attchmntText", ""),
-                                  str(a.get("hasXbrl", "")).lower() == "true")
-        if att.lower().endswith(".pdf") and title in ("Results filed", "Concall / investor meet"):
-            try:
-                data = fetch_bytes(att)
-            except Exception:  # noqa: BLE001
-                return None
-            fd, path = tempfile.mkstemp(suffix=".pdf")
-            with os.fdopen(fd, "wb") as fh:
-                fh.write(data)
-            return path
-    return None
+        if not att.lower().endswith(".pdf"):
+            continue
+        title, _, is_result = _categorise(a.get("desc", ""), a.get("attchmntText", ""),
+                                          str(a.get("hasXbrl", "")).lower() == "true")
+        if title is None:                                # routine noise — skip
+            continue
+        adt = _dt(a)
+        blob = f"{a.get('desc', '')} {a.get('attchmntText', '')}".lower()
+        label = f"{title} · {adt:%d-%b-%Y}"
+        if is_result and latest_results is None:
+            latest_results = (_doc_score(title, blob, is_result), adt, label, att)
+        if adt.date() >= fy:
+            cands.append((_doc_score(title, blob, is_result), adt, label, att))
+    if latest_results and not any(c[3] == latest_results[3] for c in cands):
+        cands.append(latest_results)                     # ensure the latest results doc is in
+    cands.sort(key=lambda c: (c[0], c[1]), reverse=True)  # richest, then newest
+
+    out: list[tuple[str, bytes]] = []
+    total = 0
+    seen: set[str] = set()
+    for _score, _adt, label, url in cands:
+        if url in seen or len(out) >= max_docs:
+            continue
+        seen.add(url)
+        try:
+            data = fetch_bytes(url)
+        except Exception:  # noqa: BLE001
+            continue
+        if total + len(data) > max_bytes:                 # stay under Gemini's inline request limit
+            continue
+        out.append((label, data))
+        total += len(data)
+    return out
 
 
 def _f(v, nd=0, pct=False) -> str:
@@ -85,16 +134,44 @@ def ensure_ingested(symbol: str, con: duckdb.DuckDBPyConnection) -> bool:
     return n > 0
 
 
-def generate_report(symbol: str, *, deep: bool = True, consolidated: bool = False,
+def _prefer_consolidated(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
+    """Auto-pick consolidated when it exists AND subsidiaries add materially — i.e.
+    consolidated revenue or PAT is ≥25% larger than standalone (RIL's Jio/Retail,
+    Tata Motors' JLR, etc.). Else standalone (where the two are ~equal)."""
+    cons = fundamentals.load_annual(con, symbol, consolidated=True)
+    if cons.empty:
+        return False
+    std = fundamentals.load_annual(con, symbol, consolidated=False)
+    if std.empty:
+        return True
+
+    def latest(df, k):
+        if k not in df.columns:
+            return None
+        s = df[k].dropna()
+        return float(s.iloc[-1]) if len(s) else None
+
+    for k in ("ProfitLossForPeriod", "RevenueFromOperations"):
+        c, s = latest(cons, k), latest(std, k)
+        if c and s and s > 0 and c / s >= 1.25:        # consolidated ≥25% larger
+            return True
+    return False
+
+
+def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None = None,
                     pdf_path: str | None = None, target_shares: float | None = None,
                     synthesize: bool = True) -> str:
-    """Full report (brief + Gemini analysis) for ``symbol``. Ingests on demand."""
+    """Full report (brief + Gemini analysis) for ``symbol``. Ingests on demand.
+
+    ``consolidated=None`` (default) auto-picks consolidated for holding-cos.
+    """
     symbol = symbol.upper()
     con = connect()
     try:
         have = ensure_ingested(symbol, con)
+        basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
         builder = build_deep_brief if deep else build_brief
-        brief = builder(con, symbol, consolidated=consolidated, target_shares=target_shares)
+        brief = builder(con, symbol, consolidated=basis, target_shares=target_shares)
     finally:
         con.close()
     if not have:
@@ -102,17 +179,10 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool = Fals
                 "NSE-listed, or the symbol is wrong.\n\n" + brief)
     if not synthesize:
         return brief
-    tmp = None
-    if pdf_path is None:                       # auto-fetch the latest results/concall filing
-        pdf_path = tmp = _latest_filing_pdf(symbol)
-    try:
+    if pdf_path:                               # explicit filing supplied (CLI --pdf)
         thesis = synthesize_thesis(brief, symbol, pdf_path=pdf_path, deep=deep)
-    finally:
-        if tmp:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+    else:                                      # auto: all filings since last FY-end + latest results
+        thesis = synthesize_thesis(brief, symbol, pdfs=_filings_for_analysis(symbol), deep=deep)
     return f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
 
 

@@ -51,7 +51,12 @@ and Cash Flow (CFO/CFI/CFF), a full derived-ratio layer (margins, ROE/ROCE/ROIC,
 leverage, liquidity, working-capital/cash-conversion, FCF/FCFF/FCFE, CFO/PAT and \
 CFO/EBITDA incl. rolled figures), a forensic block (Altman Z, Piotroski F, \
 Beneish M with components), and valuation/technical context — all from PRIMARY \
-sources (exchange XBRL filings, EOD prices). Optionally also a filing PDF.
+sources (exchange XBRL filings, EOD prices). You are ALSO given the company's \
+recent filings as PDFs — results, concall transcripts, investor presentations, \
+credit ratings, and other disclosures since the last fiscal year-end. **Read and \
+use ALL of them**: attribute management guidance and commentary to the source, and \
+extract any **contingent liabilities** and material **related-party transactions** \
+they disclose.
 
 Write a thorough, section-by-section analysis. Do NOT artificially compress — \
 length is fine; depth and rigour matter more. Cite the actual numbers. Cover:
@@ -125,18 +130,26 @@ def _build_client() -> genai.Client:
 
 
 def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None,
+                      pdfs: list[tuple[str, bytes]] | None = None,
                       model: str = MODEL, deep: bool = False) -> str:
     """Run the synthesis. Returns the thesis text. Streams (long output).
 
-    ``deep=True`` switches to the exhaustive forensic prompt and leaves the output
-    length uncapped (the model's own default max).
+    ``pdfs`` is a list of (label, pdf-bytes) filings to read alongside the brief —
+    e.g. all of the company's results / transcripts / presentations / announcements
+    since the last fiscal year-end. ``pdf_path`` (a single file) is still accepted
+    and folded in. ``deep=True`` uses the exhaustive forensic prompt, uncapped.
     """
     client = _client()
 
-    parts: list[types.Part] = []
+    docs: list[tuple[str, bytes]] = list(pdfs or [])
     if pdf_path:
         with open(pdf_path, "rb") as fh:
-            parts.append(types.Part.from_bytes(data=fh.read(), mime_type="application/pdf"))
+            docs.append((os.path.basename(pdf_path), fh.read()))
+
+    parts: list[types.Part] = []
+    for label, data in docs:
+        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
+        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
     instruction = ("Write the full forensic fundamental analysis." if deep
                    else "Write the investment note.")
     parts.append(types.Part.from_text(
