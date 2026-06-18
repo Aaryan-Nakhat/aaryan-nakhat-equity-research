@@ -273,7 +273,7 @@ def _pledge(symbol, state, pledge) -> tuple[list[Alert], dict]:
     if not pledge:
         return [], {}
     cur = pledge.get("pledged_pct_of_promoter")
-    if cur is None or cur != cur:
+    if cur is None or cur != cur or not (0 <= cur <= 100):   # n/a or implausible (no real promoter)
         return [], {}
     up = {"pledge_pct": f"{cur:.2f}"}
     last = state.get("pledge_pct")
