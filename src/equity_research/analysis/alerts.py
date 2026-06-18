@@ -146,7 +146,10 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
     o = fundamentals.annual_overview(con, symbol)
     if not o.empty:
         cfo_pat = o["cfo_to_pat_x"].iloc[-1]
-        if cfo_pat == cfo_pat:
+        net = o["net_profit_cr"].iloc[-1]
+        # cash-backing-of-profit is only meaningful when there IS a profit; for a
+        # loss year cfo/pat goes negative and would falsely "fall below 1".
+        if cfo_pat == cfo_pat and net == net and net > 0:
             if state.get("cfo_pat_ok") == "1" and cfo_pat < 1.0:
                 A.append(Alert(symbol, "red", "CFO/PAT fell below 1",
                                f"now {cfo_pat:.2f}x. CFO/PAT compares operating cash to reported "
@@ -160,7 +163,8 @@ def _fundamental(con, symbol, state) -> tuple[list[Alert], dict]:
     if snap and not hist.empty and "pe" in hist:
         pe = snap.get("pe_ttm")
         pes = hist["pe"].dropna()
-        if pe == pe and len(pes):
+        pes = pes[pes > 0]                        # ignore loss-year P/Es
+        if pe == pe and pe > 0 and len(pes):      # a negative P/E (loss) isn't "cheap"
             status = "above" if pe > pes.max() else "below" if pe < pes.min() else "within"
             if state.get("pe_band") in ("within", None, "") and status == "above":
                 A.append(Alert(symbol, "warn", "P/E above historical range",
