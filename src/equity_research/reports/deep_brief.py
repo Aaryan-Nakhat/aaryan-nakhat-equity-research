@@ -38,6 +38,15 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out)
 
 
+def _cover(ebit, fin) -> str:
+    """Interest coverage, capped — a near-zero finance cost (debt-free) otherwise
+    shows a meaningless huge multiple (e.g. 21,948x)."""
+    if ebit is None or fin is None or pd.isna(ebit) or pd.isna(fin) or fin == 0:
+        return "n/a"
+    v = ebit / fin
+    return ">500x" if v > 500 else f"{v:,.1f}x"
+
+
 def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      consolidated: bool = False, target_shares: float | None = None) -> str:
     af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
@@ -171,7 +180,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                 ["ROA (PAT/assets)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(assets.get(y)) else 100 * pat.get(y) / assets.get(y), 1, pct=True) for y in years],
                 ["Debt / equity"] + [_f(None if pd.isna(debt.get(y)) or pd.isna(eq.get(y)) else debt.get(y) / eq.get(y), 2, x=True) for y in years],
                 ["Net debt / EBITDA"] + [_f(None if pd.isna(netdebt.get(y)) or pd.isna(ebitda.get(y)) else netdebt.get(y) / ebitda.get(y), 2, x=True) for y in years],
-                ["Interest coverage (EBIT/int)"] + [_f(None if pd.isna(ebit.get(y)) or pd.isna(fin.get(y)) else ebit.get(y) / fin.get(y), 1, x=True) for y in years],
+                ["Interest coverage (EBIT/int)"] + [_cover(ebit.get(y), fin.get(y)) for y in years],
                 ["Current ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else ca.get(y) / cl.get(y), 2, x=True) for y in years],
                 ["Quick ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else (ca.get(y) - (inv.get(y) or 0)) / cl.get(y), 2, x=True) for y in years],
             ]), ""]
