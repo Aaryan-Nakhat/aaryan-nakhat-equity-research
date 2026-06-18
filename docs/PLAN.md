@@ -122,9 +122,10 @@ authorized; the brief/email layers are provider-agnostic.)
 **Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`; see [`ALERTS.md`](ALERTS.md)):
 a **self-healing daily scan** (fires once per trading day at the first heartbeat
 ≥18:00 IST; weekend/holiday-skipped) over the 27-stock watchlist, delivered as a
-**company-name digest** (email or Telegram, lines-only, **no PDFs**):
+**company-name digest** (email or Telegram, lines-only, **no PDFs**), with a
+**market-context header** (Nifty 50 / Nifty 500 day move):
 - **📅 Upcoming** — board-meeting/results dates, ex-dividend/split/bonus, AGM/fund-raising.
-- **Movers** — per-stock close · day %chg · delivery% · 52-week position (always present).
+- **Movers** — per-stock close · day %chg · delivery% · 52-week position · **P/E vs own 5-yr median** (always present).
 - **Events** — bulk/block **institutional deals**, a defined **corporate-event taxonomy**
   (results · dividend · split · rights · QIP · scheme/M&A · open offer · concall ·
   board meeting · AGM · credit rating · order win · pledge …), and **forensic/fundamental
@@ -132,13 +133,18 @@ a **self-healing daily scan** (fires once per trading day at the first heartbeat
   first-sight seeding, and **inline Gemini analysis** of notable filing PDFs (capped 5).
 Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populated.
 
-### Phase 6 — depth, quant & the email channel — ✅ done
-- **Email channel** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP), selected by the
-  `CHANNELS` flag — runs while Telegram is ISP-blocked; same brains, full report in body + PDF.
+### Phase 6 — depth, quant, email channel & report enrichment — ✅ done
+- **Email channel** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP), via the `CHANNELS`
+  flag — runs while Telegram is ISP-blocked; same brains, full report in body + PDF.
 - **Quant suite** (`analysis/quant.py`): Monte-Carlo DCF (margin of safety, P(undervalued)),
   reverse DCF, scenario DCF, Benford's-law, sector z-scores.
-- **Fundamental charts** in the PDF (`reports/charts.py`); **promoter-pledge** + **Sloan
-  accruals** forensics; **self-explaining metrics** + a Metric-guide appendix (`reports/glossary.py`).
+- **Fundamental charts** in the PDF (`reports/charts.py`); **Sloan accruals** + **promoter
+  pledge** forensics; **peer-comparison table**; **point-wise** §9 forensic deep-dive.
+- **Self-explaining metrics** (`reports/glossary.py`): inline band tags + a standalone,
+  cached **`Metric_guide.pdf`** attached separately (not in the report body/PDF).
+- **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds Gemini
+  all meaningful filings since the last FY-end + latest results; **consolidated** auto-picked
+  for holding-cos (or forced via the email subject). Generic for any NSE symbol.
 
 ### Later (deferred)
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
