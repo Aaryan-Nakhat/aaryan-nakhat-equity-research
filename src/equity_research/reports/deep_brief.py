@@ -272,12 +272,16 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     p = con.execute(
         "SELECT period_end, promoter_holding_pct, pledged_pct_of_promoter, pledged_pct_of_total "
         "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
-    if p:
+    if p and p[2] is not None:                      # has a meaningful promoter pledge
         L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
                  f"{_f(p[1], 1, pct=True)} ({glossary.label('Promoter holding%', p[1])}); "
                  f"**pledged {_f(p[2], 1, pct=True)} of promoter holding** "
                  f"({glossary.label('Pledge%', p[2]) or 'n/a'}; {_f(p[3], 1, pct=True)} of total "
                  "shares) — 0% ideal, >50% a serious red flag.")
+    elif p:                                         # no meaningful promoter (e.g. ITC)
+        L.append(f"**Promoter pledge** (as of {p[0]:%d-%b-%Y}): promoter holds "
+                 f"{_f(p[1], 1, pct=True)} — no significant promoter, so 'pledge of promoter "
+                 f"holding' is n/a; **{_f(p[3], 1, pct=True)} of total shares encumbered**.")
     else:
         L.append("**Promoter pledge:** n/a (no shareholding snapshot ingested).")
     L.append("- **Contingent liabilities / related-party transactions** live in the annual-report "

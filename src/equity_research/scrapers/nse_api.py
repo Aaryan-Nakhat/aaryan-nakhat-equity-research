@@ -237,12 +237,20 @@ def _parse_pledge(data: Any) -> dict | None:
             return None
 
     prom_hold, pledged = num("totPromoterHolding"), num("numSharesPledged")
+    # "% of promoter holding pledged" is only meaningful with a real promoter.
+    # numSharesPledged is the company's TOTAL encumbered shares; for promoter-run
+    # firms that's ~all promoter pledges (valid), but for no-promoter firms (e.g.
+    # ITC, promoter 0.02%) it's non-promoter encumbrances and dividing by the tiny
+    # promoter stake explodes (>100%, impossible). Reject those → n/a; the always-
+    # valid figure is pledged_pct_of_total (NSE's percSharesPledged).
+    pledged_of_prom = (100 * pledged / prom_hold) if prom_hold and pledged is not None else None
+    if pledged_of_prom is not None and not (0 <= pledged_of_prom <= 100):
+        pledged_of_prom = None
     return {
         "as_of": (r.get("shp") or "").strip() or None,
         "promoter_holding_pct": num("percPromoterHolding"),
         "pledged_pct_of_total": num("percSharesPledged"),
-        "pledged_pct_of_promoter": (100 * pledged / prom_hold)
-        if prom_hold and pledged is not None else None,
+        "pledged_pct_of_promoter": pledged_of_prom,
         "num_shares_pledged": pledged,
         "broadcast_dt": (r.get("broadcastDt") or "").strip() or None,
     }
