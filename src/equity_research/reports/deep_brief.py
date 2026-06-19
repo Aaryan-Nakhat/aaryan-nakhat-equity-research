@@ -25,8 +25,13 @@ from equity_research.reports import glossary
 CR = 1e7
 
 
-def _f(v, nd=0, pct=False, x=False):
+def _f(v, nd=0, pct=False, x=False, lo=None, hi=None):
+    """Format a number; ``n/a`` for missing/NaN/inf or values outside the plausible
+    [lo, hi] band (a data artifact — e.g. a holding-co 1,000% net margin, a ratio
+    blown up by near-zero equity). Bounds are only applied where passed."""
     if v is None or (isinstance(v, float) and (np.isnan(v) or np.isinf(v))):
+        return "n/a"
+    if (lo is not None and v < lo) or (hi is not None and v > hi):
         return "n/a"
     return f"{v:,.{nd}f}{'%' if pct else ''}{'x' if x else ''}"
 
@@ -134,15 +139,15 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         return series / series.shift(1) - 1
     L += ["## 2. Profitability, margins & growth", _table(
         ["Metric"] + [f"FY{y.year}" for y in years], [
-            ["Gross margin"] + [_f(None if pd.isna(gp.get(y)) else 100 * gp.get(y) / rev.get(y), 1, pct=True) for y in years],
-            ["EBITDA margin"] + [_f(None if pd.isna(ebitda.get(y)) else 100 * ebitda.get(y) / rev.get(y), 1, pct=True) for y in years],
-            ["EBIT margin"] + [_f(None if pd.isna(ebit.get(y)) else 100 * ebit.get(y) / rev.get(y), 1, pct=True) for y in years],
-            ["PBT margin"] + [_f(None if pd.isna(pbt.get(y)) else 100 * pbt.get(y) / rev.get(y), 1, pct=True) for y in years],
-            ["Net margin"] + [_f(None if pd.isna(pat.get(y)) else 100 * pat.get(y) / rev.get(y), 1, pct=True) for y in years],
-            ["Effective tax rate"] + [_f(None if pd.isna(tax_rate.get(y)) else 100 * tax_rate.get(y), 1, pct=True) for y in years],
-            ["Revenue YoY"] + [_f(None if pd.isna(yoy(rev).get(y)) else 100 * yoy(rev).get(y), 1, pct=True) for y in years],
-            ["PAT YoY"] + [_f(None if pd.isna(yoy(pat).get(y)) else 100 * yoy(pat).get(y), 1, pct=True) for y in years],
-            ["Other income / PBT"] + [_f(None if pd.isna(oi.get(y)) or pd.isna(pbt.get(y)) else 100 * oi.get(y) / pbt.get(y), 1, pct=True) for y in years],
+            ["Gross margin"] + [_f(None if pd.isna(gp.get(y)) else 100 * gp.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+            ["EBITDA margin"] + [_f(None if pd.isna(ebitda.get(y)) else 100 * ebitda.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+            ["EBIT margin"] + [_f(None if pd.isna(ebit.get(y)) else 100 * ebit.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+            ["PBT margin"] + [_f(None if pd.isna(pbt.get(y)) else 100 * pbt.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+            ["Net margin"] + [_f(None if pd.isna(pat.get(y)) else 100 * pat.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+            ["Effective tax rate"] + [_f(None if pd.isna(tax_rate.get(y)) else 100 * tax_rate.get(y), 1, pct=True, lo=0, hi=80) for y in years],
+            ["Revenue YoY"] + [_f(None if pd.isna(yoy(rev).get(y)) else 100 * yoy(rev).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
+            ["PAT YoY"] + [_f(None if pd.isna(yoy(pat).get(y)) else 100 * yoy(pat).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
+            ["Other income / PBT"] + [_f(None if pd.isna(oi.get(y)) or pd.isna(pbt.get(y)) else 100 * oi.get(y) / pbt.get(y), 1, pct=True, lo=-200, hi=300) for y in years],
         ]), ""]
 
     # ===================== BALANCE SHEET =====================
@@ -174,25 +179,25 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         # returns / leverage / liquidity (balance-sheet years)
         L += ["## 4. Returns, leverage & liquidity", _table(
             ["Metric"] + [f"FY{y.year}" for y in years], [
-                ["ROE (PAT/equity)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(eq.get(y)) else 100 * pat.get(y) / eq.get(y), 1, pct=True) for y in years],
-                ["ROCE (EBIT/(eq+debt))"] + [_f(None if pd.isna(ebit.get(y)) or pd.isna(eq.get(y)) else 100 * ebit.get(y) / (eq.get(y) + (debt.get(y) or 0)), 1, pct=True) for y in years],
-                ["ROIC (EBIT(1−t)/(eq+debt−cash))"] + [_f(None if pd.isna(ebit.get(y)) or pd.isna(eq.get(y)) else 100 * ebit.get(y) * (1 - (tax_rate.get(y) if not pd.isna(tax_rate.get(y)) else 0)) / (eq.get(y) + (debt.get(y) or 0) - (cash.get(y) or 0)), 1, pct=True) for y in years],
-                ["ROA (PAT/assets)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(assets.get(y)) else 100 * pat.get(y) / assets.get(y), 1, pct=True) for y in years],
-                ["Debt / equity"] + [_f(None if pd.isna(debt.get(y)) or pd.isna(eq.get(y)) else debt.get(y) / eq.get(y), 2, x=True) for y in years],
-                ["Net debt / EBITDA"] + [_f(None if pd.isna(netdebt.get(y)) or pd.isna(ebitda.get(y)) else netdebt.get(y) / ebitda.get(y), 2, x=True) for y in years],
+                ["ROE (PAT/equity)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(eq.get(y)) else 100 * pat.get(y) / eq.get(y), 1, pct=True, lo=-100, hi=300) for y in years],
+                ["ROCE (EBIT/(eq+debt))"] + [_f(None if pd.isna(ebit.get(y)) or pd.isna(eq.get(y)) else 100 * ebit.get(y) / (eq.get(y) + (debt.get(y) or 0)), 1, pct=True, lo=-100, hi=300) for y in years],
+                ["ROIC (EBIT(1−t)/(eq+debt−cash))"] + [_f(None if pd.isna(ebit.get(y)) or pd.isna(eq.get(y)) else 100 * ebit.get(y) * (1 - (tax_rate.get(y) if not pd.isna(tax_rate.get(y)) else 0)) / (eq.get(y) + (debt.get(y) or 0) - (cash.get(y) or 0)), 1, pct=True, lo=-100, hi=300) for y in years],
+                ["ROA (PAT/assets)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(assets.get(y)) else 100 * pat.get(y) / assets.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+                ["Debt / equity"] + [_f(None if pd.isna(debt.get(y)) or pd.isna(eq.get(y)) else debt.get(y) / eq.get(y), 2, x=True, lo=0, hi=50) for y in years],
+                ["Net debt / EBITDA"] + [_f(None if pd.isna(netdebt.get(y)) or pd.isna(ebitda.get(y)) else netdebt.get(y) / ebitda.get(y), 2, x=True, lo=-50, hi=50) for y in years],
                 ["Interest coverage (EBIT/int)"] + [_cover(ebit.get(y), fin.get(y)) for y in years],
-                ["Current ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else ca.get(y) / cl.get(y), 2, x=True) for y in years],
-                ["Quick ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else (ca.get(y) - (inv.get(y) or 0)) / cl.get(y), 2, x=True) for y in years],
+                ["Current ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else ca.get(y) / cl.get(y), 2, x=True, lo=0, hi=50) for y in years],
+                ["Quick ratio"] + [_f(None if pd.isna(ca.get(y)) or pd.isna(cl.get(y)) else (ca.get(y) - (inv.get(y) or 0)) / cl.get(y), 2, x=True, lo=0, hi=50) for y in years],
             ]), ""]
 
         # working capital / cash conversion
         L += ["## 5. Working capital & cash conversion", _table(
             ["Metric (days)"] + [f"FY{y.year}" for y in years], [
-                ["Receivable days"] + [_f(None if pd.isna(recv.get(y)) or pd.isna(rev.get(y)) else 365 * recv.get(y) / rev.get(y), 0) for y in years],
-                ["Inventory days"] + [_f(None if pd.isna(inv.get(y)) or pd.isna(cogs.get(y)) else 365 * inv.get(y) / cogs.get(y), 0) for y in years],
-                ["Payable days"] + [_f(None if pd.isna(payables.get(y)) or pd.isna(cogs.get(y)) else 365 * payables.get(y) / cogs.get(y), 0) for y in years],
-                ["Cash conversion cycle"] + [_f(None if pd.isna(recv.get(y)) or pd.isna(inv.get(y)) or pd.isna(payables.get(y)) or pd.isna(cogs.get(y)) else 365 * (recv.get(y) / rev.get(y) + inv.get(y) / cogs.get(y) - payables.get(y) / cogs.get(y)), 0) for y in years],
-                ["Asset turnover (Rev/assets)"] + [_f(None if pd.isna(rev.get(y)) or pd.isna(assets.get(y)) else rev.get(y) / assets.get(y), 2, x=True) for y in years],
+                ["Receivable days"] + [_f(None if pd.isna(recv.get(y)) or pd.isna(rev.get(y)) else 365 * recv.get(y) / rev.get(y), 0, lo=0, hi=2000) for y in years],
+                ["Inventory days"] + [_f(None if pd.isna(inv.get(y)) or pd.isna(cogs.get(y)) or not cogs.get(y) else 365 * inv.get(y) / cogs.get(y), 0, lo=0, hi=2000) for y in years],
+                ["Payable days"] + [_f(None if pd.isna(payables.get(y)) or pd.isna(cogs.get(y)) or not cogs.get(y) else 365 * payables.get(y) / cogs.get(y), 0, lo=0, hi=2000) for y in years],
+                ["Cash conversion cycle"] + [_f(None if pd.isna(recv.get(y)) or pd.isna(inv.get(y)) or pd.isna(payables.get(y)) or pd.isna(cogs.get(y)) or not cogs.get(y) or not rev.get(y) else 365 * (recv.get(y) / rev.get(y) + inv.get(y) / cogs.get(y) - payables.get(y) / cogs.get(y)), 0, lo=-1000, hi=2000) for y in years],
+                ["Asset turnover (Rev/assets)"] + [_f(None if pd.isna(rev.get(y)) or pd.isna(assets.get(y)) else rev.get(y) / assets.get(y), 2, x=True, lo=0, hi=20) for y in years],
             ]), ""]
 
     # ===================== CASH FLOW =====================
@@ -217,9 +222,9 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                 ["FCF (CFO−Capex)"] + cells(fcf),
                 ["FCFF (CFO−Capex+Int(1−t))"] + cells(fcff),
                 ["FCFE (CFO−Capex+NetBorrow)"] + cells(fcfe),
-                ["CFO / PAT"] + [_f(None if pd.isna(cfo.get(y)) or pd.isna(pat.get(y)) else cfo.get(y) / pat.get(y), 2, x=True) for y in years],
-                ["CFO / EBITDA"] + [_f(None if pd.isna(cfo.get(y)) or pd.isna(ebitda.get(y)) else 100 * cfo.get(y) / ebitda.get(y), 0, pct=True) for y in years],
-                ["Accruals ((PAT−CFO)/assets)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(cfo.get(y)) or pd.isna(assets.get(y)) else 100 * (pat.get(y) - cfo.get(y)) / assets.get(y), 1, pct=True) for y in years],
+                ["CFO / PAT"] + [_f(None if pd.isna(cfo.get(y)) or pd.isna(pat.get(y)) else cfo.get(y) / pat.get(y), 2, x=True, lo=-50, hi=50) for y in years],
+                ["CFO / EBITDA"] + [_f(None if pd.isna(cfo.get(y)) or pd.isna(ebitda.get(y)) else 100 * cfo.get(y) / ebitda.get(y), 0, pct=True, lo=-100, hi=200) for y in years],
+                ["Accruals ((PAT−CFO)/assets)"] + [_f(None if pd.isna(pat.get(y)) or pd.isna(cfo.get(y)) or pd.isna(assets.get(y)) else 100 * (pat.get(y) - cfo.get(y)) / assets.get(y), 1, pct=True, lo=-150, hi=150) for y in years],
             ]), ""]
 
         # rolling CFO quality
@@ -230,10 +235,10 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
             t = v.tail(n)
             return t[num].sum() / t[den].sum() if t[den].sum() else None
         L += ["**Rolled cash quality (most recent window):**",
-              f"- 3-yr CFO/PAT: {_f(roll_ratio('cfo','pat',3), 2, x=True)} · "
-              f"5-yr CFO/PAT: {_f(roll_ratio('cfo','pat',5), 2, x=True)}",
-              f"- 3-yr CFO/EBITDA: {_f(None if roll_ratio('cfo','ebitda',3) is None else 100*roll_ratio('cfo','ebitda',3), 0, pct=True)} · "
-              f"5-yr CFO/EBITDA: {_f(None if roll_ratio('cfo','ebitda',5) is None else 100*roll_ratio('cfo','ebitda',5), 0, pct=True)}", ""]
+              f"- 3-yr CFO/PAT: {_f(roll_ratio('cfo','pat',3), 2, x=True, lo=-50, hi=50)} · "
+              f"5-yr CFO/PAT: {_f(roll_ratio('cfo','pat',5), 2, x=True, lo=-50, hi=50)}",
+              f"- 3-yr CFO/EBITDA: {_f(None if roll_ratio('cfo','ebitda',3) is None else 100*roll_ratio('cfo','ebitda',3), 0, pct=True, lo=-100, hi=200)} · "
+              f"5-yr CFO/EBITDA: {_f(None if roll_ratio('cfo','ebitda',5) is None else 100*roll_ratio('cfo','ebitda',5), 0, pct=True, lo=-100, hi=200)}", ""]
 
     # ===================== QUARTERLY MOMENTUM =====================
     qm = fundamentals.quarterly_metrics(con, symbol, consolidated)
@@ -243,11 +248,11 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         L += ["## 8. Quarterly P&L trend (last 8q)", _table(hdr, [
             ["Revenue (₹cr)"] + [_f(x, 0) for x in q["revenue_cr"]],
             ["Net profit (₹cr)"] + [_f(x, 0) for x in q["net_profit_cr"]],
-            ["Net margin"] + [_f(x, 1, pct=True) for x in q["net_margin_%"]],
-            ["EBITDA margin"] + [_f(x, 1, pct=True) for x in q["ebitda_margin_%"]],
-            ["Rev YoY"] + [_f(x, 1, pct=True) for x in q["rev_yoy_%"]],
-            ["PAT YoY"] + [_f(x, 1, pct=True) for x in q["net_yoy_%"]],
-            ["Interest cover"] + [_f(x, 1, x=True) for x in q["interest_cover_x"]],
+            ["Net margin"] + [_f(x, 1, pct=True, lo=-100, hi=100) for x in q["net_margin_%"]],
+            ["EBITDA margin"] + [_f(x, 1, pct=True, lo=-100, hi=100) for x in q["ebitda_margin_%"]],
+            ["Rev YoY"] + [_f(x, 1, pct=True, lo=-100, hi=500) for x in q["rev_yoy_%"]],
+            ["PAT YoY"] + [_f(x, 1, pct=True, lo=-100, hi=500) for x in q["net_yoy_%"]],
+            ["Interest cover"] + [_f(x, 1, x=True, lo=-50, hi=500) for x in q["interest_cover_x"]],
         ]), ""]
 
     # ===================== FORENSIC DEEP DIVE =====================
@@ -303,14 +308,17 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     sec = sector.sector_valuation(con, symbol, consolidated, target_shares_override=target_shares)
     L += ["## 10. Valuation"]
     if snap:
-        L.append(f"- Market cap ₹{_f(snap.get('market_cap_cr'),0)} cr · P/E(TTM) {_f(snap.get('pe_ttm'),1)} · "
-                 f"P/B {_f(snap.get('pb'),2)} · earnings yield {_f(snap.get('earnings_yield_%'),2,pct=True)}")
+        L.append(f"- Market cap ₹{_f(snap.get('market_cap_cr'),0)} cr · P/E(TTM) "
+                 f"{_f(snap.get('pe_ttm'),1,lo=0,hi=2000)} · P/B {_f(snap.get('pb'),2,lo=0,hi=200)} · "
+                 f"earnings yield {_f(snap.get('earnings_yield_%'),2,pct=True,lo=-50,hi=50)}")
         if snap.get("note"):
             L.append(f"  - ⚠ {snap['note']}")
     if not hist.empty and "pe" in hist:
         pes = hist["pe"].dropna()
+        pes = pes[(pes > 0) & (pes < 2000)]                 # positive, sane P/Es only
         if len(pes):
-            L.append(f"- Own P/E history: min {_f(pes.min(),1)} / median {_f(float(pes.median()),1)} / max {_f(pes.max(),1)}")
+            L.append(f"- Own P/E history: min {_f(pes.min(),1)} / median "
+                     f"{_f(float(pes.median()),1)} / max {_f(pes.max(),1)}")
     if sec.get("peers_with_data"):
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
