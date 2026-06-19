@@ -275,7 +275,7 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
         # valuation lens: current P/E vs the stock's own positive-P/E history median
         snap = valuation.snapshot(con, sym)
         pe = snap.get("pe_ttm")
-        pe = float(pe) if (pe is not None and pe == pe and pe > 0) else None
+        pe = float(pe) if (pe is not None and pe == pe and 0 < pe < 1000) else None
         pe_med = None
         if pe is not None:
             h = valuation.valuation_history(con, sym)
