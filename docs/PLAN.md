@@ -145,6 +145,13 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 - **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds Gemini
   all meaningful filings since the last FY-end + latest results; **consolidated** auto-picked
   for holding-cos (or forced via the email subject). Generic for any NSE symbol.
+- **SEBI Integrated Filing source** (post-ANANTRAJ review): the legacy
+  `corporates-financial-results` XBRL feed froze at the **Dec-2024 quarter** (SEBI moved
+  results to "Integrated Filing"), leaving every stock's tables ~18 months stale. Added
+  `nse_financials.list_integrated_filings` (the new `/api/integrated-filing-results` endpoint,
+  `in-capmkt` taxonomy — same contexts/elements, so the parser only needed the namespace
+  added) + `list_all_result_filings` that **merges** legacy history with Integrated Filing;
+  ingest now lands quarters/annuals through the latest filed period (verified FY2026 / Q4-FY26).
 - **Report-integrity fixes** (post-WELCORP review): `ensure_ingested` is now **freshness-aware**
   (re-ingests when the latest stored quarter is stale, 2-day cooldown) so tables aren't frozen at
   the first-seen FY; statement tables carry a **TTM column** (`fundamentals.ttm_pl`); the DCF

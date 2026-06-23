@@ -84,7 +84,7 @@ def ingest_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
     giving a clean, non-overlapping quarterly series. Annual figures are derived
     downstream by summing four quarters. Returns rows written.
     """
-    filings = nse_financials.list_result_filings(symbol, period=period)
+    filings = nse_financials.list_all_result_filings(symbol, period=period)
     filings = [f for f in filings if f.xbrl_url and f.to_date]
     if max_filings:
         filings = filings[:max_filings]
@@ -130,7 +130,7 @@ def ingest_annual_financials(symbol: str, con: duckdb.DuckDBPyConnection, *,
     year-end balance sheet is the instant context dated at the filing's to_date.
     One filing = one fiscal year; N filings = N years of history.
     """
-    filings = nse_financials.list_result_filings(symbol, period="Annual")
+    filings = nse_financials.list_all_result_filings(symbol, period="Annual")
     filings = [f for f in filings if f.xbrl_url and f.to_date]
     if max_filings:
         filings = filings[:max_filings]

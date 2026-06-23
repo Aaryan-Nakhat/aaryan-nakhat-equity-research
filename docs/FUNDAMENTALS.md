@@ -29,6 +29,19 @@ Two steps (`scrapers/nse_financials.py`):
 `results-comparision?symbol=<S>` (`resCmpData`) gives NSE-pre-parsed numbers but
 only ~5 periods — used only as a **validation cross-check**, not the source.
 
+### ⚠️ SEBI Integrated Filing cutover (Dec-2024 quarter onward)
+From the **Dec-2024 quarter**, SEBI's **Integrated Filing** framework replaced the
+old result submission, and the legacy `corporates-financial-results` catalog
+**stopped getting new entries** — so it now ends at `2024-12-31` for *every* symbol.
+The new results live at **`/api/integrated-filing-results?index=equities&symbol=<S>&period=Quarterly`**
+(rows carry `qe_Date`, `consolidated`, a `type` of `"Integrated Filing- Financials"`
+vs `"…Governance"`, and a direct `xbrl` URL). The XBRL uses SEBI's new **`in-capmkt`**
+taxonomy — but with the **same `OneD`/`FourD`/`OneI` contexts and identical element
+local-names**, so the same parser handles it. `nse_financials.list_all_result_filings`
+**merges** the legacy feed (history ≤ Dec-2024) with the Integrated Filing feed
+(≥ the new regime); the annual side reads the full year from each fiscal-year-end
+(31-Mar) integrated filing's `FourD`/`OneI`. The ingest path is otherwise unchanged.
+
 ## ⚠️ The XBRL gotcha (why naïve parsing is wrong)
 
 BSE result XBRL gives multiple contexts the **same declared start/end dates** —
@@ -107,7 +120,8 @@ Validated FY24 standalone: Revenue ₹547,942cr · Net ₹42,042cr · **CFO ₹7
 
 ### History depth (taxonomy versions)
 
-The parser is taxonomy-version-agnostic (matches any `…/xbrl/fin/<date>/in-bse-fin`).
+The parser is taxonomy-version-agnostic (matches any `…/xbrl/fin/<date>/in-bse-fin`
+**and** the Integrated Filing `…/sebi.gov.in/xbrl/<date>/in-capmkt`).
 XBRL exists from ~**FY2019** (older filings 404). Caveat: pre-FY2023 result XBRLs
 are `_WEB.xml` variants that carry **P&L (+ often cash flow) but no balance
 sheet** — and they reference the plain headline contexts (`FourD`, `OneI`)
