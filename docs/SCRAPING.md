@@ -99,6 +99,8 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/option-chain-equities?symbol=…` | ✅ 200 (empty when closed) | `option_chain_equity()` |
 | `/api/equity-stockIndices?index=NIFTY 50` | ❌ 404 (path moved) | — |
 | `/api/option-chain-indices?symbol=NIFTY` | ❌ 404 (path moved) | — |
+| `/api/corporates-financial-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 — **legacy** results catalog; **frozen at the Dec-2024 quarter** (SEBI Integrated Filing cutover) | `nse_financials.list_result_filings()` |
+| `/api/integrated-filing-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 (probed 2026-06-23) — **post-Dec-2024** results (Integrated Filing); `in-capmkt` XBRL, same contexts | `nse_financials.list_integrated_filings()` |
 
 ## Derivatives = plain-HTTP archive files (no browser!)
 

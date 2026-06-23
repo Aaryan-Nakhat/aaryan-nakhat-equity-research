@@ -21,22 +21,26 @@ from datetime import date, datetime
 
 from lxml import etree
 
-from equity_research.common.http import fetch_bytes
 from equity_research.scrapers.nse_api import fetch_api
 
 _XBRLI = "http://www.xbrl.org/2003/instance"
 
 
 def _fin_local(tag: object) -> str | None:
-    """Local name if ``tag`` is an in-bse-fin element, else None.
+    """Local name if ``tag`` is a recognised financial-results element, else None.
 
-    Matches any taxonomy version (.../xbrl/fin/<date>/in-bse-fin) so older
-    filings (e.g. the 2018-03-31 taxonomy) parse the same as recent ones.
+    Accepts both taxonomies (version-agnostically, so future revisions still parse):
+    - legacy result XBRL: ``.../xbrl/fin/<date>/in-bse-fin`` (pre-Dec-2024 filings);
+    - SEBI Integrated Filing: ``.../sebi.gov.in/xbrl/<date>/in-capmkt`` (the new
+      regime from the Dec-2024 quarter on). Both use identical local names and the
+      same OneD/FourD/OneI context convention, so downstream is unchanged.
     """
     if not isinstance(tag, str) or not tag.startswith("{"):
         return None
     uri, local = tag[1:].split("}", 1)
     if "bseindia.com/xbrl/fin/" in uri and uri.endswith("in-bse-fin"):
+        return local
+    if "sebi.gov.in/xbrl/" in uri and uri.endswith("in-capmkt"):
         return local
     return None
 
@@ -84,6 +88,65 @@ def list_result_filings(symbol: str, period: str = "Quarterly") -> list[Filing]:
             xbrl_url=r.get("xbrl", ""),
         ))
     return out
+
+
+def list_integrated_filings(symbol: str, period: str = "Quarterly") -> list[Filing]:
+    """Result filings under SEBI's **Integrated Filing** regime (the Dec-2024-quarter
+    cutover that froze the legacy ``corporates-financial-results`` feed).
+
+    Hits ``/api/integrated-filing-results``; keeps only the *financial* rows (drops
+    the parallel Governance filings) and maps them onto the same ``Filing`` shape, so
+    the rest of the pipeline treats them identically. Never raises (``[]`` on error)."""
+    try:
+        resp = fetch_api(
+            f"/api/integrated-filing-results?index=equities&symbol={symbol}&period={period}")
+    except Exception:  # noqa: BLE001
+        return []
+    rows = resp.get("data") if isinstance(resp, dict) else None
+    out: list[Filing] = []
+    for r in rows or []:
+        if str(r.get("type", "")).strip().lower() != "integrated filing- financials":
+            continue                                   # skip Governance / other integrated rows
+        xbrl = (r.get("xbrl") or "").strip()
+        cons = (r.get("consolidated") or "").strip().lower()
+        if not xbrl or cons not in ("consolidated", "standalone"):
+            continue
+        out.append(Filing(
+            symbol=r.get("symbol", symbol),
+            company=r.get("cmName", ""),
+            consolidated=cons == "consolidated",
+            audited=str(r.get("audited", "")).strip().lower() == "audited",
+            financial_year="",
+            from_date=None,
+            to_date=_parse_date(r.get("qe_Date")),
+            filing_date=_parse_date(r.get("broadcast_Date")),
+            xbrl_url=xbrl,
+        ))
+    return out
+
+
+def list_all_result_filings(symbol: str, period: str = "Quarterly") -> list[Filing]:
+    """Legacy + Integrated-Filing result filings merged into one newest-first list.
+
+    The legacy feed carries history up to the Dec-2024 quarter; Integrated Filing
+    carries everything after. For ``period="Annual"`` the integrated side uses the
+    **fiscal year-end (31-Mar) filings**, whose ``FourD``/``OneI`` contexts hold the
+    full-year P&L + cash flow + year-end balance sheet (same as a legacy annual
+    filing). Deduped by ``(to_date, consolidated)``, preferring the later-broadcast
+    row (so a revision or the integrated copy wins), newest-first."""
+    integ = list_integrated_filings(symbol, "Quarterly")     # all integrated financial filings
+    if period == "Annual":
+        integ = [f for f in integ if f.to_date and (f.to_date.month, f.to_date.day) == (3, 31)]
+    merged = integ + list_result_filings(symbol, period)
+    best: dict[tuple, Filing] = {}
+    for f in merged:
+        if not f.to_date:
+            continue
+        key = (f.to_date, f.consolidated)
+        cur = best.get(key)
+        if cur is None or (f.filing_date or date.min) > (cur.filing_date or date.min):
+            best[key] = f
+    return sorted(best.values(), key=lambda f: f.to_date, reverse=True)
 
 
 # BSE result-XBRL context-ID convention (in-bse-fin taxonomy). The contexts'
