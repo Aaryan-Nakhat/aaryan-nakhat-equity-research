@@ -236,6 +236,15 @@ def _categorise(desc: str, text: str, has_xbrl: bool) -> tuple[str | None, str, 
     return "Announcement", "info", False
 
 
+def _clip(text: str, n: int = 220) -> str:
+    """Collapse whitespace and trim to ~n chars at a word boundary (no mid-word
+    cut), adding an ellipsis when shortened."""
+    text = " ".join((text or "").split())
+    if len(text) <= n:
+        return text
+    return text[:n].rsplit(" ", 1)[0].rstrip(" ,;:.–-") + "…"
+
+
 def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
     """anns: list of announcement dicts for this symbol (newest first)."""
     if not anns:
@@ -267,7 +276,7 @@ def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
         seen_titles.add(title)
         att = (a.get("attchmntFile") or "").strip()
         att = att if att.lower().startswith("http") and att.lower().endswith(".pdf") else ""
-        body = (a.get("attchmntText") or a.get("desc") or "")[:180]
+        body = _clip(a.get("attchmntText") or a.get("desc") or "")
         A.append(Alert(symbol, sev, title, body, attach_report=is_result, attachment=att))
     return A, up
 
