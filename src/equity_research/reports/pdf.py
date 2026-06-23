@@ -72,7 +72,8 @@ def report_to_pdf(markdown_text: str, title: str = "",
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            page.set_content(html, wait_until="load")
+            page.set_default_timeout(60_000)         # bound every op so a busy box can't hang us
+            page.set_content(html, wait_until="load", timeout=60_000)
             pdf = page.pdf(format="A4", landscape=True, print_background=True,
                            margin={"top": "12mm", "bottom": "12mm",
                                    "left": "10mm", "right": "10mm"})

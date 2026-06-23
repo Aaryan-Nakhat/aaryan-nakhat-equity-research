@@ -17,6 +17,7 @@ fully intact and revives by setting CHANNELS=telegram. Run via run_email_bot.ps1
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import os
@@ -138,8 +139,11 @@ def _ack(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> No
         log.exception("ack send failed for %s", symbol)
 
 
-def _pdf_with_charts(symbol: str, report_md: str) -> bytes:
-    """Full report PDF with the fundamental charts embedded (charts best-effort)."""
+def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
+    """Full report PDF with the fundamental charts embedded — best-effort with a
+    HARD timeout. The PDF (Playwright Chromium) can hang on a busy box; the full
+    report is already in the email body, so on timeout/failure we return None and
+    deliver body-only rather than blocking the whole send forever."""
     con = connect()
     try:
         images = charts.report_charts(con, symbol)
@@ -148,7 +152,14 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes:
         images = []
     finally:
         con.close()
-    return report_to_pdf(report_md, symbol, images=images)
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(report_to_pdf, report_md, symbol, images).result(timeout=150)
+    except Exception:  # noqa: BLE001 — timeout or render failure
+        log.exception("report PDF generation failed/timed out for %s — sending body-only", symbol)
+        return None
+    finally:
+        ex.shutdown(wait=False)            # don't block on a hung render thread
 
 
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
@@ -161,13 +172,17 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
     body = f"{head}\n\n{report_md}"
+    attachments = [("Metric_guide.pdf", glossary.guide_pdf())]
+    if pdf:
+        attachments.insert(0, (f"{symbol}_{today}.pdf", pdf))
+    else:
+        body += "\n\n_(The charted PDF couldn't be generated this time — the full report is above.)_"
     emailer.send_report(
         _re_subject(req.subject),
         body,
         to=req.sender,
         html=emailer.body_html(body, symbol),
-        attachments=[(f"{symbol}_{today}.pdf", pdf),
-                     ("Metric_guide.pdf", glossary.guide_pdf())],
+        attachments=attachments,
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
     )
