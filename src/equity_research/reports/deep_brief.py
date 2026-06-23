@@ -109,10 +109,33 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     fcff = cfo - capex + fin * (1 - tax_rate)
     fcfe = cfo - capex + net_borrow
 
+    # ---- trailing-12-month (TTM) P&L column (last 4 consecutive quarters) ----
+    tpl = fundamentals.ttm_pl(con, symbol, consolidated)
+
+    def tg(el):                       # TTM scalar for an element (₹); NaN if absent
+        v = tpl.get(el)
+        return float(v) if v is not None and not pd.isna(v) else np.nan
+
+    t_rev, t_oi, t_inc = tg("RevenueFromOperations"), tg("OtherIncome"), tg("Income")
+    has_ttm = not tpl.empty and not pd.isna(t_rev)
+    t_cm = tg("CostOfMaterialsConsumed")
+    t_cogs = (np.nan if pd.isna(t_cm) else
+              np.nansum([t_cm, tg("PurchasesOfStockInTrade"),
+                         tg("ChangesInInventoriesOfFinishedGoodsWorkInProgressAndStockInTrade")]))
+    t_emp, t_fin = tg("EmployeeBenefitExpense"), tg("FinanceCosts")
+    t_dep, t_oexp, t_texp = tg("DepreciationDepletionAndAmortisationExpense"), tg("OtherExpenses"), tg("Expenses")
+    t_pbeit, t_exc = tg("ProfitBeforeExceptionalItemsAndTax"), tg("ExceptionalItemsBeforeTax")
+    t_pbt, t_ctax, t_dtax, t_tax = tg("ProfitBeforeTax"), tg("CurrentTax"), tg("DeferredTax"), tg("TaxExpense")
+    t_pat, t_ci = tg("ProfitLossForPeriod"), tg("ComprehensiveIncomeForThePeriod")
+    t_ebit, t_ebitda, t_gp = t_pbt + t_fin, t_pbt + t_fin + t_dep, t_rev - t_cogs
+
+    def _rt(num, den, mul=100.0):     # safe ratio (no div-by-zero / NaN warnings)
+        return mul * num / den if (den == den and den) else np.nan
+
     # ===================== INCOME STATEMENT =====================
     years = [y for y in yrs if not pd.isna(rev.get(y))]
-    hdr = ["Income statement"] + [f"FY{y.year}" for y in years]
-    L += ["## 1. Income statement", _table(hdr, [
+    hdr = ["Income statement"] + [f"FY{y.year}" for y in years] + (["TTM"] if has_ttm else [])
+    rows1 = [
         ["Revenue from operations"] + cells(rev),
         ["Other income"] + cells(oi),
         ["Total income"] + cells(inc),
@@ -132,23 +155,44 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         ["Total tax"] + cells(tax),
         ["Net profit (PAT)"] + cells(pat),
         ["Comprehensive income"] + cells(ci),
-    ]), ""]
+    ]
+    if has_ttm:
+        ttm_is = [t_rev, t_oi, t_inc, t_cogs, t_emp, t_fin, t_dep, t_oexp, t_texp,
+                  t_ebitda, t_ebit, t_pbeit, t_exc, t_pbt, t_ctax, t_dtax, t_tax, t_pat, t_ci]
+        for row, val in zip(rows1, ttm_is):
+            row.append(_f(None if pd.isna(val) else val / CR, 0))
+    L += ["## 1. Income statement", _table(hdr, rows1), ""]
 
     # ---- margins & growth ----
     def yoy(series):
         return series / series.shift(1) - 1
+    rows2 = [
+        ["Gross margin"] + [_f(None if pd.isna(gp.get(y)) else 100 * gp.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+        ["EBITDA margin"] + [_f(None if pd.isna(ebitda.get(y)) else 100 * ebitda.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+        ["EBIT margin"] + [_f(None if pd.isna(ebit.get(y)) else 100 * ebit.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+        ["PBT margin"] + [_f(None if pd.isna(pbt.get(y)) else 100 * pbt.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+        ["Net margin"] + [_f(None if pd.isna(pat.get(y)) else 100 * pat.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
+        ["Effective tax rate"] + [_f(None if pd.isna(tax_rate.get(y)) else 100 * tax_rate.get(y), 1, pct=True, lo=0, hi=80) for y in years],
+        ["Revenue YoY"] + [_f(None if pd.isna(yoy(rev).get(y)) else 100 * yoy(rev).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
+        ["PAT YoY"] + [_f(None if pd.isna(yoy(pat).get(y)) else 100 * yoy(pat).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
+        ["Other income / PBT"] + [_f(None if pd.isna(oi.get(y)) or pd.isna(pbt.get(y)) else 100 * oi.get(y) / pbt.get(y), 1, pct=True, lo=-200, hi=300) for y in years],
+    ]
+    if has_ttm:
+        ttm_m = [
+            _f(_rt(t_gp, t_rev), 1, pct=True, lo=-100, hi=100),
+            _f(_rt(t_ebitda, t_rev), 1, pct=True, lo=-100, hi=100),
+            _f(_rt(t_ebit, t_rev), 1, pct=True, lo=-100, hi=100),
+            _f(_rt(t_pbt, t_rev), 1, pct=True, lo=-100, hi=100),
+            _f(_rt(t_pat, t_rev), 1, pct=True, lo=-100, hi=100),
+            _f(_rt(t_tax, t_pbt), 1, pct=True, lo=0, hi=80),
+            "n/a",   # YoY needs the prior-year TTM (not computed)
+            "n/a",
+            _f(_rt(t_oi, t_pbt), 1, pct=True, lo=-200, hi=300),
+        ]
+        for row, val in zip(rows2, ttm_m):
+            row.append(val)
     L += ["## 2. Profitability, margins & growth", _table(
-        ["Metric"] + [f"FY{y.year}" for y in years], [
-            ["Gross margin"] + [_f(None if pd.isna(gp.get(y)) else 100 * gp.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
-            ["EBITDA margin"] + [_f(None if pd.isna(ebitda.get(y)) else 100 * ebitda.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
-            ["EBIT margin"] + [_f(None if pd.isna(ebit.get(y)) else 100 * ebit.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
-            ["PBT margin"] + [_f(None if pd.isna(pbt.get(y)) else 100 * pbt.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
-            ["Net margin"] + [_f(None if pd.isna(pat.get(y)) else 100 * pat.get(y) / rev.get(y), 1, pct=True, lo=-100, hi=100) for y in years],
-            ["Effective tax rate"] + [_f(None if pd.isna(tax_rate.get(y)) else 100 * tax_rate.get(y), 1, pct=True, lo=0, hi=80) for y in years],
-            ["Revenue YoY"] + [_f(None if pd.isna(yoy(rev).get(y)) else 100 * yoy(rev).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
-            ["PAT YoY"] + [_f(None if pd.isna(yoy(pat).get(y)) else 100 * yoy(pat).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
-            ["Other income / PBT"] + [_f(None if pd.isna(oi.get(y)) or pd.isna(pbt.get(y)) else 100 * oi.get(y) / pbt.get(y), 1, pct=True, lo=-200, hi=300) for y in years],
-        ]), ""]
+        ["Metric"] + [f"FY{y.year}" for y in years] + (["TTM"] if has_ttm else []), rows2), ""]
 
     # ===================== BALANCE SHEET =====================
     by = [y for y in yrs if not pd.isna(assets.get(y))]
@@ -245,7 +289,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     if not qm.empty:
         q = qm.tail(8)
         hdr = ["Quarter"] + [str(i.date()) for i in q.index]
-        L += ["## 8. Quarterly P&L trend (last 8q)", _table(hdr, [
+        L += [f"## 8. Quarterly P&L trend (last {len(q)}q)", _table(hdr, [
             ["Revenue (₹cr)"] + [_f(x, 0) for x in q["revenue_cr"]],
             ["Net profit (₹cr)"] + [_f(x, 0) for x in q["net_profit_cr"]],
             ["Net margin"] + [_f(x, 1, pct=True, lo=-100, hi=100) for x in q["net_margin_%"]],
@@ -270,6 +314,15 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
              else "weak" if fsc.value <= 2 else "middling")
     mflag = ("n/a" if m.value is None else
              "⚠ above −1.78 (possible manipulation)" if m.value > -1.78 else "clean (≤ −1.78)")
+    # corroborate a Beneish flag against the harder cash/accrual evidence — a sharp
+    # margin recovery can trip the statistical screen without any real manipulation.
+    cp = (cfo / pat).replace([np.inf, -np.inf], np.nan).dropna()
+    cfo_pat_latest = float(cp.iloc[-1]) if len(cp) else None
+    beneish_fp = (m.value is not None and m.value > -1.78
+                  and acc.value is not None and acc.value <= 10
+                  and cfo_pat_latest is not None and cfo_pat_latest >= 1.0)
+    mcaveat = (" — but Sloan accruals and cash conversion look clean, so likely a statistical "
+               "false positive from a sharp margin recovery" if beneish_fp else "")
     L += ["## 9. Forensic deep-dive", ""]
     L.append(f"- **Altman Z = {_f(z.value, 2)} — {zband}.** Bankruptcy-distance score "
              "(>2.99 safe · 1.81–2.99 grey · <1.81 distress); calibrated for manufacturers, so "
@@ -281,7 +334,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  f"checklist. Passed: {', '.join(passed) or 'none'}. Failed: {', '.join(failed) or 'none'}.")
     else:
         L.append(f"- **Piotroski F:** n/a (missing {fsc.missing}).")
-    L.append(f"- **Beneish M = {_f(m.value, 2)} — {mflag}.** Statistical earnings-manipulation "
+    L.append(f"- **Beneish M = {_f(m.value, 2)} — {mflag}{mcaveat}.** Statistical earnings-manipulation "
              "screen (a flag to dig, not proof — corroborate with accruals/receivables/cash).")
     if acc.value is not None:
         L.append(f"- **Sloan accruals = {_f(acc.value, 1, pct=True)} of avg assets — "
@@ -319,9 +372,14 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         if len(pes):
             L.append(f"- Own P/E history: min {_f(pes.min(),1)} / median "
                      f"{_f(float(pes.median()),1)} / max {_f(pes.max(),1)}")
-    if sec.get("peers_with_data"):
+    if sec.get("peers_with_data", 0) >= 3:
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
+    elif sec.get("industry"):
+        n_peers = sec.get("peers_with_data", 0)
+        L.append(f"- Sector ({sec['industry']}): insufficient peer data "
+                 f"({n_peers} peer{'s' if n_peers != 1 else ''} with comparable P/E) — "
+                 "sector percentile omitted; see the peer table below")
 
     # peer comparison table (target ◄ vs sector peers that have data)
     pcols = ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"]
@@ -363,8 +421,14 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
             L.append(f"- **Intrinsic value/share ₹{_f(mc.median, 0)} (median)**, p10–p90 "
                      f"₹{_f(mc.p10, 0)}–{_f(mc.p90, 0)}; price ₹{_f(mc.price, 0)} → {mos}; "
                      f"P(undervalued) {glossary.read('P(undervalued)%', 100 * mc.prob_undervalued, nd=0, pct=True)}.")
-        L.append(f"- Scenario fair value — bear ₹{_f(sc.get('bear'), 0)} · base "
-                 f"₹{_f(sc.get('base'), 0)} · bull ₹{_f(sc.get('bull'), 0)}.")
+        if sc.get("meaningful"):
+            L.append(f"- Scenario fair value — bear ₹{_f(sc.get('bear'), 0, lo=0, hi=1_000_000)} · base "
+                     f"₹{_f(sc.get('base'), 0, lo=0, hi=1_000_000)} · bull "
+                     f"₹{_f(sc.get('bull'), 0, lo=0, hi=1_000_000)}.")
+        else:
+            L.append("- Scenario fair value — not meaningful for this company "
+                     "(high-beta / cyclical / capex-heavy inputs drive the modelled FCFF negative); "
+                     "rely on the reverse-DCF and the relative valuation in §10 instead.")
         if rev.get("implied_growth") is not None:
             L.append(f"- Reverse-DCF: today's price implies ~{_f(100 * rev['implied_growth'], 1, pct=True)} "
                      f"revenue growth (vs {_f(100 * (rev.get('historical_growth') or 0), 1, pct=True)} "

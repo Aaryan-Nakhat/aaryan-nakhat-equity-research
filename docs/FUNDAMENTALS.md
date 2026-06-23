@@ -80,6 +80,10 @@ Reads the quarterly series and computes — validated on RELIANCE:
   interest coverage, effective tax rate, other-income-to-PBT, and **YoY** revenue
   & net-profit growth (vs the same quarter a year earlier).
 - **TTM** (`ttm`): trailing-4-quarter revenue, net profit and margins.
+- **TTM P&L** (`ttm_pl`): the trailing-4-quarter **sum of every P&L element** (for a
+  "TTM" column beside the annual statements in the deep brief). Returns empty unless
+  4 *consecutive* quarters exist (≈9–13 months end-to-end), so a missing quarter
+  never silently understates the total.
 
 Report: `uv run python scripts/fundamentals_report.py RELIANCE [--consolidated]`.
 

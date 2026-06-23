@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from equity_research.analysis import sector, valuation
-from equity_research.analysis.fundamentals import load_annual, ttm
+from equity_research.analysis.fundamentals import load_annual, load_quarters, ttm
 
 CR = 1e7
 _MARKET_INDEX = "Nifty 50"
@@ -87,7 +87,27 @@ def _beta(con: duckdb.DuckDBPyConnection, symbol: str, lookback: int = 500) -> f
     rs, ri = rs[mask], ri[mask]
     if len(rs) < 60 or np.var(ri) == 0:
         return None
-    return float(np.cov(rs, ri)[0, 1] / np.var(ri))
+    # cap to a sane equity range — a raw regression beta can spike to ~3 on a
+    # thin/volatile name and then pins WACC at its ceiling, breaking the DCF.
+    return float(np.clip(np.cov(rs, ri)[0, 1] / np.var(ri), 0.4, 2.0))
+
+
+def _recent_revenue_yoy(con: duckdb.DuckDBPyConnection, symbol: str,
+                        consolidated: bool = False) -> float | None:
+    """Most-recent trailing-12-month revenue growth vs the prior TTM (last 4
+    quarters vs the 4 before). Captures current momentum the annual CAGR misses.
+    None unless ≥8 quarters with positive prior-TTM revenue exist."""
+    q = load_quarters(con, symbol, consolidated)
+    if q.empty or "RevenueFromOperations" not in q.columns:
+        return None
+    rev = q["RevenueFromOperations"].dropna()
+    if len(rev) < 8:
+        return None
+    recent = float(rev.iloc[-4:].sum())
+    prior = float(rev.iloc[-8:-4].sum())
+    if prior <= 0:
+        return None
+    return recent / prior - 1
 
 
 def dcf_inputs(con: duckdb.DuckDBPyConnection, symbol: str,
@@ -129,6 +149,13 @@ def dcf_inputs(con: duckdb.DuckDBPyConnection, symbol: str,
         yoy = (rev / rev.shift(1) - 1).dropna()
         if len(yoy):
             inp.growth_sigma = float(np.clip(np.std(yoy), 0.02, 0.08))
+    # blend the long-run CAGR with recent momentum (TTM vs prior-TTM revenue) so a
+    # historically fast grower that is *currently shrinking* isn't handed the +25%
+    # cap — its declining quarters pull the assumption down.
+    if inp.growth is not None:
+        recent = _recent_revenue_yoy(con, symbol, consolidated)
+        if recent is not None:
+            inp.growth = 0.5 * inp.growth + 0.5 * recent
     inp.growth = float(np.clip(inp.growth if inp.growth is not None else 0.08, -0.05, 0.25))
 
     # margins / intensity ratios (means over available years, revenue-weighted-ish)
@@ -287,9 +314,13 @@ def scenario_dcf(inp: DcfInputs) -> dict:
     for name, (dg, dm, dw) in {
         "bear": (-gs, -ms, +0.01), "base": (0, 0, 0), "bull": (+gs, +ms, -0.01),
     }.items():
-        out[name] = float(_value_per_share(
+        v = float(_value_per_share(
             inp, max(g + dg, -0.10), max(mg + dm, 0.01),
             float(np.clip(w + dw, 0.07, 0.20)), inp.terminal_growth))
+        out[name] = v if np.isfinite(v) and v > 0 else None   # negative/NaN ⇒ not meaningful
+    # the model is only meaningful if the central case produces a positive value;
+    # a non-positive base means capex/NWC intensity or high WACC broke the FCFF path.
+    out["meaningful"] = out.get("base") is not None
     out["price"] = inp.price
     return out
 
