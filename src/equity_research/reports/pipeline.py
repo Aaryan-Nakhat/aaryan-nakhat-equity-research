@@ -6,11 +6,11 @@ on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import duckdb
 
-from equity_research.analysis import forensic, fundamentals, quant, valuation
+from equity_research.analysis import forensic, fundamentals, quant, sector, valuation
 from equity_research.analysis.alerts import _categorise
 from equity_research.common.db import connect
 from equity_research.common.http import fetch_bytes
@@ -113,25 +113,100 @@ def _f(v, nd=0, pct=False) -> str:
     return f"{v:,.{nd}f}{'%' if pct else ''}"
 
 
-def ensure_ingested(symbol: str, con: duckdb.DuckDBPyConnection) -> bool:
-    """Ingest financials for ``symbol`` if we don't have any yet. Returns True if
-    data is available afterwards."""
-    n = con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ?", [symbol]).fetchone()[0]
-    if n == 0:
-        try:
-            ingest_financials(symbol, con, period="Quarterly", max_filings=12)
-            ingest_annual_financials(symbol, con, max_filings=8)
-        except Exception:  # noqa: BLE001
-            pass
-        n = con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ?", [symbol]).fetchone()[0]
-    # best-effort: ensure a promoter-pledge snapshot exists (one browser fetch, cached)
+def _expected_latest_quarter_end(today: date) -> date:
+    """Most recent Mar/Jun/Sep/Dec quarter-end that should already be *filed* — i.e.
+    at least ~75 days old (SEBI's 45-day quarterly / 60-day annual deadline + slack)."""
+    cutoff = today - timedelta(days=75)
+    ends = [date(cutoff.year, 3, 31), date(cutoff.year, 6, 30),
+            date(cutoff.year, 9, 30), date(cutoff.year, 12, 31),
+            date(cutoff.year - 1, 12, 31)]
+    return max(d for d in ends if d <= cutoff)
+
+
+def _financials_stale(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
+    """True if we hold no quarterly rows, or the newest one predates the quarter that
+    should already have been filed by now (the staleness that left FY2024 in a 2026 report)."""
+    row = con.execute("SELECT max(period_end) FROM financials "
+                      "WHERE symbol = ? AND period_type = 'Q'", [symbol]).fetchone()
+    latest = row[0] if row else None
+    return latest is None or latest < _expected_latest_quarter_end(date.today())
+
+
+def _shareholding_stale(con: duckdb.DuckDBPyConnection, symbol: str, days: int = 80) -> bool:
+    """True if there's no pledge snapshot, or it's older than ~a quarter."""
+    row = con.execute("SELECT max(updated_at) FROM shareholding WHERE symbol = ?", [symbol]).fetchone()
+    ts = row[0] if row else None
+    if ts is None:
+        return True
     try:
-        if con.execute("SELECT COUNT(*) FROM shareholding WHERE symbol = ?",
-                       [symbol]).fetchone()[0] == 0:
-            ingest_shareholding(symbol, con)
+        return (datetime.now() - ts).days >= days
+    except TypeError:
+        return True
+
+
+def _refresh_attempted_recently(con: duckdb.DuckDBPyConnection, symbol: str, days: int = 2) -> bool:
+    """Cooldown: did we already try to refresh this symbol within ``days``? Avoids
+    re-hitting NSE on every report when a newer filing genuinely isn't out yet."""
+    row = con.execute("SELECT value FROM alert_state WHERE symbol = ? AND key = 'fin_refresh'",
+                      [symbol]).fetchone()
+    if not row:
+        return False
+    try:
+        return (date.today() - date.fromisoformat(row[0])).days < days
+    except (ValueError, TypeError):
+        return False
+
+
+def _mark_refresh_attempt(con: duckdb.DuckDBPyConnection, symbol: str) -> None:
+    con.execute("INSERT OR REPLACE INTO alert_state(symbol, key, value, updated_at) "
+                "VALUES (?, 'fin_refresh', ?, now())", [symbol, date.today().isoformat()])
+
+
+def ensure_ingested(symbol: str, con: duckdb.DuckDBPyConnection) -> bool:
+    """Ensure ``symbol`` has *fresh* financials + a pledge snapshot. Re-ingests when
+    our latest filing is stale (not just when empty), behind a per-symbol cooldown so
+    repeat requests don't hammer NSE. Returns True if financial data is available."""
+    have = con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ?", [symbol]).fetchone()[0] > 0
+    need_fin = not have or _financials_stale(con, symbol)
+    need_sh = _shareholding_stale(con, symbol)
+    if (need_fin or need_sh) and not _refresh_attempted_recently(con, symbol):
+        if need_fin:
+            try:  # idempotent upsert — re-lands the latest filings, appends any new period
+                ingest_financials(symbol, con, period="Quarterly", max_filings=12)
+                ingest_annual_financials(symbol, con, max_filings=8)
+            except Exception:  # noqa: BLE001
+                pass
+        if need_sh:
+            try:  # one browser fetch, cached
+                ingest_shareholding(symbol, con)
+            except Exception:  # noqa: BLE001
+                pass
+        _mark_refresh_attempt(con, symbol)
+        have = con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ?", [symbol]).fetchone()[0] > 0
+    return have
+
+
+def _ensure_peer_financials(con: duckdb.DuckDBPyConnection, symbol: str, cap: int = 6) -> None:
+    """Best-effort: ingest ANNUAL financials for up to ``cap`` same-sector peers that
+    have none yet, so the peer-comparison table has real comparables (peer P/B, ROE,
+    ROCE, net-margin, D/E come from annual statements + the market-wide EOD price we
+    already hold). Annual-only keeps it bounded; cached for future reports; never raises."""
+    try:
+        peers = sector.peers(con, symbol)
     except Exception:  # noqa: BLE001
-        pass
-    return n > 0
+        return
+    done = 0
+    for ps in peers:
+        if done >= cap:
+            break
+        try:
+            if con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ? AND period_type = 'Y'",
+                           [ps]).fetchone()[0]:
+                continue                       # already have annual data for this peer
+            if ingest_annual_financials(ps, con, max_filings=8):
+                done += 1
+        except Exception:  # noqa: BLE001 — one bad peer shouldn't break the report
+            continue
 
 
 def _prefer_consolidated(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
@@ -169,6 +244,8 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     con = connect()
     try:
         have = ensure_ingested(symbol, con)
+        if deep:
+            _ensure_peer_financials(con, symbol)   # populate peers so §10's table is real
         basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
         builder = build_deep_brief if deep else build_brief
         brief = builder(con, symbol, consolidated=basis, target_shares=target_shares)

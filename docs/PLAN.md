@@ -145,6 +145,13 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 - **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds Gemini
   all meaningful filings since the last FY-end + latest results; **consolidated** auto-picked
   for holding-cos (or forced via the email subject). Generic for any NSE symbol.
+- **Report-integrity fixes** (post-WELCORP review): `ensure_ingested` is now **freshness-aware**
+  (re-ingests when the latest stored quarter is stale, 2-day cooldown) so tables aren't frozen at
+  the first-seen FY; statement tables carry a **TTM column** (`fundamentals.ttm_pl`); the DCF
+  **caps beta to [0.4, 2.0]**, blends growth with **recent quarterly momentum**, and prints
+  **"not meaningful"** instead of negative fair values; the peer table ingests **~6 same-sector
+  peers on demand** (`_ensure_peer_financials`); §9 adds a Beneish **false-positive caveat** when
+  accruals + cash conversion are clean.
 
 ### Later (deferred)
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,

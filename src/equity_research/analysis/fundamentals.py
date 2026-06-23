@@ -95,6 +95,21 @@ def ttm(con: duckdb.DuckDBPyConnection, symbol: str,
     }
 
 
+def ttm_pl(con: duckdb.DuckDBPyConnection, symbol: str,
+           consolidated: bool = False) -> pd.Series:
+    """Trailing-twelve-month sum of **every** P&L element over the last 4 quarters —
+    for a 'TTM' column alongside the annual statements. Empty unless 4 *consecutive*
+    quarters exist (≈9-13 months end-to-end), so a missing quarter never understates."""
+    q = load_quarters(con, symbol, consolidated)
+    if len(q) < 4:
+        return pd.Series(dtype=float)
+    last4 = q.tail(4)
+    span = (last4.index[-1] - last4.index[0]).days
+    if not (250 <= span <= 400):
+        return pd.Series(dtype=float)
+    return last4.sum(min_count=1)
+
+
 def load_annual(con: duckdb.DuckDBPyConnection, symbol: str,
                 consolidated: bool = False) -> pd.DataFrame:
     """Wide annual frame: index = fiscal year-end, columns = XBRL elements."""

@@ -93,8 +93,14 @@ The deep brief also carries a quant layer (numpy-only, assumption-driven):
   **distribution**: median, p10–p90, **margin of safety** and **P(undervalued)**.
   Growth fades to terminal and `wacc−tg` is floored, so terminal value can't
   explode. **Skipped for banks/NBFCs** (FCFF-DCF inappropriate — flagged).
+  *Guards (so a noisy stock never prints garbage):* **beta is capped to [0.4, 2.0]**
+  (a raw regression beta can spike to ~3 and pin WACC at its ceiling); the growth
+  assumption **blends the long-run CAGR with recent TTM momentum** so a historically
+  fast grower that's currently shrinking isn't handed the +25% cap.
 - **Reverse DCF** — the growth today's price implies (bisection), vs history.
-- **Scenario DCF** — bear/base/bull point values.
+- **Scenario DCF** — bear/base/bull point values; if the central case isn't a
+  positive value (high-beta / cyclical / capex-heavy inputs drive modelled FCFF
+  negative) the section prints **"not meaningful"** rather than a negative number.
 - **Benford's law** — first-digit conformity (MAD) of all reported figures, a
   manipulation/rounding tell.
 - **Sector z-scores** + a **peer-comparison table** — target ◄ vs sector peers on
@@ -112,6 +118,28 @@ results, concall transcripts, investor presentations, ratings, M&A, etc.
 under Gemini's inline limit) and feeds them all to Gemini, so every on-demand
 report folds in management guidance + contingent-liability / related-party notes.
 Generic — works for any NSE symbol (new or famous). No manual `--pdf` needed.
+
+**Data freshness (auto-refresh):** `pipeline.ensure_ingested` is freshness-aware —
+it re-ingests the latest quarterly + annual filings whenever the newest stored
+quarter is older than the quarter that should already be filed (≈75-day SEBI lag),
+not just when the symbol is empty. A per-symbol 2-day cooldown (in `alert_state`)
+stops repeat requests from re-hitting NSE. The promoter-pledge snapshot refreshes
+the same way when older than ~80 days. (Ingests are idempotent upserts, so this
+re-lands the latest and appends any new period.) This is what keeps the statement
+tables current instead of frozen at the first-seen fiscal year.
+
+**Quarter-level P&L (TTM column):** the §1 Income statement and §2 margins tables
+carry a **TTM** column (trailing-4-quarters sum, via `fundamentals.ttm_pl`) next to
+the fiscal years, so a quarterly filer's freshest 12-month view sits beside the
+annuals. Balance sheet / cash flow stay annual (quarterly XBRL carries no BS/CF).
+The §8 quarterly-trend label now reflects the **actual** quarter count.
+
+**Real peer table:** before building a deep report, `pipeline._ensure_peer_financials`
+best-effort ingests **annual** financials for up to ~6 same-sector peers that lack
+them (cached after), so §10's peer comparison shows real comparables instead of the
+one-or-two stocks that happened to be ingested. When fewer than 3 peers have a
+comparable P/E, the sector-percentile line is replaced by an "insufficient peer
+data" note (the peer table still renders).
 
 **Consolidated vs standalone:** `generate_report(consolidated=None)` auto-picks
 **consolidated** when it exists and subsidiaries add materially (consolidated
