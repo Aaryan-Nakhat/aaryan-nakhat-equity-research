@@ -388,6 +388,10 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
             out["NetMargin%"] = 100 * pat / rev
         if eq:
             out["D/E"] = debt / eq
+        # peer fallback: when a TTM P/E isn't available (peers are ingested annual-only),
+        # use a trailing-annual P/E (market cap / last-FY PAT) so the column isn't all n/a.
+        if "P/E" not in out and pat and pat > 0 and snap.get("market_cap_cr"):
+            out["P/E"] = snap["market_cap_cr"] * CR / pat
     # plausible bounds — drop implausible values (e.g. holding-co standalone net
     # margin >100% when 'revenue from operations' excludes investment income, or a
     # negative/blown-up P/E) so peer tables and z-scores aren't distorted.

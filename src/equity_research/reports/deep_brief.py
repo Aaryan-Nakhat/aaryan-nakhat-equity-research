@@ -392,7 +392,9 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         if len(prows) >= 8:
             break
     if len(prows) >= 2:
-        L += ["### Peer comparison", _table(["Company"] + pcols, prows)]
+        # blank lines around the table so the following "## 11." renders as a heading
+        # (a table glued straight to a heading makes the renderer swallow the '##')
+        L += ["", "### Peer comparison", "", _table(["Company"] + pcols, prows), ""]
 
     # ===================== QUANT VALUATION (Monte-Carlo DCF) =====================
     inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
