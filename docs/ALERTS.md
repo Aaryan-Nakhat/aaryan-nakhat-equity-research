@@ -108,6 +108,10 @@ day-one flood). State-based dedup also makes a double-run harmless.
   results days; grouped by symbol. Telegram still attaches PDFs (parked channel).
 - The bot only runs while the laptop is on; a missed 18:00 slot is covered by the
   self-healing heartbeat (fires once the bot is next up after 18:00). True 24/7
-  needs a small server.
+  needs a small server. If the laptop was **off the whole day**, that day can't be
+  recovered by the heartbeat — run `scripts/run_scan_once.py` the next morning
+  (before market close, so the latest bhavcopy is still the missed day's) to
+  backfill that digest; it doesn't set the daily marker, so the evening scan still
+  fires normally.
 - Fundamental/valuation events need financials ingested; symbols without NSE
   financials still get price/announcement alerts.
