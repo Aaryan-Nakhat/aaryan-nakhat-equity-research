@@ -35,7 +35,12 @@ Nifty 500 day move, `scan.market_context`) then three parts:
 - **📅 Upcoming:** the watchlist's events in the next ~35 days — board-meeting /
   results dates, ex-dividend / split / bonus dates, AGM / fund-raising
   (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
-  corporate-actions feeds, fetched with a date range).
+  corporate-actions feeds, fetched with a date range). Board-meeting **purposes are
+  LLM-labelled** in one batched Gemini call (`synthesize.label_events`) into clean
+  plain-English (e.g. "Q1 results & dividend"); a keyword heuristic
+  (`_bm_purpose`, after-"consider", case-insensitive) is the per-item fallback.
+  Every record is parsed best-effort and each digest section is built
+  independently, so one malformed filing can never abort the whole scan.
 - **Movers (always present):** a per-stock daily snapshot for the whole watchlist
   — close, day %change, delivery%, 52-week position, and **P/E vs the stock's own
   5-yr median** (cheap/rich lens) — sorted biggest-move first
