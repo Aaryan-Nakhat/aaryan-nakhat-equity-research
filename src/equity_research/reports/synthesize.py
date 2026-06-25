@@ -16,6 +16,7 @@ Model via GEMINI_MODEL (default gemini-2.5-pro). See ``docs/REPORTS.md``.
 from __future__ import annotations
 
 import os
+import re
 
 from google import genai
 from google.genai import types
@@ -201,3 +202,41 @@ def analyze_filing(pdf_bytes: bytes, symbol: str, event_title: str,
         if chunk.text:
             out.append(chunk.text)
     return "".join(out).strip()
+
+
+_LABEL_SYS = """You label Indian-exchange (NSE/BSE) corporate filings and board-meeting \
+notices. You are given a numbered list of raw announcement texts. Reply with the SAME \
+numbers, one label per line, each the concise plain-English SUBJECT/purpose of AT MOST \
+~8 words — e.g. "Q1 results & dividend", "Fund raising via QIP", "Stock split 1:5", \
+"Bonus issue", "Scheme of amalgamation", "Buyback of shares". Give ONLY the subject — do \
+NOT include the words "board meeting", "intimation", "outcome", or "announcement". No extra \
+commentary, no blank lines, no markdown. One line per input number, in order."""
+
+
+def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
+    """Concise plain-English labels for a batch of NSE filing / board-meeting texts in ONE
+    Gemini call (cheap — one call per scan). Returns a list aligned to ``texts`` ("" where
+    the model gave nothing for that item); returns all-"" on any failure so the caller falls
+    back to its heuristic. Never raises."""
+    items = [" ".join((t or "").split())[:400] for t in texts]
+    blank = ["" for _ in items]
+    if not any(items):
+        return blank
+    numbered = "\n".join(f"{i + 1}. {t or '(no text)'}" for i, t in enumerate(items))
+    try:
+        resp = _client().models.generate_content(
+            model=model,
+            contents=[types.Part.from_text(text=numbered)],
+            config=types.GenerateContentConfig(system_instruction=_LABEL_SYS, max_output_tokens=1200),
+        )
+        text = resp.text or ""
+    except Exception:  # noqa: BLE001 — labeling is best-effort
+        return blank
+    out = list(blank)
+    for line in text.splitlines():
+        m = re.match(r"\s*(\d+)[.)]\s*(.+)", line)
+        if m:
+            idx = int(m.group(1)) - 1
+            if 0 <= idx < len(out):
+                out[idx] = m.group(2).strip().strip("*").strip().rstrip(".")[:60]
+    return out

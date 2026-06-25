@@ -194,10 +194,30 @@ def _parse_dt(s) -> date | None:
         return None
 
 
-def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30) -> list[dict]:
+def _bm_purpose(desc: str, fallback: str) -> str:
+    """Heuristic board-meeting purpose: the text after 'consider', matched
+    **case-insensitively** (NSE writes 'Consider'/'consider'/'CONSIDER'). Falls
+    back when the phrasing differs. Never raises."""
+    low = (desc or "").lower()
+    i = low.find("consider")
+    if i != -1:
+        tail = desc[i + len("consider"):].strip().rstrip(".")
+        if tail:
+            return tail
+    return (fallback or "meeting").strip() or "meeting"
+
+
+def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30, labeler=None) -> list[dict]:
     """Upcoming events for the watchlist (next ``days``): board meetings (with
     purpose), results / fund-raising / AGM (event calendar), and ex-dividend /
-    split / bonus dates (corporate actions). Returns [{symbol, date, what}]."""
+    split / bonus dates (corporate actions). Returns [{symbol, date, what}].
+
+    ``labeler(list[str]) -> list[str]`` (optional) turns the raw board-meeting
+    descriptions into clean plain-English purposes via the LLM, in one batched
+    call; whenever it returns nothing for an item we fall back to the keyword
+    heuristic. Each record is processed best-effort — a single malformed entry is
+    skipped, never allowed to abort the whole scan (a missing 'consider' once took
+    the entire digest down)."""
     symset = set(syms)
     today = datetime.now(_IST).date()
     horizon = today + timedelta(days=days)
@@ -213,16 +233,33 @@ def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30) -> list[dic
         seen.add(key)
         out.append({"symbol": sym, "date": d, "what": what})
 
-    for r in feeds.get("board_meetings") or []:
-        desc = (r.get("bm_desc") or "")
-        purpose = (desc.split("consider", 1)[1].strip().rstrip(".")
-                   if "consider" in desc.lower() else (r.get("bm_purpose") or "meeting"))
+    def _each(rows, fn):
+        for i, r in enumerate(rows or []):
+            try:
+                fn(i, r)
+            except Exception:  # noqa: BLE001 — one bad record must not sink the digest
+                log.exception("skipping malformed upcoming-event record: %r", r)
+
+    # board meetings — LLM-label the purposes in one batch (best-effort), else heuristic
+    bms = feeds.get("board_meetings") or []
+    llm: dict[int, str] = {}
+    if labeler and bms:
+        try:
+            labels = labeler([(r.get("bm_desc") or "") for r in bms])
+            llm = {i: labels[i] for i in range(min(len(labels), len(bms))) if labels[i]}
+        except Exception:  # noqa: BLE001 — labeling is best-effort
+            log.exception("LLM event labeling failed — using heuristic purposes")
+
+    def _bm(i, r):
+        purpose = llm.get(i) or _bm_purpose(r.get("bm_desc") or "", r.get("bm_purpose") or "")
         add(r.get("bm_symbol"), _parse_dt(r.get("bm_date")), f"Board meeting — {purpose}"[:70])
-    for r in feeds.get("event_calendar") or []:
-        add(r.get("symbol"), _parse_dt(r.get("date")), r.get("purpose") or "Event")
-    for r in feeds.get("corp_actions") or []:
-        add(r.get("symbol"), _parse_dt(r.get("exDate")),
-            f"{(r.get('subject') or 'Corporate action')} (ex-date)")
+
+    _each(bms, _bm)
+    _each(feeds.get("event_calendar"), lambda i, r: add(
+        r.get("symbol"), _parse_dt(r.get("date")), r.get("purpose") or "Event"))
+    _each(feeds.get("corp_actions"), lambda i, r: add(
+        r.get("symbol"), _parse_dt(r.get("exDate")),
+        f"{(r.get('subject') or 'Corporate action')} (ex-date)"))
     out.sort(key=lambda u: u["date"])
     return out
 
@@ -395,8 +432,26 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}).items():
             results.setdefault(sym, []).extend(deal_alerts)
         _enrich_event_docs(results)                         # inline Gemini read of filings
-        return ScanResult(results, watchlist_movers(con), watchlist_upcoming(syms, feeds),
-                          market_context(con))
+
+        # build each digest section best-effort — one failing section must never
+        # abort the whole scan (it's the difference between a partial digest and none).
+        def _safe(fn, default):
+            try:
+                return fn()
+            except Exception:  # noqa: BLE001
+                log.exception("digest section failed: %s", getattr(fn, "__name__", fn))
+                return default
+
+        def _labeler(descs):
+            from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
+            return synthesize.label_events(descs)
+
+        return ScanResult(
+            results,
+            _safe(lambda: watchlist_movers(con), []),
+            _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
+            _safe(lambda: market_context(con), ""),
+        )
     finally:
         if own:
             con.close()
