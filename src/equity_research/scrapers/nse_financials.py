@@ -21,7 +21,7 @@ from datetime import date, datetime
 
 from lxml import etree
 
-from equity_research.scrapers.nse_api import fetch_api
+from equity_research.scrapers.nse_api import fetch_api, q
 
 _XBRLI = "http://www.xbrl.org/2003/instance"
 
@@ -72,7 +72,7 @@ def _parse_date(s: str | None) -> date | None:
 def list_result_filings(symbol: str, period: str = "Quarterly") -> list[Filing]:
     """All result filings for ``symbol`` (period = ``Quarterly`` or ``Annual``)."""
     rows = fetch_api(
-        f"/api/corporates-financial-results?index=equities&symbol={symbol}&period={period}"
+        f"/api/corporates-financial-results?index=equities&symbol={q(symbol)}&period={period}"
     )
     out: list[Filing] = []
     for r in rows:
@@ -99,7 +99,7 @@ def list_integrated_filings(symbol: str, period: str = "Quarterly") -> list[Fili
     the rest of the pipeline treats them identically. Never raises (``[]`` on error)."""
     try:
         resp = fetch_api(
-            f"/api/integrated-filing-results?index=equities&symbol={symbol}&period={period}")
+            f"/api/integrated-filing-results?index=equities&symbol={q(symbol)}&period={period}")
     except Exception:  # noqa: BLE001
         return []
     rows = resp.get("data") if isinstance(resp, dict) else None
