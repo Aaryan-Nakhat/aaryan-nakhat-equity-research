@@ -6,8 +6,9 @@ where the "normal" range shifts by business model. This module is the
 deterministic backbone (consistent, no LLM); the Gemini narrative then adds the
 company-specific, sector-aware reading on top.
 
-- ``read(key, value)``  -> short inline tag, e.g. "9.5% — fair"
-- ``guide(keys)``       -> a Markdown "Metric guide" appendix (what/typical/how)
+- ``read(key, value)``    -> short inline tag, e.g. "9.5% — fair"
+- ``guide_markdown()``    -> the standalone "Metrics & ratings guide" (metrics +
+  the categorical outputs: verdict ratings, P/E n/a reasons, event types)
 """
 
 from __future__ import annotations
@@ -172,15 +173,79 @@ def label(key: str, value: float | None) -> str:
     return (_band(m, value) or "") if (m and value is not None) else ""
 
 
+# ---- Categorical outputs (fixed value sets the reports / digest can produce) ----
+
+# The deep report's one-line call — graded most-positive → most-negative.
+VERDICTS: list[tuple[str, str]] = [
+    ("Buy", "Strongest positive — start or add a position now; looks undervalued with a margin of safety."),
+    ("Accumulate", "Moderately positive — build gradually / on dips; a good business but not a deep bargain (often already priced for growth)."),
+    ("Hold", "Neutral — keep it if you own it, but not a fresh-buy case; roughly fairly valued."),
+    ("Reduce", "Moderately negative — trim the position; deteriorating fundamentals or a stretched valuation, but not a full exit."),
+    ("Avoid", "Strongest negative — don't buy / exit; overvalued, risky, or carrying red flags. (There is no separate 'Sell' — Avoid is the floor of the scale.)"),
+]
+
+# Why a Movers P/E is shown as "n/a (...)" instead of a misleading number.
+PE_NA_REASONS: list[tuple[str, str]] = [
+    ("loss-making", "Negative trailing-twelve-month earnings — a P/E is undefined."),
+    ("earnings distorted, profit > sales", "Net profit exceeds revenue — an artifact (e.g. a demerger or one-off gain), so the P/E is meaningless."),
+    ("negative net worth", "Accumulated losses exceed equity (negative book value) — earnings and P/E aren't meaningful."),
+]
+
+# How each watchlist filing is tagged in the daily digest's Events section.
+EVENT_TYPES: list[tuple[str, str]] = [
+    ("Results filed", "Quarterly or annual financial results."),
+    ("Concall / investor meet", "Earnings call, analyst/investor meet, transcript or presentation."),
+    ("Dividend", "Dividend declaration."),
+    ("Stock split", "Sub-division of shares (lower face value)."),
+    ("Bonus issue", "Free additional shares issued to existing holders."),
+    ("Rights issue", "Discounted new shares offered pro-rata to existing holders."),
+    ("QIP / fund raising", "Fresh capital raised from institutional investors."),
+    ("Preferential issue", "Shares/warrants issued to select investors."),
+    ("Scheme / M&A", "Merger, demerger, amalgamation or scheme of arrangement."),
+    ("Open offer / SAST", "Substantial-acquisition / takeover open offer."),
+    ("Buyback", "Company repurchasing its own shares."),
+    ("Acquisition / disposal", "Buying or selling a business or stake."),
+    ("Order / contract win", "New order or contract bagged."),
+    ("Credit rating update", "Rating action by a rating agency."),
+    ("Promoter pledge / charge", "Promoter shares pledged, or a charge created/satisfied."),
+    ("Insider-trading disclosure", "SEBI PIT (insider-trading) disclosure."),
+    ("Director / KMP change", "Board / key-management appointment, resignation or auditor change."),
+    ("Shareholder meeting", "AGM / EGM, postal ballot, or its proceedings."),
+    ("Board meeting", "Intimation or outcome of a board meeting."),
+    ("Delisting", "Proposal to delist the shares."),
+    ("Announcement", "Any other material disclosure (catch-all)."),
+]
+
+
 def guide_markdown() -> str:
-    """The full Metric guide (every metric) as a standalone Markdown document —
-    what each is, typical values, and how to read it."""
-    lines = ["# Metric guide",
-             "_What each metric in the reports means, its typical/benchmark values, and how "
-             "to read it — judge sector-relative where noted._\n"]
+    """The full guide as a standalone Markdown document — every metric (what it is,
+    typical values, how to read it) plus the categorical outputs (verdict ratings,
+    P/E n/a reasons, corporate-event types) and their possible values."""
+    lines = ["# Metrics & ratings guide",
+             "_What each metric and rating in the reports means, its typical values or "
+             "possible categories, and how to read it — judge sector-relative where noted._\n",
+             "## Financial & forensic metrics"]
     for k, m in GLOSSARY.items():
         note = f" _Sector:_ {m.sector_note}" if m.sector_note else ""
         lines.append(f"- **{k}** — {m.what} _Typical:_ {m.typical}{note}")
+    lines.append("\n_The inline band words (e.g. safe / strong / rich / elevated) are just the "
+                 "current value placed into each metric's thresholds listed above._")
+
+    lines.append("\n## Verdict — the report's call")
+    lines.append("_The deep report ends with exactly one of these five ratings — a graded "
+                 "judgment (most positive → most negative), grounded in the quant brief and the "
+                 "filings the model read:_")
+    lines += [f"- **{v}** — {meaning}" for v, meaning in VERDICTS]
+
+    lines.append("\n## Why a Movers P/E shows 'n/a'")
+    lines.append("_In the daily digest, a P/E is dropped (with the reason) rather than printed "
+                 "when it would be misleading:_")
+    lines += [f"- **{r}** — {meaning}" for r, meaning in PE_NA_REASONS]
+
+    lines.append("\n## Corporate-event types (daily digest)")
+    lines.append("_How each watchlist filing is tagged. Emoji: 🟢 positive · 🔴 negative · "
+                 "⚠️ caution · 📄 results filing · 🔔 neutral/informational._")
+    lines += [f"- **{e}** — {meaning}" for e, meaning in EVENT_TYPES]
     return "\n".join(lines)
 
 
@@ -188,9 +253,9 @@ _GUIDE_PDF: bytes | None = None
 
 
 def guide_pdf() -> bytes:
-    """The Metric guide as a constant PDF (built once, cached — it never changes)."""
+    """The guide as a constant PDF (built once, cached — it never changes)."""
     global _GUIDE_PDF
     if _GUIDE_PDF is None:
         from equity_research.reports.pdf import report_to_pdf
-        _GUIDE_PDF = report_to_pdf(guide_markdown(), "Metric guide")
+        _GUIDE_PDF = report_to_pdf(guide_markdown(), "Metrics & ratings guide")
     return _GUIDE_PDF

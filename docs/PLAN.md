@@ -141,7 +141,8 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 - **Fundamental charts** in the PDF (`reports/charts.py`); **Sloan accruals** + **promoter
   pledge** forensics; **peer-comparison table**; **point-wise** §9 forensic deep-dive.
 - **Self-explaining metrics** (`reports/glossary.py`): inline band tags + a standalone,
-  cached **`Metric_guide.pdf`** attached separately (not in the report body/PDF).
+  cached **`Metrics_and_ratings_guide.pdf`** attached separately (not in the report body/PDF);
+  covers the metrics plus the categorical outputs (Verdict scale, P/E n/a reasons, event types).
 - **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds Gemini
   all meaningful filings since the last FY-end + latest results; **consolidated** auto-picked
   for holding-cos (or forced via the email subject). Generic for any NSE symbol.

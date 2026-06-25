@@ -89,7 +89,7 @@ def main(argv: list[str]) -> int:
         from equity_research.reports.glossary import guide_pdf
         send_report(f"Research: {symbol}", report, html=body_html(report, symbol),
                     attachments=[(f"{symbol}.pdf", pdf_bytes),
-                                 ("Metric_guide.pdf", guide_pdf())])
+                                 ("Metrics_and_ratings_guide.pdf", guide_pdf())])
         print(f"\n[emailed report for {symbol}]")
     return 0
 

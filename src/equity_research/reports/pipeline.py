@@ -328,8 +328,9 @@ def report_summary(symbol: str, *, consolidated: bool = False) -> str:
         L.append("- **Red flags:** " + ("; ".join(flags) if flags else "none from the quant screens"))
         L.append("")
         L.append("_Full analysis — multi-year statements, forensic deep-dive, quant valuation "
-                 "and charts — is in the attached PDF, which ends with a **Metric guide** "
-                 "explaining what each number means, its typical range, and how to read it._")
+                 "and charts — is in the attached PDF. A separate **Metrics & ratings guide** "
+                 "explains what each number and rating means, its typical range or possible "
+                 "values, and how to read it._")
         return "\n".join(L)
     finally:
         con.close()

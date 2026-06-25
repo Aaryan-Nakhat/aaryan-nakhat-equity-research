@@ -172,7 +172,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
     body = f"{head}\n\n{report_md}"
-    attachments = [("Metric_guide.pdf", glossary.guide_pdf())]
+    attachments = [("Metrics_and_ratings_guide.pdf", glossary.guide_pdf())]
     if pdf:
         attachments.insert(0, (f"{symbol}_{today}.pdf", pdf))
     else:

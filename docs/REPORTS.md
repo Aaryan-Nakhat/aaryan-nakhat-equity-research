@@ -158,9 +158,12 @@ interest cover, FCF/FCFF, and the **Monte-Carlo fair-value histogram**.
 Every headline metric is annotated so the report stands on its own:
 - **Inline band tags** on forensic/quant/pledge lines (e.g. `ROCE 9.5% — weak`,
   `pledge 2.4% — good`, `margin of safety 19% — some`) via `glossary.read/label`.
-- A standalone **Metric guide** — what each metric is, typical values, how to read
-  it (sector caveats). Built once and cached (`glossary.guide_pdf`) and attached to
-  report emails as a **separate `Metric_guide.pdf`** (not in the report body/PDF).
+- A standalone **Metrics & ratings guide** — what each metric is (typical values,
+  sector caveats) **plus the categorical outputs and their possible values**: the
+  **Verdict** scale (Buy / Accumulate / Hold / Reduce / Avoid), why a Movers P/E
+  shows `n/a`, and the corporate-event types. Built once and cached
+  (`glossary.guide_pdf`) and attached to report emails as a **separate
+  `Metrics_and_ratings_guide.pdf`** (not in the report body/PDF).
 - The Gemini prompt is told to explain each metric it cites and judge it **for this
   company's sector/business model** (a vanilla DCF understates a true compounder;
   utilities run lower ROCE; etc.).
