@@ -26,9 +26,13 @@ from equity_research import watchlist
 _IST = ZoneInfo("Asia/Kolkata")
 log = logging.getLogger("equity_research.scan")
 
-# Event types whose attached filing PDF is worth an inline Gemini read.
+# Event types whose attached filing PDF is worth an inline Gemini read — the
+# details (order value/client, deal terms, rating, etc.) live in the PDF, not the
+# one-line NSE subject, so these get a point-wise read.
 _ANALYZE_TITLES = {"Results filed", "Concall / investor meet", "Scheme / M&A",
-                   "Open offer / SAST", "Rights issue", "QIP / fund raising"}
+                   "Open offer / SAST", "Rights issue", "QIP / fund raising",
+                   "Order / contract win", "Acquisition / disposal",
+                   "Credit rating update", "Preferential issue", "Buyback"}
 
 
 @dataclass
@@ -284,9 +288,11 @@ def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30, labeler=Non
     return out
 
 
-def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 5) -> None:
-    """Download + Gemini-analyse the attached filing for notable doc-bearing events
-    (results / concall / scheme / etc.), inline. Capped to keep heavy days bounded."""
+def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 25) -> None:
+    """Download + Gemini-analyse the attached filing for EVERY notable doc-bearing
+    event (results / concall / scheme / order win / acquisition / rating / etc.),
+    point-wise and inline — multiple per stock. Deduped by PDF URL so the same
+    document isn't read twice; ``cap`` is a generous safety bound for runaway days."""
     candidates = [(sym, al) for sym, fired in results.items() for al in fired
                   if al.attachment and al.title in _ANALYZE_TITLES]
     prio = {"Results filed": 0, "Concall / investor meet": 1, "Scheme / M&A": 2}
@@ -294,15 +300,15 @@ def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 5) -> 
     if not candidates:
         return
     from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
-    done, analyzed = 0, set()
+    done, seen = 0, set()
     for sym, al in candidates:
         if done >= cap:
             break
-        if sym in analyzed:                # one filing analysed per stock — spread the cap
+        if al.attachment in seen:          # don't re-analyse the same PDF
             continue
         try:
             al.analysis = synthesize.analyze_filing(fetch_bytes(al.attachment), sym, al.title)
-            analyzed.add(sym)
+            seen.add(al.attachment)
             done += 1
         except Exception:  # noqa: BLE001 — a bad doc shouldn't break the scan
             log.exception("filing analysis failed for %s (%s)", sym, al.title)

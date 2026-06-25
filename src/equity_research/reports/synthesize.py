@@ -172,17 +172,24 @@ def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None
 
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
-transcript, an investor presentation, an annual report, or a corporate-action \
-document. In AT MOST ~180 words give an investor the key takeaways:
-- the headline decision / numbers (what was filed or decided);
-- management guidance, commentary and outlook (if a transcript / presentation);
-- growth drivers and any margin / cash / order-book trends mentioned;
-- risks and red flags, plus any **contingent liabilities** or **related-party \
-transactions** disclosed.
-Cite specific figures from the document. If it is routine/administrative with \
-little investor relevance, say so in ONE short sentence and stop — do not pad. \
-Always finish with a complete sentence; never trail off mid-thought. Never invent \
-anything not in it."""
+transcript, an investor presentation, an annual report, an order/contract win, an \
+acquisition, a credit-rating action, or another corporate-action document.
+
+Summarise it as a **point-wise markdown bullet list** ('- ' bullets) for an investor.
+Be COMPREHENSIVE — capture every material specific the document contains; do NOT \
+generalise or omit detail. In particular, always pull out the concrete specifics:
+- amounts & values — order/contract size, deal/acquisition value, fund-raise amount, \
+credit rating (and prior rating / outlook);
+- the counterparties — client/customer, acquirer/target, lender, rating agency;
+- quantities, capacities, dates, timelines, and completion/execution periods;
+- ownership / stake %s, and any voting or approval outcomes (with the % for/against);
+- guidance, outlook, and margin / cash / order-book trends (transcripts/presentations);
+- risks, red flags, **contingent liabilities** and **related-party transactions**.
+
+Cite the exact figures from the document. One fact per bullet; keep each bullet tight. \
+Do NOT impose a length limit — include as many bullets as the document warrants, and \
+never trail off mid-thought. If the filing is genuinely routine/administrative with no \
+investor-relevant detail, say so in a single bullet. Never invent anything not in it."""
 
 
 def analyze_filing(pdf_bytes: bytes, symbol: str, event_title: str,
