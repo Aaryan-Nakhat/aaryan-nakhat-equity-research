@@ -15,12 +15,20 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import quote
 
 from scrapling.fetchers import StealthyFetcher
 
 from equity_research.common.http import ScrapeError
 
 _HOME = "https://www.nseindia.com/"
+
+
+def q(symbol: str) -> str:
+    """URL-encode an NSE symbol for an ``/api`` query param. NSE symbols can contain
+    ``&`` (M&M, M&MFIN, J&KBANK, ARE&M); a bare ``&`` would split the query string and
+    silently look up the wrong (truncated) symbol → empty result."""
+    return quote(str(symbol), safe="")
 
 # Run inside the page: retry the XHR because Akamai validates _abck asynchronously.
 _IN_PAGE_FETCH = """async ({path, retries, delay}) => {
@@ -173,7 +181,7 @@ def corporate_announcements(index: str = "equities", symbol: str | None = None) 
     watchlist coverage)."""
     path = f"/api/corporate-announcements?index={index}"
     if symbol:
-        path += f"&symbol={symbol}"
+        path += f"&symbol={q(symbol)}"
     return fetch_api(path)
 
 
@@ -196,7 +204,7 @@ _BATCH_ANN = """async ({paths, retries, delay}) => {
 def corporate_announcements_batch(symbols: list[str]) -> dict[str, Any]:
     """Fetch many symbols' announcements in ONE Camoufox session (warm page once,
     then in-page XHR per symbol). Returns {symbol: parsed-json-or-None}."""
-    paths = {s: f"/api/corporate-announcements?index=equities&symbol={s}" for s in symbols}
+    paths = {s: f"/api/corporate-announcements?index=equities&symbol={q(s)}" for s in symbols}
     captured: dict[str, Any] = {}
 
     def _action(page):
@@ -259,7 +267,7 @@ def _parse_pledge(data: Any) -> dict | None:
 def promoter_pledge(symbol: str) -> dict | None:
     """Latest promoter share-pledge snapshot for ``symbol`` (None if unavailable)."""
     try:
-        data = fetch_api(f"/api/corporate-pledgedata?index=equities&symbol={symbol}")
+        data = fetch_api(f"/api/corporate-pledgedata?index=equities&symbol={q(symbol)}")
     except Exception:  # noqa: BLE001 — degrade to n/a, never break the report
         return None
     return _parse_pledge(data)
@@ -267,7 +275,7 @@ def promoter_pledge(symbol: str) -> dict | None:
 
 def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
     """Pledge snapshot for many symbols in ONE Camoufox session (warm once)."""
-    paths = {s: f"/api/corporate-pledgedata?index=equities&symbol={s}" for s in symbols}
+    paths = {s: f"/api/corporate-pledgedata?index=equities&symbol={q(s)}" for s in symbols}
     captured: dict[str, Any] = {}
 
     def _action(page):
@@ -286,7 +294,7 @@ def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
 
 def option_chain_equity(symbol: str) -> Any:
     """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
-    return fetch_api(f"/api/option-chain-equities?symbol={symbol}")
+    return fetch_api(f"/api/option-chain-equities?symbol={q(symbol)}")
 
 
 def trading_holidays() -> set:

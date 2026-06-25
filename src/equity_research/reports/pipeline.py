@@ -252,8 +252,9 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     finally:
         con.close()
     if not have:
-        return (f"No financial data could be ingested for **{symbol}** — it may not be "
-                "NSE-listed, or the symbol is wrong.\n\n" + brief)
+        return (f"No structured financials could be ingested for **{symbol}** — NSE may not "
+                "publish result XBRL for it (newly listed / recently renamed), or the lookup "
+                "returned nothing. Price/technical data may still be available.\n\n" + brief)
     if not synthesize:
         return brief
     if pdf_path:                               # explicit filing supplied (CLI --pdf)
