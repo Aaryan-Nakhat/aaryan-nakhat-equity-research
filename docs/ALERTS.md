@@ -103,6 +103,14 @@ rise) fire once on change; the `last_eod_date` guard prevents re-firing price
 events twice the same day; **first sighting of a symbol seeds state silently** (no
 day-one flood). State-based dedup also makes a double-run harmless.
 
+**At-least-once delivery:** the scan computes each stock's state advance but does
+**not** persist it inline — `scan_symbol(commit=False)` returns the updates, the scan
+carries them in `ScanResult.pending_state`, and they're saved by `commit_scan_state`
+**only after the digest is actually delivered**. So a scan that crashes (or whose
+send fails) leaves the markers untouched and the events resurface on the next run,
+instead of being silently consumed. (Seeding callers — `/watch`, `populate_watchlist`
+— still use `commit=True`.)
+
 ## Cost / limits
 
 - Price + fundamental + accruals detection is DB-only (fast, all symbols, seconds).
