@@ -175,21 +175,21 @@ filing/disclosure for an Indian listed company — e.g. quarterly results, a con
 transcript, an investor presentation, an annual report, an order/contract win, an \
 acquisition, a credit-rating action, or another corporate-action document.
 
-Summarise it as a **point-wise markdown bullet list** ('- ' bullets) for an investor.
-Be COMPREHENSIVE — capture every material specific the document contains; do NOT \
-generalise or omit detail. In particular, always pull out the concrete specifics:
-- amounts & values — order/contract size, deal/acquisition value, fund-raise amount, \
-credit rating (and prior rating / outlook);
-- the counterparties — client/customer, acquirer/target, lender, rating agency;
-- quantities, capacities, dates, timelines, and completion/execution periods;
-- ownership / stake %s, and any voting or approval outcomes (with the % for/against);
-- guidance, outlook, and margin / cash / order-book trends (transcripts/presentations);
-- risks, red flags, **contingent liabilities** and **related-party transactions**.
+Reply with ONE flat markdown bullet list — every line starts with '- ', one fact per \
+line. Do NOT use section headings, bold titles, numbered lists, or nested/indented \
+sub-bullets; fold any grouping into the bullet text itself (e.g. '- Resolution 3 \
+(re-appoint Sagar Adani): passed with 99.77% for; 0.72% of institutions against').
 
-Cite the exact figures from the document. One fact per bullet; keep each bullet tight. \
-Do NOT impose a length limit — include as many bullets as the document warrants, and \
-never trail off mid-thought. If the filing is genuinely routine/administrative with no \
-investor-relevant detail, say so in a single bullet. Never invent anything not in it."""
+Be COMPREHENSIVE — capture every material specific; do not generalise or omit. Always \
+pull out the concrete numbers: amounts/values (order or deal size, fund-raise amount, \
+rating + prior rating/outlook), the counterparties (client, acquirer/target, agency), \
+quantities/capacities, dates and timelines, stake %s, voting/approval outcomes (with the \
+% for and against), guidance and outlook, margin/cash/order-book trends, and any risks, \
+**contingent liabilities** or **related-party transactions**. Cite exact figures.
+
+No length limit — as many bullets as the document warrants; never trail off mid-thought. \
+If the filing is genuinely routine/administrative with no investor-relevant detail, say \
+so in a single bullet. Never invent anything not in it."""
 
 
 def analyze_filing(pdf_bytes: bytes, symbol: str, event_title: str,

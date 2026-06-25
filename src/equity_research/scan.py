@@ -9,6 +9,7 @@ generates a deep report for any 'results filed' alert.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -293,10 +294,15 @@ def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 25) ->
     event (results / concall / scheme / order win / acquisition / rating / etc.),
     point-wise and inline — multiple per stock. Deduped by PDF URL so the same
     document isn't read twice; ``cap`` is a generous safety bound for runaway days."""
-    candidates = [(sym, al) for sym, fired in results.items() for al in fired
-                  if al.attachment and al.title in _ANALYZE_TITLES]
-    prio = {"Results filed": 0, "Concall / investor meet": 1, "Scheme / M&A": 2}
-    candidates.sort(key=lambda x: prio.get(x[1].title, 5))
+    # analyse EVERY fired event that carries a PDF (clarifications, press releases,
+    # AGM proceedings, orders … all have detail in the attachment, not the subject);
+    # _ANALYZE_TITLES only sets priority so the richest filings win under the cap.
+    candidates = [(sym, al) for sym, fired in results.items() for al in fired if al.attachment]
+    prio = {t: i for i, t in enumerate(
+        ("Results filed", "Concall / investor meet", "Scheme / M&A", "Order / contract win",
+         "Acquisition / disposal", "Open offer / SAST", "QIP / fund raising", "Rights issue",
+         "Credit rating update", "Preferential issue", "Buyback"))}
+    candidates.sort(key=lambda x: prio.get(x[1].title, 99))
     if not candidates:
         return
     from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
@@ -425,10 +431,11 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
             for al in results[sym]:
                 emo = alerts.EMOJI.get(al.severity, "🔔")
                 lines.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
-                if al.analysis:                       # inline filing read, as a quote block
-                    lines.append("")
-                    lines += [f"> {ln}" for ln in al.analysis.splitlines() if ln.strip()]
-                    lines.append("")
+                if al.analysis:                       # inline point-wise filing read
+                    for ln in al.analysis.splitlines():
+                        t = re.sub(r"^\s*[-*•·–]+\s*", "", ln).strip()
+                        if t:
+                            lines.append(f"    - {t}")  # nested sub-bullets under the event
             ev.append("\n".join(lines))
         parts.append("\n\n".join(ev))
     else:
