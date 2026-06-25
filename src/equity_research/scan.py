@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 
-from equity_research.analysis import alerts, valuation
+from equity_research.analysis import alerts, fundamentals, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import ingest_eod, store_pledge
@@ -309,10 +309,23 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
         hi, lo = (hl or (None, None))
         chg = (close / prev - 1) * 100 if prev else None
         pos = (close - lo) / (hi - lo) * 100 if hi and lo and hi > lo else None
-        # valuation lens: current P/E vs the stock's own positive-P/E history median
+        # valuation lens: current P/E vs the stock's own positive-P/E history median.
+        # Suppress (with a reason) when the P/E is meaningless rather than show a bogus
+        # number: a loss-maker, profit > sales (a demerger/exceptional artifact, e.g.
+        # TMPV), or negative net worth (accumulated losses > equity, e.g. Vodafone Idea).
         snap = valuation.snapshot(con, sym)
         pe = snap.get("pe_ttm")
         pe = float(pe) if (pe is not None and pe == pe and 0 < pe < 1000) else None
+        pb = snap.get("pb")
+        t = fundamentals.ttm(con, sym)
+        net, rev = t.get("ttm_net_profit_cr"), t.get("ttm_revenue_cr")
+        pe_note = None
+        if net is not None and net == net and net <= 0:
+            pe, pe_note = None, "loss-making"
+        elif net and rev and net == net and rev == rev and net > rev:
+            pe, pe_note = None, "earnings distorted, profit > sales"
+        elif pb is not None and pb == pb and pb < 0:
+            pe, pe_note = None, "negative net worth"
         pe_med = None
         if pe is not None:
             h = valuation.valuation_history(con, sym)
@@ -321,7 +334,8 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
                 pos_pe = pos_pe[pos_pe > 0]
                 pe_med = float(pos_pe.median()) if len(pos_pe) else None
         out.append({"symbol": sym, "company": names.get(sym) or sym, "close": close,
-                    "chg_pct": chg, "deliv": deliv, "pos_52w": pos, "pe": pe, "pe_median": pe_med})
+                    "chg_pct": chg, "deliv": deliv, "pos_52w": pos, "pe": pe,
+                    "pe_median": pe_med, "pe_note": pe_note})
     out.sort(key=lambda m: abs(m["chg_pct"]) if m["chg_pct"] is not None else 0, reverse=True)
     return out
 
@@ -372,6 +386,8 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
                     med = m["pe_median"]
                     rel = "below" if m["pe"] < med * 0.9 else "above" if m["pe"] > med * 1.1 else "~"
                     val += f" ({rel} 5y-med {med:.0f})"
+            elif m.get("pe_note"):                      # explain why there's no P/E
+                val = f" · P/E n/a ({m['pe_note']})"
             rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
                         f"{chg} · {deliv}{tail}{val}")
         parts.append("\n".join(rows))
