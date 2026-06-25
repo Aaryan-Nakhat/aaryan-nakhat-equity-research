@@ -268,6 +268,7 @@ async def scan_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🔎 Running watchlist scan now (may take a few min)…")
     sr = await asyncio.to_thread(scan.run_watchlist_scan)
     await _push_scan(ctx.bot, update.effective_chat.id, sr)
+    await asyncio.to_thread(scan.commit_scan_state, sr)   # advance markers after delivery
 
 
 async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -280,6 +281,7 @@ async def scan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("scan failed")
         return
     await _push_scan(context.bot, chat_id, sr)
+    await asyncio.to_thread(scan.commit_scan_state, sr)   # advance markers ONLY after delivery
     await asyncio.to_thread(scan.mark_scanned)
 
 

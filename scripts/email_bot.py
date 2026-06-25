@@ -244,23 +244,24 @@ def handle_request(req: EmailRequest) -> None:
 
 
 # ----------------- watchlist push (self-healing daily) -----------------
-def _push_digest(sr: "scan.ScanResult") -> None:
+def _push_digest(sr: "scan.ScanResult") -> bool:
     """Daily digest: upcoming events + per-stock movers + events (deals / corporate
     events / forensic changes, with inline filing analysis), by company name. No
-    PDFs — reply with a name for the full report."""
+    PDFs — reply with a name for the full report. Returns True if a digest was sent."""
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send digest")
-        return
+        return False
     if not sr.results and not sr.movers and not sr.upcoming:
         log.info("nothing to report — no digest email sent")
-        return
+        return False
     today = datetime.now(IST).date().isoformat()
     md = scan.format_digest(today, sr)
     emailer.send_report(f"📊 Watchlist — {today}", md, to=to,
                         html=emailer.body_html(md, "Watchlist"))
     log.info("digest sent to %s (%d movers, %d event-symbols, %d upcoming)",
              to, len(sr.movers), len(sr.results), len(sr.upcoming))
+    return True
 
 
 def maybe_scan() -> None:
@@ -279,8 +280,9 @@ def maybe_scan() -> None:
         sr = scan.run_watchlist_scan()
     except Exception:  # noqa: BLE001
         log.exception("scan failed")
-        return
-    _push_digest(sr)
+        return                                  # no mark, no commit → retried next heartbeat
+    if _push_digest(sr):
+        scan.commit_scan_state(sr)              # advance dedup markers ONLY after delivery
     scan.mark_scanned()
 
 

@@ -302,8 +302,14 @@ def _pledge(symbol, state, pledge) -> tuple[list[Alert], dict]:
 
 
 def scan_symbol(con: duckdb.DuckDBPyConnection, symbol: str, anns: list | None = None,
-                pledge: dict | None = None) -> list[Alert]:
-    """Run all per-symbol detectors. Seeds state silently on first sighting."""
+                pledge: dict | None = None, *, commit: bool = True) -> tuple[list[Alert], dict]:
+    """Run all per-symbol detectors. Seeds state silently on first sighting.
+
+    Returns ``(alerts, updates)`` where ``updates`` is the dedup-state advance
+    (last-seen markers). With ``commit=True`` (default — for seeding callers) it
+    persists ``updates`` immediately; the daily scan passes ``commit=False`` and
+    persists only **after** the digest is delivered (via ``scan.commit_scan_state``),
+    so a crash before delivery never silently consumes that day's events."""
     state = load_state(con, symbol)
     first_sight = "last_eod_date" not in state
     alerts, updates = [], {}
@@ -313,5 +319,6 @@ def scan_symbol(con: duckdb.DuckDBPyConnection, symbol: str, anns: list | None =
                              _announcements(symbol, anns or [], state)):
         alerts += fn_alerts
         updates.update(fn_up)
-    save_state(con, symbol, updates)
-    return [] if first_sight else alerts
+    if commit:
+        save_state(con, symbol, updates)
+    return ([] if first_sight else alerts), updates
