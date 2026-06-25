@@ -236,13 +236,10 @@ def _categorise(desc: str, text: str, has_xbrl: bool) -> tuple[str | None, str, 
     return "Announcement", "info", False
 
 
-def _clip(text: str, n: int = 220) -> str:
-    """Collapse whitespace and trim to ~n chars at a word boundary (no mid-word
-    cut), adding an ellipsis when shortened."""
-    text = " ".join((text or "").split())
-    if len(text) <= n:
-        return text
-    return text[:n].rsplit(" ", 1)[0].rstrip(" ,;:.–-") + "…"
+def _clip(text: str) -> str:
+    """Collapse whitespace in an announcement body — no length cap, shown in full
+    (NSE descriptions carry the actual detail; truncating loses it)."""
+    return " ".join((text or "").split())
 
 
 def _announcements(symbol, anns, state) -> tuple[list[Alert], dict]:
