@@ -37,6 +37,26 @@ class ScanResult:
     movers: list[dict] = field(default_factory=list)
     upcoming: list[dict] = field(default_factory=list)
     market: str = ""
+    # per-symbol dedup-state advances, persisted ONLY after the digest is delivered
+    # (see commit_scan_state) so a crash before delivery can't silently eat events.
+    pending_state: dict[str, dict] = field(default_factory=dict)
+
+
+def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Advance the dedup 'last-seen' markers from a scan. Call this **only after** the
+    digest has actually been delivered — that's the whole point: if the scan crashes or
+    delivery fails, state is left untouched and the events resurface on the next run."""
+    if not sr.pending_state:
+        return
+    own = con is None
+    con = con or connect()
+    try:
+        for sym, updates in sr.pending_state.items():
+            if updates:
+                alerts.save_state(con, sym, updates)
+    finally:
+        if own:
+            con.close()
 
 
 def market_context(con: duckdb.DuckDBPyConnection) -> str:
@@ -436,12 +456,17 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         except Exception:  # noqa: BLE001
             feeds = {}
         results: dict[str, list[alerts.Alert]] = {}
+        pending: dict[str, dict] = {}
         for sym in syms:
             try:
-                fired = alerts.scan_symbol(con, sym, anns_by_sym.get(sym, []),
-                                           pledge_by_sym.get(sym))
+                # commit=False: hold the dedup-state advance until the digest is
+                # delivered (commit_scan_state), so a crash can't eat today's events.
+                fired, updates = alerts.scan_symbol(con, sym, anns_by_sym.get(sym, []),
+                                                    pledge_by_sym.get(sym), commit=False)
             except Exception:  # noqa: BLE001 — one bad symbol shouldn't kill the scan
-                fired = []
+                fired, updates = [], {}
+            if updates:
+                pending[sym] = updates
             if fired:
                 results[sym] = fired
         # per-stock bulk/block deals (institutional buy/sell) — merge in
@@ -467,6 +492,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             _safe(lambda: watchlist_movers(con), []),
             _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
             _safe(lambda: market_context(con), ""),
+            pending_state=pending,
         )
     finally:
         if own:

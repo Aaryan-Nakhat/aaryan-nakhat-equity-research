@@ -34,6 +34,7 @@ def main() -> None:
     md = scan.format_digest(date_str, sr)
     emailer.send_report(f"📊 Watchlist — {date_str} (backfill)", md, to=to,
                         html=emailer.body_html(md, "Watchlist"))
+    scan.commit_scan_state(sr)          # advance dedup markers only after the digest is sent
     print(f"digest sent to {to} for {date_str}: "
           f"{len(sr.movers)} movers, {len(sr.results)} event-symbols, {len(sr.upcoming)} upcoming")
 
