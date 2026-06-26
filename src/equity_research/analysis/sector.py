@@ -19,6 +19,26 @@ def industry_of(con: duckdb.DuckDBPyConnection, symbol: str) -> str | None:
     return row[0] if row else None
 
 
+# Keyword → valuation lens. Financial reuses the bank/NBFC/insurer words that
+# quant.dcf_inputs uses to flag is_financial; cyclical = asset-heavy / commodity /
+# capital-intensive names better judged on EV/EBITDA + P/B than P/E.
+_FINANCIAL_WORDS = ("bank", "financ", "nbfc", "insur", "capital market")
+_CYCLICAL_WORDS = ("metal", "mining", "oil", "gas", "petrol", "fuel", "power",
+                   "energy", "capital goods", "auto", "cement", "construction",
+                   "realty", "real estate", "chemical", "infrastructure", "shipping")
+
+
+def valuation_lens(industry: str | None) -> str:
+    """How to value this sector: ``"financial"`` (P/B + ROE), ``"cyclical"``
+    (EV/EBITDA + P/B, mid-cycle), or ``"earnings"`` (P/E) — the default."""
+    ind = (industry or "").lower()
+    if any(w in ind for w in _FINANCIAL_WORDS):
+        return "financial"
+    if any(w in ind for w in _CYCLICAL_WORDS):
+        return "cyclical"
+    return "earnings"
+
+
 def peers(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
     """Symbols sharing the target's industry (excluding the target)."""
     ind = industry_of(con, symbol)
