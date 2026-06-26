@@ -27,6 +27,10 @@ from equity_research import watchlist
 _IST = ZoneInfo("Asia/Kolkata")
 log = logging.getLogger("equity_research.scan")
 
+# Max inline-analysis bullets per event in the digest — keeps the email under
+# Gmail's ~100 KB clip limit; the full point-wise read is in the on-demand report.
+_ANALYSIS_BULLET_CAP = 12
+
 # Event types whose attached filing PDF is worth an inline Gemini read — the
 # details (order value/client, deal terms, rating, etc.) live in the PDF, not the
 # one-line NSE subject, so these get a point-wise read.
@@ -69,7 +73,10 @@ def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = 
 _HEADER_INDICES = ["Nifty 50", "Nifty Bank", "Nifty Financial Services", "Nifty IT",
                    "Nifty Auto", "Nifty Pharma", "Nifty FMCG", "Nifty Metal",
                    "Nifty Energy", "Nifty Realty"]
-_SHORT_NAME = {"Nifty 50": "Nifty 50", "Nifty Financial Services": "Fin Svcs"}
+_INDEX_EMOJI = {"Nifty 50": "🇮🇳", "Nifty Bank": "🏦", "Nifty Financial Services": "💹",
+                "Nifty IT": "💻", "Nifty Auto": "🚗", "Nifty Pharma": "💊",
+                "Nifty FMCG": "🛒", "Nifty Metal": "⚙️", "Nifty Energy": "⚡",
+                "Nifty Realty": "🏠"}
 
 
 def market_context(con: duckdb.DuckDBPyConnection) -> str:
@@ -82,16 +89,16 @@ def market_context(con: duckdb.DuckDBPyConnection) -> str:
             ",".join("?" * len(wanted))), wanted).fetchall()
     by_name = {r[0]: (r[1], r[2]) for r in rows if r[1] is not None}
 
-    def cell(short: str, close: float, chg, nd: int = 0) -> str:
-        return f"{short} {close:,.{nd}f}".strip() + (f" ({chg:+.1f}%)" if chg is not None else "")
+    def val(close, chg, nd=0):
+        return f"{close:,.{nd}f}" + (f" ({chg:+.1f}%)" if chg is not None else "")
 
-    idx = [cell(_SHORT_NAME.get(n, n.replace("Nifty ", "")), *by_name[n])
-           for n in _HEADER_INDICES if n in by_name]
     lines = []
+    idx = [n for n in _HEADER_INDICES if n in by_name]
     if idx:
-        lines.append("- 📈 **Indices** — " + " · ".join(idx))
+        lines.append("- 📈 **Indices**")
+        lines += [f"    - {_INDEX_EMOJI.get(n, '•')} {n} — {val(*by_name[n])}" for n in idx]
     if "India VIX" in by_name:
-        lines.append("- 😨 **India VIX** — " + cell("", *by_name["India VIX"], nd=1))
+        lines.append("- 😨 **India VIX** — " + val(*by_name["India VIX"], nd=1))
     return "\n".join(lines)
 
 
@@ -481,10 +488,14 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
                 emo = alerts.EMOJI.get(al.severity, "🔔")
                 lines.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
                 if al.analysis:                       # inline point-wise filing read
-                    for ln in al.analysis.splitlines():
-                        t = re.sub(r"^\s*[-*•·–]+\s*", "", ln).strip()
-                        if t:
-                            lines.append(f"    - {t}")  # nested sub-bullets under the event
+                    bullets = [t for ln in al.analysis.splitlines()
+                               if (t := re.sub(r"^\s*[-*•·–]+\s*", "", ln).strip())]
+                    for t in bullets[:_ANALYSIS_BULLET_CAP]:
+                        lines.append(f"    - {t}")      # nested sub-bullets under the event
+                    extra = len(bullets) - _ANALYSIS_BULLET_CAP
+                    if extra > 0:                        # keep the email under Gmail's clip limit
+                        lines.append(f"    - …(+{extra} more — reply with the company "
+                                     "name for the full report)")
             ev.append("\n".join(lines))
         parts.append("\n\n".join(ev))
     else:
