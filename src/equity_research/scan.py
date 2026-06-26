@@ -27,10 +27,6 @@ from equity_research import watchlist
 _IST = ZoneInfo("Asia/Kolkata")
 log = logging.getLogger("equity_research.scan")
 
-# Max inline-analysis bullets per event in the digest — keeps the email under
-# Gmail's ~100 KB clip limit; the full point-wise read is in the on-demand report.
-_ANALYSIS_BULLET_CAP = 12
-
 # Event types whose attached filing PDF is worth an inline Gemini read — the
 # details (order value/client, deal terms, rating, etc.) live in the PDF, not the
 # one-line NSE subject, so these get a point-wise read.
@@ -487,15 +483,11 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
             for al in results[sym]:
                 emo = alerts.EMOJI.get(al.severity, "🔔")
                 lines.append(f"- {emo} {al.title}" + (f" — {al.body}" if al.body else ""))
-                if al.analysis:                       # inline point-wise filing read
-                    bullets = [t for ln in al.analysis.splitlines()
-                               if (t := re.sub(r"^\s*[-*•·–]+\s*", "", ln).strip())]
-                    for t in bullets[:_ANALYSIS_BULLET_CAP]:
-                        lines.append(f"    - {t}")      # nested sub-bullets under the event
-                    extra = len(bullets) - _ANALYSIS_BULLET_CAP
-                    if extra > 0:                        # keep the email under Gmail's clip limit
-                        lines.append(f"    - …(+{extra} more — reply with the company "
-                                     "name for the full report)")
+                if al.analysis:                       # inline point-wise filing read (full, never capped)
+                    for ln in al.analysis.splitlines():
+                        t = re.sub(r"^\s*[-*•·–]+\s*", "", ln).strip()
+                        if t:
+                            lines.append(f"    - {t}")  # nested sub-bullets under the event
             ev.append("\n".join(lines))
         parts.append("\n\n".join(ev))
     else:
