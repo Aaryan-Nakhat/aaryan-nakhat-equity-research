@@ -102,6 +102,19 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/corporates-financial-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 — **legacy** results catalog; **frozen at the Dec-2024 quarter** (SEBI Integrated Filing cutover) | `nse_financials.list_result_filings()` |
 | `/api/integrated-filing-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 (probed 2026-06-23) — **post-Dec-2024** results (Integrated Filing); `in-capmkt` XBRL, same contexts | `nse_financials.list_integrated_filings()` |
 
+## Commodities & benchmark rates (for the digest header, probed 2026-06-26)
+
+- **MCX commodities** (gold / silver / crude) — `scrapers/mcx.py`. Live futures at
+  `https://www.mcxindia.com/market-data/market-watch/GetMarketWatch?culture=en`. Two gotchas:
+  it's behind **Akamai** (so fetch **in-page via Camoufox**, NSE-style) **and** the endpoint
+  is gated on an **`X-Requested-With: XMLHttpRequest`** header (an ASP.NET AJAX check) — a
+  plain GET 404s. The payload carries 2,600+ rows; keep `InstrumentName == "FUTCOM"` (futures,
+  not the `OPTFUT` option rows) and take the soonest expiry per `Symbol`.
+- **FBIL benchmark rates** — `scrapers/fbil.py`. Plain-HTTP JSON under `/wasdm/`, **no browser**:
+  `…/wasdm/refrates/fetch?authenticated=false` gives the daily **USD/INR** reference rate
+  (`subProdName == "INR / 1 USD"`). The **G-Sec** feed (`…/wasdm/gsec/fetch`) returns only
+  archive-file *metadata*, so the 10-yr par yield isn't wired yet (see `PLAN.md`).
+
 ## Derivatives = plain-HTTP archive files (no browser!)
 
 Both validated `200` via `Fetcher`:

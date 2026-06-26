@@ -20,7 +20,7 @@ from equity_research.analysis import alerts, fundamentals, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import ingest_eod, store_pledge
-from equity_research.scrapers import nse_api
+from equity_research.scrapers import fbil, mcx, nse_api
 from equity_research import watchlist
 
 
@@ -114,6 +114,19 @@ def _fii_dii_line(data) -> str:
     parts = [f"{k} {'+' if v >= 0 else '−'}₹{abs(v):,.0f} cr"
              for k in ("FII", "DII") if (v := out.get(k)) is not None]
     return "📊 " + " · ".join(parts) + " (net cash)" if parts else ""
+
+
+def _money_line(usd: float | None, comm: dict) -> str:
+    """USD/INR (FBIL) + near-month MCX commodity futures, on one line. Best-effort."""
+    parts = []
+    if usd is not None:
+        parts.append(f"USD/INR {usd:,.2f}")
+    for sym, label in (("CRUDEOIL", "Crude"), ("GOLD", "Gold"), ("SILVER", "Silver")):
+        d = (comm or {}).get(sym)
+        if d and d.get("ltp") is not None:
+            pct = d.get("pct")
+            parts.append(f"{label} ₹{d['ltp']:,.0f}" + (f" ({pct:+.1f}%)" if pct is not None else ""))
+    return "💱 " + " · ".join(parts) if parts else ""
 
 
 def _meta(con, key):
@@ -535,10 +548,15 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
             return synthesize.label_events(descs)
 
-        market = _safe(lambda: market_context(con), "")
-        fii = _fii_dii_line(feeds.get("fiidii") or [])
-        if fii:
-            market = f"{market}\n{fii}" if market else fii
+        # market block: indices+VIX (DB) · FII/DII (feeds) · USD/INR (FBIL) + commodities
+        # (MCX) — each best-effort, a failing source is simply left out.
+        usd = _safe(lambda: fbil.usd_inr(), None)
+        comm = _safe(lambda: mcx.commodities(), {})
+        market = "\n".join(x for x in (
+            _safe(lambda: market_context(con), ""),
+            _safe(lambda: _fii_dii_line(feeds.get("fiidii") or []), ""),
+            _safe(lambda: _money_line(usd, comm), ""),
+        ) if x)
         return ScanResult(
             results,
             _safe(lambda: watchlist_movers(con), []),

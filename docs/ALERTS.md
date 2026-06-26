@@ -30,11 +30,16 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 ## The digest
 
 Sent by **company name** (ticker in parens — symbols like `RAMASTEEL` are
-cryptic), lines-only (no PDFs), with a **market-context header** — Nifty 50 + the
-key **sectoral Nifty indices** (Bank · Fin Services · IT · Auto · Pharma · FMCG ·
-Metal · Energy · Realty) + **India VIX** (`scan.market_context`, all from
-`index_close`), and a **FII/DII** net-cash line (`scan._fii_dii_line` off the
-`fiidiiTradeReact` feed, batched into `market_feeds`) — then three parts:
+cryptic), lines-only (no PDFs), with a **3-line market-context header** — then
+three parts. The header (all primary-source):
+- **Indices** — Nifty 50 + the key **sectoral Nifty indices** (Bank · Fin Services ·
+  IT · Auto · Pharma · FMCG · Metal · Energy · Realty) + **India VIX**
+  (`scan.market_context`, all from `index_close`).
+- **FII/DII** net-cash (`scan._fii_dii_line` off the `fiidiiTradeReact` feed, batched
+  into `market_feeds`).
+- **USD/INR + commodities** (`scan._money_line`): USD/INR from **FBIL** (`scrapers/fbil`)
+  + near-month **gold / silver / crude** futures from **MCX** (`scrapers/mcx`). Each line
+  is best-effort — a failing feed is simply omitted. The three parts:
 - **📅 Upcoming:** the watchlist's events in the next ~35 days — board-meeting /
   results dates, ex-dividend / split / bonus dates, AGM / fund-raising
   (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
