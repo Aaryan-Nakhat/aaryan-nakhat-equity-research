@@ -162,6 +162,7 @@ def market_feeds(horizon_days: int = 35) -> dict[str, Any]:
         "board": f"/api/corporate-board-meetings?index=equities&from_date={f}&to_date={t}",
         "calendar": f"/api/event-calendar?from_date={f}&to_date={t}",
         "actions": f"/api/corporates-corporateActions?index=equities&from_date={f}&to_date={t}",
+        "fiidii": "/api/fiidiiTradeReact",          # FII/DII cash flows (free in the batch)
     })
     ld = raw.get("largedeal") or {}
     return {
@@ -170,6 +171,7 @@ def market_feeds(horizon_days: int = 35) -> dict[str, Any]:
         "board_meetings": raw.get("board") or [],
         "event_calendar": raw.get("calendar") or [],
         "corp_actions": raw.get("actions") or [],
+        "fiidii": raw.get("fiidii") or [],
     }
 
 
