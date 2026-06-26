@@ -83,17 +83,16 @@ def market_context(con: duckdb.DuckDBPyConnection) -> str:
     by_name = {r[0]: (r[1], r[2]) for r in rows if r[1] is not None}
 
     def cell(short: str, close: float, chg, nd: int = 0) -> str:
-        return f"{short} {close:,.{nd}f}" + (f" ({chg:+.1f}%)" if chg is not None else "")
+        return f"{short} {close:,.{nd}f}".strip() + (f" ({chg:+.1f}%)" if chg is not None else "")
 
-    parts = []
-    for name in _HEADER_INDICES:
-        if name in by_name:
-            close, chg = by_name[name]
-            parts.append(cell(_SHORT_NAME.get(name, name.replace("Nifty ", "")), close, chg))
+    idx = [cell(_SHORT_NAME.get(n, n.replace("Nifty ", "")), *by_name[n])
+           for n in _HEADER_INDICES if n in by_name]
+    lines = []
+    if idx:
+        lines.append("- 📈 **Indices** — " + " · ".join(idx))
     if "India VIX" in by_name:
-        close, chg = by_name["India VIX"]
-        parts.append(cell("VIX", close, chg, nd=1))
-    return "📈 " + " · ".join(parts) if parts else ""
+        lines.append("- 😨 **India VIX** — " + cell("", *by_name["India VIX"], nd=1))
+    return "\n".join(lines)
 
 
 def _fii_dii_line(data) -> str:
@@ -113,20 +112,22 @@ def _fii_dii_line(data) -> str:
             out["DII"] = net
     parts = [f"{k} {'+' if v >= 0 else '−'}₹{abs(v):,.0f} cr"
              for k in ("FII", "DII") if (v := out.get(k)) is not None]
-    return "📊 " + " · ".join(parts) + " (net cash)" if parts else ""
+    return "- 💸 **FII / DII (cash)** — " + " · ".join(parts) if parts else ""
 
 
-def _money_line(usd: float | None, comm: dict) -> str:
-    """USD/INR (FBIL) + near-month MCX commodity futures, on one line. Best-effort."""
-    parts = []
+def _money_lines(usd: float | None, comm: dict) -> str:
+    """USD/INR (FBIL) + near-month MCX commodity futures, one point-wise bullet each."""
+    lines = []
     if usd is not None:
-        parts.append(f"USD/INR {usd:,.2f}")
-    for sym, label in (("CRUDEOIL", "Crude"), ("GOLD", "Gold"), ("SILVER", "Silver")):
+        lines.append(f"- 💵 **USD/INR** — {usd:,.2f}")
+    for sym, label, emoji in (("CRUDEOIL", "Crude oil", "🛢️"),
+                              ("GOLD", "Gold", "🥇"), ("SILVER", "Silver", "🥈")):
         d = (comm or {}).get(sym)
         if d and d.get("ltp") is not None:
             pct = d.get("pct")
-            parts.append(f"{label} ₹{d['ltp']:,.0f}" + (f" ({pct:+.1f}%)" if pct is not None else ""))
-    return "💱 " + " · ".join(parts) if parts else ""
+            v = f"₹{d['ltp']:,.0f}" + (f" ({pct:+.1f}%)" if pct is not None else "")
+            lines.append(f"- {emoji} **{label}** — {v}")
+    return "\n".join(lines)
 
 
 def _meta(con, key):
@@ -555,7 +556,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         market = "\n".join(x for x in (
             _safe(lambda: market_context(con), ""),
             _safe(lambda: _fii_dii_line(feeds.get("fiidii") or []), ""),
-            _safe(lambda: _money_line(usd, comm), ""),
+            _safe(lambda: _money_lines(usd, comm), ""),
         ) if x)
         return ScanResult(
             results,
