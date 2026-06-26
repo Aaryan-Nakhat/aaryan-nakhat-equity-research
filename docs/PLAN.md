@@ -166,6 +166,10 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
   holdings overlap).
 - Macro overlay (RBI / MOSPI) feeding sector calls.
 - Screener across a broad universe to *find* ideas, not just analyse known ones.
+- **More market-header context** (extends the sectoral-indices/VIX/FII-DII header): **USD/INR**,
+  the **10-yr G-Sec yield**, and **gold / silver / crude**. Sources are bot-walled (MCX/Akamai)
+  or JS-app (RBI/FBIL) and need dedicated scraping work — deferred. Global cues (US/Asia/Brent/
+  DXY) would need a third-party vendor, which the primary-sources-only rule excludes.
 - **Finer peer classification.** Peers are currently *same NSE macro-Industry within
   the Nifty 500* (`sector.peers` over the `sector_map`), so broad buckets lump
   unlike businesses (e.g. "Capital Goods" puts Welspun Corp's steel pipes next to

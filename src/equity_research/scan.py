@@ -64,21 +64,56 @@ def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = 
             con.close()
 
 
+# Digest header: headline + sectoral Nifty indices (display name = strip "Nifty ",
+# except where shortened below). India VIX is appended after. Easy to adjust.
+_HEADER_INDICES = ["Nifty 50", "Nifty Bank", "Nifty Financial Services", "Nifty IT",
+                   "Nifty Auto", "Nifty Pharma", "Nifty FMCG", "Nifty Metal",
+                   "Nifty Energy", "Nifty Realty"]
+_SHORT_NAME = {"Nifty 50": "Nifty 50", "Nifty Financial Services": "Fin Svcs"}
+
+
 def market_context(con: duckdb.DuckDBPyConnection) -> str:
-    """One-line market header (Nifty 50 + Nifty 500 latest close + day move) so a
-    stock's move can be read against the market."""
+    """Market header — Nifty 50 + the key sectoral indices + India VIX (latest close
+    and day move), so a stock's move reads against the market and its sector."""
+    wanted = _HEADER_INDICES + ["India VIX"]
     rows = con.execute(
-        "SELECT index_name, close, pct_change FROM index_close "
-        "WHERE index_name IN ('Nifty 50', 'Nifty 500') "
-        "AND trade_date = (SELECT max(trade_date) FROM index_close)").fetchall()
-    order = {"Nifty 50": 0, "Nifty 500": 1}
+        "SELECT index_name, close, pct_change FROM index_close WHERE index_name IN ({}) "
+        "AND trade_date = (SELECT max(trade_date) FROM index_close)".format(
+            ",".join("?" * len(wanted))), wanted).fetchall()
+    by_name = {r[0]: (r[1], r[2]) for r in rows if r[1] is not None}
+
+    def cell(short: str, close: float, chg, nd: int = 0) -> str:
+        return f"{short} {close:,.{nd}f}" + (f" ({chg:+.1f}%)" if chg is not None else "")
+
     parts = []
-    for name, close, chg in sorted(rows, key=lambda r: order.get(r[0], 9)):
-        if close is None:
+    for name in _HEADER_INDICES:
+        if name in by_name:
+            close, chg = by_name[name]
+            parts.append(cell(_SHORT_NAME.get(name, name.replace("Nifty ", "")), close, chg))
+    if "India VIX" in by_name:
+        close, chg = by_name["India VIX"]
+        parts.append(cell("VIX", close, chg, nd=1))
+    return "📈 " + " · ".join(parts) if parts else ""
+
+
+def _fii_dii_line(data) -> str:
+    """One-line FII/DII net cash flows from the fiidiiTradeReact feed (best-effort)."""
+    out: dict[str, float] = {}
+    for r in data if isinstance(data, list) else []:
+        cat = (r.get("category") or "").upper()
+        try:
+            net = float(r["netValue"]) if r.get("netValue") is not None else None
+        except (TypeError, ValueError, KeyError):
+            net = None
+        if net is None:
             continue
-        parts.append(f"{name} {close:,.0f} ({chg:+.1f}%)" if chg is not None
-                     else f"{name} {close:,.0f}")
-    return "📈 Market: " + " · ".join(parts) if parts else ""
+        if "FII" in cat or "FPI" in cat:
+            out["FII"] = net
+        elif "DII" in cat:
+            out["DII"] = net
+    parts = [f"{k} {'+' if v >= 0 else '−'}₹{abs(v):,.0f} cr"
+             for k in ("FII", "DII") if (v := out.get(k)) is not None]
+    return "📊 " + " · ".join(parts) + " (net cash)" if parts else ""
 
 
 def _meta(con, key):
@@ -500,11 +535,15 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             from equity_research.reports import synthesize  # lazy: keeps genai off the hot path
             return synthesize.label_events(descs)
 
+        market = _safe(lambda: market_context(con), "")
+        fii = _fii_dii_line(feeds.get("fiidii") or [])
+        if fii:
+            market = f"{market}\n{fii}" if market else fii
         return ScanResult(
             results,
             _safe(lambda: watchlist_movers(con), []),
             _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
-            _safe(lambda: market_context(con), ""),
+            market,
             pending_state=pending,
         )
     finally:
