@@ -36,6 +36,38 @@ def _f(v, nd=0, pct=False, x=False, lo=None, hi=None):
     return f"{v:,.{nd}f}{'%' if pct else ''}{'x' if x else ''}"
 
 
+def _num(v):
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _forward_line(guidance: dict | None, snap: dict | None, evd: dict, lens: str) -> str | None:
+    """A forward-multiple bullet from **explicit** management guidance (else None).
+    Forward EV/EBITDA / P/E / P/S as the guided figures allow; clearly attributed."""
+    if not guidance:
+        return None
+    fy = guidance.get("fy_label") or "next FY"
+    src = guidance.get("source")
+    mcap = (snap or {}).get("market_cap_cr")
+    ev = (evd or {}).get("ev_cr")
+    g_rev, g_ebitda = _num(guidance.get("revenue_cr")), _num(guidance.get("ebitda_cr"))
+    g_margin, g_pat = _num(guidance.get("ebit_margin")), _num(guidance.get("pat_cr"))
+    fwd_ebitda = g_ebitda if g_ebitda else (g_rev * g_margin / 100 if g_rev and g_margin else None)
+    bits = []
+    if lens != "financial" and ev and fwd_ebitda and fwd_ebitda > 0:
+        bits.append(f"forward EV/EBITDA ~{ev / fwd_ebitda:.1f}x (EBITDA ₹{fwd_ebitda:,.0f} cr)")
+    if mcap and g_pat and g_pat > 0:
+        bits.append(f"forward P/E ~{mcap / g_pat:.1f}x (PAT ₹{g_pat:,.0f} cr)")
+    if mcap and g_rev and g_rev > 0 and not fwd_ebitda and not (g_pat and g_pat > 0):
+        bits.append(f"forward P/S ~{mcap / g_rev:.1f}x (revenue ₹{g_rev:,.0f} cr)")
+    if not bits:
+        return None
+    return (f"- **Forward — on management's {fy} guidance{f' ({src})' if src else ''}:** "
+            + " · ".join(bits))
+
+
 def _table(headers: list[str], rows: list[list[str]]) -> str:
     out = ["| " + " | ".join(headers) + " |",
            "|" + "|".join(["---"] * len(headers)) + "|"]
@@ -53,7 +85,8 @@ def _cover(ebit, fin) -> str:
 
 
 def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
-                     consolidated: bool = False, target_shares: float | None = None) -> str:
+                     consolidated: bool = False, target_shares: float | None = None,
+                     guidance: dict | None = None) -> str:
     af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
     label = "consolidated" if consolidated else "standalone"
     L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
@@ -359,19 +392,52 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)
     hist = valuation.valuation_history(con, symbol, consolidated)
     sec = sector.sector_valuation(con, symbol, consolidated, target_shares_override=target_shares)
+    industry = sector.industry_of(con, symbol)
+    lens = sector.valuation_lens(industry)
+    evd = valuation.ev_ebitda(con, symbol, consolidated, shares_override=target_shares)
     L += ["## 10. Valuation"]
     if snap:
-        L.append(f"- Market cap ₹{_f(snap.get('market_cap_cr'),0)} cr · P/E(TTM) "
-                 f"{_f(snap.get('pe_ttm'),1,lo=0,hi=2000)} · P/B {_f(snap.get('pb'),2,lo=0,hi=200)} · "
-                 f"earnings yield {_f(snap.get('earnings_yield_%'),2,pct=True,lo=-50,hi=50)}")
+        pe, pb, ey = snap.get("pe_ttm"), snap.get("pb"), snap.get("earnings_yield_%")
+        ev_val = evd.get("ev_ebitda")
+        L.append(f"- Market cap ₹{_f(snap.get('market_cap_cr'),0)} cr"
+                 + (f" ({industry})" if industry else ""))
+        if lens == "financial":
+            r0 = af.loc[af.index[-1]]
+            roe = (100 * r0["ProfitLossForPeriod"] / r0["Equity"]
+                   if r0.get("ProfitLossForPeriod") is not None and r0.get("Equity") else None)
+            L.append(f"- **Lens — financial → P/B on ROE:** P/B {_f(pb,2,lo=0,hi=200)} on ROE "
+                     f"{_f(roe,1,pct=True,lo=-100,hi=100)} · P/E(TTM) {_f(pe,1,lo=0,hi=2000)} · "
+                     f"earnings yield {_f(ey,2,pct=True,lo=-50,hi=50)}")
+            L.append("  - For a lender, judge P/B against ROE (and asset quality) — a richer P/B is "
+                     "warranted only by a durably higher ROE; P/E and DCF are unreliable here.")
+        elif lens == "cyclical" and ev_val is not None and ev_val == ev_val and ev_val > 0:
+            mid = evd.get("ev_ebitda_midcycle")
+            midtxt = f" · mid-cycle {_f(mid,1,x=True,lo=0,hi=100)}" if mid and mid == mid else ""
+            L.append(f"- **Lens — cyclical → EV/EBITDA:** {_f(ev_val,1,x=True,lo=0,hi=100)}{midtxt} · "
+                     f"P/B {_f(pb,2,lo=0,hi=200)} · P/E(TTM) {_f(pe,1,lo=0,hi=2000)} "
+                     f"(EV ₹{_f(evd.get('ev_cr'),0)} cr incl. net debt ₹{_f(evd.get('net_debt_cr'),0)} cr)")
+            L.append("  - Asset-heavy/commodity: judge on **mid-cycle** EV/EBITDA — trailing earnings & "
+                     "P/E swing with the cycle and mislead at peaks/troughs.")
+        else:
+            L.append(f"- **Lens — earnings → P/E:** P/E(TTM) {_f(pe,1,lo=0,hi=2000)} · P/B "
+                     f"{_f(pb,2,lo=0,hi=200)} · earnings yield {_f(ey,2,pct=True,lo=-50,hi=50)}")
         if snap.get("note"):
             L.append(f"  - ⚠ {snap['note']}")
-    if not hist.empty and "pe" in hist:
-        pes = hist["pe"].dropna()
-        pes = pes[(pes > 0) & (pes < 2000)]                 # positive, sane P/Es only
-        if len(pes):
-            L.append(f"- Own P/E history: min {_f(pes.min(),1)} / median "
-                     f"{_f(float(pes.median()),1)} / max {_f(pes.max(),1)}")
+    # own-history percentile band on the lens's primary multiple (more intuitive than median)
+    if not hist.empty:
+        col = "pb" if lens == "financial" else "pe"
+        cur = snap.get("pb") if col == "pb" else snap.get("pe_ttm")
+        ser = hist[col].dropna() if col in hist else pd.Series(dtype=float)
+        ser = ser[(ser > 0) & (ser < 100_000)]
+        pctile = valuation.multiple_percentile(ser, cur)
+        if pctile is not None:
+            tag = ("cheap vs its own history" if pctile <= 35 else
+                   "rich vs its own history" if pctile >= 65 else "mid-range vs its own history")
+            L.append(f"- {'P/B' if col == 'pb' else 'P/E'} {_f(cur,1)} — **{pctile:.0f}th percentile** "
+                     f"of its {len(ser)}-yr range ({tag})")
+    fwd = _forward_line(guidance, snap, evd, lens)            # forward multiple from guidance
+    if fwd:
+        L.append(fwd)
     if sec.get("peers_with_data", 0) >= 3:
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
@@ -396,47 +462,49 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         # (a table glued straight to a heading makes the renderer swallow the '##')
         L += ["", "### Peer comparison", "", _table(["Company"] + pcols, prows), ""]
 
-    # ===================== QUANT VALUATION (Monte-Carlo DCF) =====================
+    # =============== VALUATION — WHAT THE PRICE IMPLIES (reverse-DCF first) ===============
     inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
-    L += ["## 11. Quant valuation (Monte-Carlo DCF)"]
+    L += ["## 11. Valuation — what the price implies (reverse-DCF)"]
     if inp.is_financial:
-        L.append("- FCFF-DCF is not meaningful for a lender/financial; skipped."
-                 + (f" {inp.note}" if inp.note else ""))
+        L.append("- Reverse/forward-DCF is not meaningful for a lender/financial; rely on the "
+                 "P/B-on-ROE and the peer comparison in §10." + (f" {inp.note}" if inp.note else ""))
     elif not inp.usable:
-        L.append(f"- DCF inputs unavailable: {', '.join(inp.missing) or inp.note or 'n/a'}.")
+        L.append(f"- DCF inputs unavailable: {', '.join(inp.missing) or inp.note or 'n/a'}. "
+                 "Rely on the relative valuation in §10.")
     else:
-        mc = quant.monte_carlo_dcf(inp)
         rev = quant.reverse_dcf(inp)
-        sc = quant.scenario_dcf(inp)
-        L.append(f"- Drivers: revenue ₹{_f(inp.rev0 / CR, 0)} cr · growth "
-                 f"{_f(100 * inp.growth, 1, pct=True)} (σ {_f(100 * inp.growth_sigma, 1)}) · "
-                 f"EBIT margin {_f(100 * inp.ebit_margin, 1, pct=True)} · WACC "
-                 f"{_f(100 * inp.wacc, 1, pct=True)} (β {_f(inp.beta, 2)}) · terminal g "
-                 f"{_f(100 * inp.terminal_growth, 1, pct=True)} · net debt ₹{_f(inp.net_debt / CR, 0)} cr")
-        if mc.median and mc.price:
-            if mc.price <= mc.median:
-                mos = ("margin of safety "
-                       + glossary.read("Margin of safety%", 100 * (mc.median - mc.price) / mc.median,
-                                       nd=0, pct=True))
-            else:
-                mos = f"price is {_f(mc.price / mc.median, 1)}x the DCF median (no margin of safety)"
-            L.append(f"- **Intrinsic value/share ₹{_f(mc.median, 0)} (median)**, p10–p90 "
-                     f"₹{_f(mc.p10, 0)}–{_f(mc.p90, 0)}; price ₹{_f(mc.price, 0)} → {mos}; "
-                     f"P(undervalued) {glossary.read('P(undervalued)%', 100 * mc.prob_undervalued, nd=0, pct=True)}.")
-        if sc.get("meaningful"):
-            L.append(f"- Scenario fair value — bear ₹{_f(sc.get('bear'), 0, lo=0, hi=1_000_000)} · base "
-                     f"₹{_f(sc.get('base'), 0, lo=0, hi=1_000_000)} · bull "
-                     f"₹{_f(sc.get('bull'), 0, lo=0, hi=1_000_000)}.")
-        else:
-            L.append("- Scenario fair value — not meaningful for this company "
-                     "(high-beta / cyclical / capex-heavy inputs drive the modelled FCFF negative); "
-                     "rely on the reverse-DCF and the relative valuation in §10 instead.")
+        # LEAD with the reverse-DCF — the robust 'what's priced in' read.
         if rev.get("implied_growth") is not None:
-            L.append(f"- Reverse-DCF: today's price implies ~{_f(100 * rev['implied_growth'], 1, pct=True)} "
-                     f"revenue growth (vs {_f(100 * (rev.get('historical_growth') or 0), 1, pct=True)} "
-                     f"historical) — {'plausible' if rev.get('plausible') else 'demanding'}.")
+            hg = rev.get("historical_growth")
+            L.append(f"- **Reverse-DCF (the centrepiece):** at today's price the market is pricing in "
+                     f"~{_f(100 * rev['implied_growth'], 1, pct=True)} perpetual revenue growth, vs "
+                     f"~{_f(100 * (hg or 0), 1, pct=True)} delivered historically — "
+                     f"**{'plausible' if rev.get('plausible') else 'demanding'}**. If the company can "
+                     "clear that implied bar the stock is cheap; if not, it's rich.")
         elif rev.get("note"):
-            L.append(f"- Reverse-DCF: {rev['note']}.")
+            L.append(f"- **Reverse-DCF:** {rev['note']}.")
+        # Monte-Carlo FCFF-DCF: only a SECONDARY cross-check, and only where it's meaningful.
+        sc = quant.scenario_dcf(inp)
+        if sc.get("meaningful"):
+            mc = quant.monte_carlo_dcf(inp)
+            if mc.median and mc.price:
+                if mc.price <= mc.median:
+                    mos = ("a margin of safety of " + glossary.read(
+                        "Margin of safety%", 100 * (mc.median - mc.price) / mc.median, nd=0, pct=True))
+                else:
+                    mos = f"price {_f(mc.price / mc.median, 1)}x the DCF median (no margin of safety)"
+                L.append(f"- _Cross-check_ — Monte-Carlo FCFF-DCF: intrinsic ₹{_f(mc.median, 0)} "
+                         f"(median; p10–p90 ₹{_f(mc.p10, 0)}–{_f(mc.p90, 0)}) vs price ₹{_f(mc.price, 0)} "
+                         f"→ {mos}; scenario bear/base/bull ₹{_f(sc.get('bear'),0,lo=0,hi=1_000_000)} / "
+                         f"{_f(sc.get('base'),0,lo=0,hi=1_000_000)} / {_f(sc.get('bull'),0,lo=0,hi=1_000_000)}.")
+            L.append(f"  - DCF drivers: growth {_f(100*inp.growth,1,pct=True)} · EBIT margin "
+                     f"{_f(100*inp.ebit_margin,1,pct=True)} · WACC {_f(100*inp.wacc,1,pct=True)} "
+                     f"(β {_f(inp.beta,2)}) · terminal g {_f(100*inp.terminal_growth,1,pct=True)} · "
+                     f"net debt ₹{_f(inp.net_debt/CR,0)} cr.")
+        else:
+            L.append("- _Monte-Carlo FCFF-DCF cross-check omitted_ — high-beta / cyclical / capex-heavy "
+                     "inputs drive the modelled FCFF negative (a point-estimate DCF isn't reliable here); "
+                     "lean on the reverse-DCF above and the sector-appropriate multiples in §10.")
         if inp.note:
             L.append(f"- _{inp.note.strip()}_")
     L.append("- _DCF is assumption-driven — read the distribution/range, not a point estimate._")

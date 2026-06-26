@@ -101,6 +101,20 @@ The deep brief also carries a quant layer (numpy-only, assumption-driven):
 - **Scenario DCF** — bear/base/bull point values; if the central case isn't a
   positive value (high-beta / cyclical / capex-heavy inputs drive modelled FCFF
   negative) the section prints **"not meaningful"** rather than a negative number.
+
+**How the report frames valuation (§10–§11).** Because a point-estimate FCFF-DCF is
+unreliable for Indian cyclicals/financials/capex-heavy names, valuation leans on
+*relative + sector-appropriate + forward*, not the DCF:
+- **§10 picks a lens by sector** (`sector.valuation_lens`): **financial → P/B on ROE**;
+  **cyclical/asset-heavy → EV/EBITDA** (`valuation.ev_ebitda`, with a **mid-cycle** variant
+  so peaks/troughs don't mislead) + P/B; **everything else → P/E**. It also shows the current
+  multiple as a **percentile of the stock's own history** (`valuation.multiple_percentile`),
+  and — when management gave explicit guidance — a **forward multiple**
+  (`synthesize.extract_guidance`: a Gemini read of the concalls → guided revenue/EBITDA/PAT →
+  forward EV/EBITDA / P/E, threaded in via `pipeline.generate_report`).
+- **§11 leads with the reverse-DCF** ("what perpetual growth the price implies vs history →
+  plausible/demanding") as the centrepiece; the **Monte-Carlo FCFF-DCF is only a secondary
+  cross-check**, shown only when its inputs are meaningful.
 - **Benford's law** — first-digit conformity (MAD) of all reported figures, a
   manipulation/rounding tell.
 - **Sector z-scores** + a **peer-comparison table** — target ◄ vs sector peers on

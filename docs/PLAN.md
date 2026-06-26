@@ -165,7 +165,15 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
   holdings overlap).
 - Macro overlay (RBI / MOSPI) feeding sector calls.
-- Screener across a broad universe to *find* ideas, not just analyse known ones.
+- **Idea-generation screener** across a broad universe to *find* ideas, not just analyse known
+  ones (the system's biggest "monitor → discover" gap). Two phases:
+  - *Phase 1 — price/technical screen (feasible now, no new data):* over the full-market EOD we
+    already hold (~4,100 symbols), surface 52-week breakouts/breakdowns, **delivery-% spikes**
+    (institutional conviction), momentum and % from the 200-DMA → a weekly "what's moving" list.
+  - *Phase 2 — fundamental + forensic screen (the real edge):* one-time bulk-ingest of the
+    Nifty-500's financials (the Integrated-Filing scraper now works), then rank the universe on
+    quality (ROCE, CFO/PAT, low debt) + **forensic** (clean Altman/Beneish/accruals/no pledge) +
+    cheap-vs-own-history, and **auto-deep-report** the top candidates (screen finds, LLM diligences).
 - **10-yr G-Sec yield** in the market header — the last deferred macro feed. FBIL's `gsec`
   endpoint returns only archive-file metadata (not inline yields); needs the archive download
   parsed, or a CCIL/RBI source. (USD/INR via FBIL and gold/silver/crude via MCX are **done**.)

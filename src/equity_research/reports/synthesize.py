@@ -15,6 +15,7 @@ Model via GEMINI_MODEL (default gemini-2.5-pro). See ``docs/REPORTS.md``.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -247,3 +248,53 @@ def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
             if 0 <= idx < len(out):
                 out[idx] = m.group(2).strip().strip("*").strip().rstrip(".")[:60]
     return out
+
+
+_GUIDANCE_SYS = """You read Indian-listed companies' filings (concall transcripts, \
+investor presentations, results, outlook statements). Extract ONLY explicit FORWARD \
+guidance that MANAGEMENT itself gave for a FUTURE full fiscal year — e.g. "we expect \
+FY27 revenue of ~₹5,000 cr", "targeting 18-20% EBITDA margin next year", "guiding to \
+₹1,200 cr EBITDA in FY27".
+
+Reply with ONLY a JSON object (money figures in ₹ crore, numbers only):
+{"fy_label":"FY27","revenue_cr":5000,"ebitda_cr":1200,"ebit_margin":19.0,"pat_cr":800,"source":"Q4FY26 concall"}
+Use null for any field management did not give. If a RANGE is given, use the midpoint. \
+If management gave NO explicit forward guidance for a future year, reply exactly \
+{"guidance":null}. Never infer or invent a number management did not state."""
+
+
+def extract_guidance(pdfs: list[tuple[str, bytes]] | None, *, model: str = MODEL) -> dict | None:
+    """Pull management's **explicit** forward guidance (a future FY's revenue / EBITDA /
+    margin / PAT) from the filing PDFs, as a dict; ``None`` if none was given. Best-effort —
+    forces JSON output, never raises, and never invents numbers (so the report's forward
+    multiple is only shown when management actually guided)."""
+    docs = list(pdfs or [])
+    if not docs:
+        return None
+    parts: list[types.Part] = []
+    for label, data in docs:
+        parts.append(types.Part.from_text(text=f"--- Filing: {label} ---"))
+        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
+    parts.append(types.Part.from_text(text="Extract management's forward guidance as JSON."))
+    try:
+        resp = _client().models.generate_content(
+            model=model, contents=parts,
+            config=types.GenerateContentConfig(
+                system_instruction=_GUIDANCE_SYS, response_mime_type="application/json"),
+        )
+        text = (resp.text or "").strip()
+    except Exception:  # noqa: BLE001 — guidance is best-effort
+        return None
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(d, dict) or d.get("guidance", "x") is None:
+        return None
+    # need at least one usable forward number to be worth showing
+    if not any(d.get(k) is not None for k in ("revenue_cr", "ebitda_cr", "ebit_margin", "pat_cr")):
+        return None
+    return d

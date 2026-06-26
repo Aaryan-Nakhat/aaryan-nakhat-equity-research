@@ -19,7 +19,7 @@ from equity_research.ingest import (ingest_annual_financials, ingest_financials,
                                     ingest_shareholding)
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
-from equity_research.reports.synthesize import synthesize_thesis
+from equity_research.reports.synthesize import extract_guidance, synthesize_thesis
 from equity_research.scrapers import nse_api
 
 CR = 1e7
@@ -244,11 +244,21 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     con = connect()
     try:
         have = ensure_ingested(symbol, con)
+        # Gather filings + management guidance up-front (deep, auto-synthesize) so the
+        # brief's valuation can show a forward multiple; the PDFs are reused for the
+        # thesis below (no double fetch).
+        pdfs = guidance = None
+        if have and deep and synthesize and not pdf_path:
+            pdfs = _filings_for_analysis(symbol)
+            guidance = extract_guidance(pdfs)
         if deep:
             _ensure_peer_financials(con, symbol)   # populate peers so §10's table is real
         basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
-        builder = build_deep_brief if deep else build_brief
-        brief = builder(con, symbol, consolidated=basis, target_shares=target_shares)
+        if deep:
+            brief = build_deep_brief(con, symbol, consolidated=basis,
+                                     target_shares=target_shares, guidance=guidance)
+        else:
+            brief = build_brief(con, symbol, consolidated=basis, target_shares=target_shares)
     finally:
         con.close()
     if not have:
@@ -260,7 +270,9 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     if pdf_path:                               # explicit filing supplied (CLI --pdf)
         thesis = synthesize_thesis(brief, symbol, pdf_path=pdf_path, deep=deep)
     else:                                      # auto: all filings since last FY-end + latest results
-        thesis = synthesize_thesis(brief, symbol, pdfs=_filings_for_analysis(symbol), deep=deep)
+        thesis = synthesize_thesis(brief, symbol,
+                                   pdfs=pdfs if pdfs is not None else _filings_for_analysis(symbol),
+                                   deep=deep)
     return f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
 
 

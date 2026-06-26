@@ -37,6 +37,14 @@ GLOSSARY: dict[str, Metric] = {
         "<1x = below book; 1–3x typical; >5x means heavy intangible/brand or very high returns.",
         [(5, "rich"), (3, "full"), (1, "moderate")], lower_better=True,
         sector_note="Banks/financials judged largely on P/B; asset-light businesses run high P/B legitimately."),
+    "EV/EBITDA": Metric(
+        "Enterprise value (market cap + net debt) ÷ EBITDA — capital-structure-neutral, so it "
+        "compares firms with different debt and is the standard lens for cyclical/asset-heavy names "
+        "where P/E swings with the cycle.",
+        "~8–12x typical; <6x cheap, >15x rich. Judge cyclicals on MID-CYCLE EBITDA, not peak/trough.",
+        [(15, "rich"), (12, "full"), (8, "moderate")], lower_better=True,
+        sector_note="Lower for slow/cyclical (metals, oil & gas, utilities); higher for structural "
+        "growth. Not meaningful for banks/financials."),
     "ROE%": Metric(
         "Return on equity — net profit ÷ shareholders' equity.",
         "≥18% strong · 12–18% decent · <10% weak.",
@@ -126,6 +134,17 @@ GLOSSARY: dict[str, Metric] = {
     "Implied growth%": Metric(
         "Revenue growth the current price implies (reverse DCF).",
         "Compare to history: at/below past growth = undemanding; well above = priced for acceleration.",
+        []),
+    "Multiple percentile (own history)": Metric(
+        "Where today's multiple sits within the stock's OWN multi-year range (0–100th percentile).",
+        "<35th = cheap vs its own history · ~50th = mid-range · >65th = rich vs its own history. "
+        "A timing gauge, not a quality one.",
+        []),
+    "Forward multiple (guidance)": Metric(
+        "A multiple (EV/EBITDA, P/E or P/S) on MANAGEMENT'S OWN forward guidance for a future fiscal "
+        "year, not trailing numbers.",
+        "Cheaper than the trailing multiple when growth is expected; only as reliable as the guidance — "
+        "shown only when management gave explicit figures.",
         []),
     "Promoter holding%": Metric(
         "Share of equity held by promoters (founders/controlling group).",
