@@ -162,6 +162,32 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
   accruals + cash conversion are clean.
 
 ### Later (deferred)
+- **Verdict track record — make the tool grade itself** *(top-priority next build; the honest
+  gap — we issue Buy/Accumulate/Hold/Reduce/Avoid verdicts and never check if they were right).*
+  - `verdict_ledger` table: one row per verdict — `symbol, as_of_date, verdict, price_at_call,
+    basis, thesis_reasons` **+ a snapshot of the signals at call time** (forensic scores,
+    valuation lens + own-history percentile, reverse-DCF read, CFO/PAT) so we can later attribute
+    *which signals predict*, not just whether the call worked. PK `(symbol, as_of_date)`; a
+    re-rating is a new row (keeps the history).
+  - *Capture:* (a) on-demand — a deterministic `parse_verdict(thesis)` pulls the one-of-five word
+    from each deep report's structured verdict line, logged best-effort; (b) **a weekly systematic
+    sweep** that deep-reports the whole watchlist and logs all verdicts — without this the ledger
+    is too sparse to be statistical.
+  - *Scoring:* `track_record()` — for each row past 1m/3m/6m/1y, stock return from `price_at_call`
+    vs the **sector index** (excess/alpha; sector-relative grades stock-picking, not market timing);
+    bullish call "right" if alpha > 0, bearish if alpha < 0. Aggregate by verdict bucket × horizon:
+    avg return, avg alpha, hit-rate, n.
+  - *Delivery:* an email **"scorecard"** command (table by bucket) + a monthly auto-email with the
+    attribution slice. Label buckets with n; never over-claim on thin samples.
+  - *Honest caveats:* starts from zero (can't backfill — the LLM would read today's filings, not
+    the call-date's), so it's "not enough data" for ~a month, meaningful ~a quarter in, genuinely
+    useful at 6–12 months. Modest statistical power (24 stocks × weekly).
+- **Guidance-vs-delivery (management credibility)** — store each extracted forward guidance
+  (`synthesize.extract_guidance`, already shipped); when actuals land, compare guided vs delivered
+  → a habitual-over-promiser score that discounts the current guidance. Builds on today's work.
+- **Ownership / stake-change tracking** — ingest NSE quarterly shareholding pattern (promoter %,
+  FII %, DII %, MF %); flag promoter/institutional stake increases (conviction) vs trims + pledge
+  upticks (red flag). Primary data; complements the forensic block.
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
   holdings overlap).
 - Macro overlay (RBI / MOSPI) feeding sector calls.
