@@ -16,7 +16,7 @@ from equity_research.common.db import connect
 from equity_research.common.http import fetch_bytes
 from equity_research.reports import glossary
 from equity_research.ingest import (ingest_annual_financials, ingest_financials,
-                                    ingest_shareholding)
+                                    ingest_insider_trades, ingest_shareholding)
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import extract_guidance, synthesize_thesis
@@ -179,6 +179,10 @@ def ensure_ingested(symbol: str, con: duckdb.DuckDBPyConnection) -> bool:
         if need_sh:
             try:  # one browser fetch, cached
                 ingest_shareholding(symbol, con)
+            except Exception:  # noqa: BLE001
+                pass
+            try:  # insider/promoter (SEBI PIT) disclosures — same ownership cadence
+                ingest_insider_trades(symbol, con)
             except Exception:  # noqa: BLE001
                 pass
         _mark_refresh_attempt(con, symbol)

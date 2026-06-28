@@ -187,7 +187,13 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
   → a habitual-over-promiser score that discounts the current guidance. Builds on today's work.
 - **Ownership / stake-change tracking** — ingest NSE quarterly shareholding pattern (promoter %,
   FII %, DII %, MF %); flag promoter/institutional stake increases (conviction) vs trims + pledge
-  upticks (red flag). Primary data; complements the forensic block.
+  upticks (red flag). Primary data; complements the forensic block. *(Adjacent **insider/promoter
+  PIT trades** — `/api/corporates-pit` → digest alert + report section — are **done**; the
+  remaining piece is the quarterly SHP stake-trend.)*
+
+**Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
+`positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +
+deep-report section (`nse_api.insider_trades`, `insider_trades` table).
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
   holdings overlap).
 - Macro overlay (RBI / MOSPI) feeding sector calls.

@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 
-from equity_research.analysis import alerts, fundamentals, valuation
+from equity_research.analysis import alerts, fundamentals, positioning, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import ingest_eod, store_pledge
@@ -42,9 +42,13 @@ class ScanResult:
     movers: list[dict] = field(default_factory=list)
     upcoming: list[dict] = field(default_factory=list)
     market: str = ""
+    insider: list[str] = field(default_factory=list)        # formatted insider/promoter alert lines
     # per-symbol dedup-state advances, persisted ONLY after the digest is delivered
     # (see commit_scan_state) so a crash before delivery can't silently eat events.
     pending_state: dict[str, dict] = field(default_factory=dict)
+    # raw insider rows {symbol: [rows]} stored ONLY after delivery (the table is the
+    # dedup ledger: a disclosure alerts once, then storing it marks it seen).
+    pending_insider: dict[str, list[dict]] = field(default_factory=dict)
 
 
 def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = None) -> None:
@@ -59,6 +63,9 @@ def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = 
         for sym, updates in sr.pending_state.items():
             if updates:
                 alerts.save_state(con, sym, updates)
+        if sr.pending_insider:                              # mark surfaced disclosures seen
+            from equity_research.ingest import store_insider_trades
+            store_insider_trades(con, sr.pending_insider)
     finally:
         if own:
             con.close()
@@ -116,6 +123,20 @@ def _fii_dii_line(data) -> str:
     parts = [f"{k} {'+' if v >= 0 else '−'}₹{abs(v):,.0f} cr"
              for k in ("FII", "DII") if (v := out.get(k)) is not None]
     return "- 💸 **FII / DII (cash)** — " + " · ".join(parts) if parts else ""
+
+
+def _fii_futures_line(d: dict) -> str:
+    """FII index-futures positioning bullet (sentiment) + retail contrast. Best-effort."""
+    nl = (d or {}).get("net_long_pct")
+    if nl is None:
+        return ""
+    label = ("bullish" if nl >= 55 else "neutral" if nl >= 45
+             else "cautious" if nl >= 35 else "bearish")
+    prev = d.get("prev_net_long_pct")
+    trend = f"; was {prev:.0f}% last wk" if prev is not None else ""
+    retail = d.get("retail_net_long_pct")
+    rtxt = f" · retail {retail:.0f}% long" if retail is not None else ""
+    return f"- 🌍 **FII index futures** — {nl:.0f}% net-long ({label}{trend}){rtxt}"
 
 
 def _money_lines(usd: float | None, comm: dict) -> str:
@@ -493,8 +514,67 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
     else:
         parts.append("_No corporate events, institutional deals, or forensic changes today._")
 
+    if sr.insider:
+        rows = ["## 🔬 Insider & promoter trades"]
+        rows += [f"- {ln}" for ln in sr.insider]
+        parts.append("\n".join(rows))
+
     parts.append("_Reply with a company name to get its full report._")
     return "\n\n".join(parts)
+
+
+_INSIDER_ALERT_DAYS = 5     # only alert on disclosures filed within N days (cold-start guard)
+
+
+def _is_material_insider(r: dict) -> bool:
+    """Promoter/director trades, or any open-market (not off-market) trade — the signal;
+    routine off-market designated-person/relative ESOP transfers are noise."""
+    cat = (r.get("category") or "").lower()
+    mode = (r.get("mode") or "").lower()
+    return ("promoter" in cat or "director" in cat
+            or ("market" in mode and "off" not in mode))
+
+
+def _fmt_insider(sym: str, r: dict) -> str:
+    txn = (r.get("txn_type") or "").lower()
+    emoji = "🟢" if "buy" in txn else "🔴" if "sell" in txn else "🔹"
+    who = (r.get("acq_name") or "Insider").title()
+    val, qty = r.get("value_cr"), r.get("qty")
+    size = (f"₹{val:,.1f} cr" if val and val >= 0.05 else f"{qty:,.0f} sh" if qty else "—")
+    hb, ha = r.get("hold_before_pct"), r.get("hold_after_pct")
+    hold = (f"; holding {hb:.2f}%→{ha:.2f}%"
+            if hb is not None and ha is not None and (hb or ha) else "")
+    filed = (r.get("disclosure_dt") or "").split()[0]
+    return (f"{emoji} **{sym}** — {r.get('category') or 'Insider'} {who} "
+            f"{(r.get('txn_type') or 'traded').lower()} {size} "
+            f"({r.get('mode') or 'n/a'}){hold} · filed {filed}")
+
+
+def _insider_alerts(con: duckdb.DuckDBPyConnection, insider_by_sym: dict) -> list[str]:
+    """New (not yet stored) + material + recent insider/promoter disclosures, formatted."""
+    if not insider_by_sym:
+        return []
+    from datetime import datetime, timedelta
+    syms = list(insider_by_sym)
+    seen = {(s, d) for s, d in con.execute(
+        f"SELECT symbol, did FROM insider_trades WHERE symbol IN ({','.join('?' * len(syms))})",
+        syms).fetchall()}
+    cutoff = datetime.now() - timedelta(days=_INSIDER_ALERT_DAYS)
+
+    def recent(r):
+        try:
+            return datetime.strptime((r.get("disclosure_dt") or "").strip(),
+                                     "%d-%b-%Y %H:%M") >= cutoff
+        except (ValueError, TypeError):
+            return False
+
+    lines = []
+    for sym in syms:
+        for r in insider_by_sym.get(sym) or []:
+            did = r.get("did")
+            if did and (sym, did) not in seen and _is_material_insider(r) and recent(r):
+                lines.append(_fmt_insider(sym, r))
+    return lines
 
 
 def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResult:
@@ -520,6 +600,11 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             feeds = nse_api.market_feeds() if syms else {}
         except Exception:  # noqa: BLE001
             feeds = {}
+        # one session for insider/promoter (SEBI PIT) disclosures across the watchlist
+        try:
+            insider_by_sym = nse_api.insider_trades_batch(syms) if syms else {}
+        except Exception:  # noqa: BLE001
+            insider_by_sym = {}
         results: dict[str, list[alerts.Alert]] = {}
         pending: dict[str, dict] = {}
         for sym in syms:
@@ -559,6 +644,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         market = "\n".join(x for x in (
             _safe(lambda: market_context(con), ""),
             _safe(lambda: _fii_dii_line(feeds.get("fiidii") or []), ""),
+            _safe(lambda: _fii_futures_line(positioning.fii_index_futures(con)), ""),
             _safe(lambda: _money_lines(usd, comm), ""),
         ) if x)
         return ScanResult(
@@ -566,7 +652,9 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             _safe(lambda: watchlist_movers(con), []),
             _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
             market,
+            insider=_safe(lambda: _insider_alerts(con, insider_by_sym), []),
             pending_state=pending,
+            pending_insider=insider_by_sym,
         )
     finally:
         if own:

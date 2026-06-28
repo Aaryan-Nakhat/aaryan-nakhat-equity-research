@@ -226,6 +226,47 @@ def store_pledge(con: duckdb.DuckDBPyConnection, data: dict[str, dict | None]) -
     return _write_shareholding(con, [_pledge_row(s, p) for s, p in data.items()])
 
 
+_INSIDER_COLS = ["symbol", "did", "disclosure_dt", "trade_to_dt", "acq_name", "category",
+                 "mode", "txn_type", "qty", "value_cr", "hold_before_pct",
+                 "hold_after_pct", "regulation"]
+
+
+def _insider_rows(symbol: str, rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows or []:
+        if not r.get("did"):
+            continue
+        out.append({"symbol": symbol, **{c: r.get(c) for c in _INSIDER_COLS if c != "symbol"}})
+    return out
+
+
+def _write_insider(con: duckdb.DuckDBPyConnection, rows: list[dict]) -> int:
+    rows = [r for r in rows if r]
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows, columns=_INSIDER_COLS)
+    con.register("_pit", df)
+    try:
+        con.execute(f"INSERT OR REPLACE INTO insider_trades ({', '.join(_INSIDER_COLS)}) "
+                    "SELECT * FROM _pit")
+    finally:
+        con.unregister("_pit")
+    return len(df)
+
+
+def ingest_insider_trades(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
+    """Land recent SEBI PIT (insider/promoter) trade disclosures for ``symbol`` (best-effort)."""
+    return _write_insider(con, _insider_rows(symbol, nse_api.insider_trades(symbol)))
+
+
+def store_insider_trades(con: duckdb.DuckDBPyConnection, data: dict[str, list[dict]]) -> int:
+    """Persist already-fetched insider data ({symbol: [rows]}) — no extra browser session."""
+    n = 0
+    for s, rows in (data or {}).items():
+        n += _write_insider(con, _insider_rows(s, rows))
+    return n
+
+
 def ingest_sector_map(con: duckdb.DuckDBPyConnection, index: str = "nifty500") -> int:
     """Land the symbol -> industry map from an NSE index constituent list."""
     df = nse_archives.fetch_constituents(index)

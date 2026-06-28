@@ -37,9 +37,13 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   (`scan.market_context`, all from `index_close`).
 - **FII/DII** net-cash (`scan._fii_dii_line` off the `fiidiiTradeReact` feed, batched
   into `market_feeds`).
-- **USD/INR + commodities** (`scan._money_line`): USD/INR from **FBIL** (`scrapers/fbil`)
+- **FII index-futures positioning** (`scan._fii_futures_line` off
+  `positioning.fii_index_futures`): FII net-long % in index futures + the week-ago trend +
+  the retail (Client) contrast — a smart-money sentiment read from the `participant_oi` we
+  already ingest daily (prior-session fallback if the evening file isn't out by 18:00).
+- **USD/INR + commodities** (`scan._money_lines`): USD/INR from **FBIL** (`scrapers/fbil`)
   + near-month **gold / silver / crude** futures from **MCX** (`scrapers/mcx`). Each line
-  is best-effort — a failing feed is simply omitted. The three parts:
+  is best-effort — a failing feed is simply omitted. The parts:
 - **📅 Upcoming:** the watchlist's events in the next ~35 days — board-meeting /
   results dates, ex-dividend / split / bonus dates, AGM / fund-raising
   (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
@@ -60,6 +64,13 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   investor analysis (guidance, key numbers, contingent-liability / related-party
   flags) is shown **inline** as a quote block (`scan._enrich_event_docs` →
   `synthesize.analyze_filing`; capped at 5/scan). No PDFs attached.
+- **🔬 Insider & promoter trades (when they happen):** SEBI PIT Reg 7(2) disclosures for
+  watchlist names — promoter/director buys & sells and open-market trades, with the ₹ size and
+  the holding % before→after (`nse_api.insider_trades_batch` → `scan._insider_alerts`).
+  Routine off-market / designated-person ESOP transfers are filtered out. **Dedup** uses the
+  `insider_trades` table as the ledger (a disclosure alerts once, then `store_insider_trades`
+  marks it seen — committed only after delivery), plus a 5-day recency guard so the first run
+  doesn't flood. Fires only when a watchlist name actually files — most days, nothing.
 
 Built by `scan.format_digest`; all market-wide feeds come from `nse_api.market_feeds`
 in one browser session. Shared by the email + Telegram channels.
