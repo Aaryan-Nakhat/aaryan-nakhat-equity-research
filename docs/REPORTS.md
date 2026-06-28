@@ -125,6 +125,12 @@ Plus new forensic metrics in the brief: **Sloan (balance-sheet) accruals** and
 **promoter-pledge %** (NSE pledge feed → `shareholding` table; pledge-of-promoter
 is `n/a` for no-promoter firms where it would be meaningless).
 
+**Insider & promoter trades:** an `### Insider & promoter trades (recent)` block
+(`deep_brief._insider_block`, after the pledge bullets) lists the latest SEBI PIT
+Reg 7(2) disclosures (`insider_trades` table, ingested on demand in `ensure_ingested`)
+with a one-line **net read** over the last 6 months (promoter/director + open-market
+buys − sells → "net buyers ₹X cr — conviction" vs "net sellers — caution").
+
 **Auto multi-filing read:** `generate_report` auto-fetches **all the company's
 meaningful filings since the last fiscal year-end (plus the latest results)** —
 results, concall transcripts, investor presentations, ratings, M&A, etc.

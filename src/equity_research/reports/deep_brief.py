@@ -12,7 +12,7 @@ balance sheet and cash flow are present FY2023+ (older result XBRLs omit them).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import duckdb
 import numpy as np
@@ -66,6 +66,62 @@ def _forward_line(guidance: dict | None, snap: dict | None, evd: dict, lens: str
         return None
     return (f"- **Forward — on management's {fy} guidance{f' ({src})' if src else ''}:** "
             + " · ".join(bits))
+
+
+def _insider_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
+    """Recent SEBI PIT insider/promoter trades (from `insider_trades`) + a net read.
+    Returns [] if none stored."""
+    rows = con.execute(
+        "SELECT disclosure_dt, acq_name, category, mode, txn_type, qty, value_cr, "
+        "hold_before_pct, hold_after_pct FROM insider_trades WHERE symbol = ?", [symbol]).fetchall()
+    if not rows:
+        return []
+
+    def pdt(s):
+        try:
+            return datetime.strptime((s or "").strip(), "%d-%b-%Y %H:%M")
+        except (ValueError, TypeError):
+            return None
+
+    keys = ("dt_s", "name", "cat", "mode", "txn", "qty", "val", "hb", "ha")
+    recs = [dict(zip(keys, r)) for r in rows]
+    for r in recs:
+        r["dt"] = pdt(r["dt_s"])
+    recs = sorted((r for r in recs if r["dt"]), key=lambda r: r["dt"], reverse=True)
+    if not recs:
+        return []
+
+    def sig(r):                                      # promoter/director or open-market
+        c, m = (r["cat"] or "").lower(), (r["mode"] or "").lower()
+        return "promoter" in c or "director" in c or ("market" in m and "off" not in m)
+
+    cutoff = datetime.now() - timedelta(days=183)
+    net, have = 0.0, False
+    for r in recs:
+        if r["dt"] >= cutoff and sig(r) and r["val"]:
+            have = True
+            t = (r["txn"] or "").lower()
+            net += r["val"] if "buy" in t else -r["val"] if "sell" in t else 0
+    L = ["### Insider & promoter trades (recent)"]
+    if have:
+        dirn = "net buyers" if net > 0 else "net sellers" if net < 0 else "roughly flat"
+        tag = " — conviction" if net > 0 else " — caution" if net < 0 else ""
+        L.append(f"- **Net (last 6 mo, promoter/director + open-market): {dirn} "
+                 f"₹{abs(net):,.1f} cr{tag}.**")
+    else:
+        L.append("- _Recent activity is routine (off-market / designated-person ESOP); "
+                 "no material promoter/open-market signal._")
+    for r in recs[:8]:
+        t = (r["txn"] or "").lower()
+        emo = "🟢" if "buy" in t else "🔴" if "sell" in t else "🔹"
+        size = (f"₹{r['val']:,.2f} cr" if r["val"] and r["val"] >= 0.01
+                else f"{r['qty']:,.0f} sh" if r["qty"] else "—")
+        hb, ha = r["hb"], r["ha"]
+        hold = f"; {hb:.2f}%→{ha:.2f}%" if hb is not None and ha is not None and (hb or ha) else ""
+        L.append(f"- {emo} {r['cat'] or 'Insider'} {(r['name'] or '').title()} — "
+                 f"{r['txn'] or 'traded'} {size} ({r['mode'] or 'n/a'}){hold} · {r['dt']:%d-%b-%Y}")
+    L.append("")
+    return L
 
 
 def _table(headers: list[str], rows: list[list[str]]) -> str:
@@ -387,6 +443,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     L.append("- **Contingent liabilities / related-party transactions:** read from the company's "
              "filings (see the Analysis section); not in the structured XBRL.")
     L.append("")
+    L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)

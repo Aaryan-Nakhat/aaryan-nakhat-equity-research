@@ -107,6 +107,25 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS insider_trades (
+        symbol           VARCHAR,
+        did              VARCHAR,    -- NSE disclosure id (unique per disclosure)
+        disclosure_dt    VARCHAR,    -- when filed (intimation), 'DD-Mon-YYYY HH:MM'
+        trade_to_dt      VARCHAR,    -- trade 'to' date
+        acq_name         VARCHAR,
+        category         VARCHAR,    -- Promoter / Promoter Group / Director / Designated Person / ...
+        mode             VARCHAR,    -- Market Purchase / Market Sale / Off Market / ...
+        txn_type         VARCHAR,    -- Buy / Sell / Pledge / ...
+        qty              DOUBLE,
+        value_cr         DOUBLE,
+        hold_before_pct  DOUBLE,
+        hold_after_pct   DOUBLE,
+        regulation       VARCHAR,
+        updated_at       TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol, did)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS shareholding (
         symbol                   VARCHAR,
         period_end               DATE,      -- shareholding-pattern 'as of' date

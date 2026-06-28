@@ -294,6 +294,66 @@ def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
     return out
 
 
+def _parse_pit(data: Any) -> list[dict]:
+    """Normalise /api/corporates-pit rows — SEBI PIT Reg 7(2) insider/promoter trades.
+    NSE returns numbers as (sometimes comma'd / space-padded) strings."""
+    rows = data.get("data") if isinstance(data, dict) else (data if isinstance(data, list) else None)
+    out: list[dict] = []
+    for r in rows or []:
+        def num(k):
+            try:
+                return float(str(r.get(k, "")).strip().replace(",", ""))
+            except (TypeError, ValueError):
+                return None
+        val = num("secVal")
+        rec = {
+            "did": str(r.get("did") or "").strip() or None,
+            "disclosure_dt": (r.get("date") or r.get("intimDt") or "").strip() or None,
+            "trade_to_dt": (r.get("acqtoDt") or "").strip() or None,
+            "acq_name": (r.get("acqName") or "").strip(),
+            "category": (r.get("personCategory") or "").strip(),
+            "mode": (r.get("acqMode") or "").strip(),
+            "txn_type": (r.get("tdpTransactionType") or "").strip(),
+            "qty": num("secAcq"),
+            "value_cr": (val / 1e7) if val is not None else None,
+            "hold_before_pct": num("befAcqSharesPer"),
+            "hold_after_pct": num("afterAcqSharesPer"),
+            "regulation": (r.get("anex") or "").strip(),
+        }
+        if rec["did"]:
+            out.append(rec)
+    return out
+
+
+def insider_trades(symbol: str) -> list[dict]:
+    """Recent SEBI PIT (insider/promoter) trade disclosures for ``symbol`` ([] if none)."""
+    try:
+        data = fetch_api(f"/api/corporates-pit?index=equities&symbol={q(symbol)}")
+    except Exception:  # noqa: BLE001 — degrade to empty, never break the report
+        return []
+    return _parse_pit(data)
+
+
+def insider_trades_batch(symbols: list[str]) -> dict[str, list[dict]]:
+    """Insider/promoter trade disclosures for many symbols in ONE Camoufox session
+    (warm the page once, then in-page XHR per symbol). {symbol: [rows]}."""
+    paths = {s: f"/api/corporates-pit?index=equities&symbol={q(s)}" for s in symbols}
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, list[dict]] = {}
+    for sym, body in captured.items():
+        try:
+            out[sym] = _parse_pit(json.loads(body)) if body else []
+        except (json.JSONDecodeError, TypeError):
+            out[sym] = []
+    return out
+
+
 def option_chain_equity(symbol: str) -> Any:
     """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
     return fetch_api(f"/api/option-chain-equities?symbol={q(symbol)}")
