@@ -77,24 +77,29 @@ in one browser session. Shared by the email + Telegram channels.
 
 ## The midday digest (same-day, 12:30 IST)
 
-A second, **lighter** digest at ~12:30 PM for same-day opportunities — `🔔 Watchlist —
+The **same sections as the 18:00 digest, with LIVE midday data** — `🔔 Watchlist —
 same-day (HH:MM)`. Fired once per trading day in the **12:30–14:00 IST** window by
 `email_bot.maybe_intraday` (heartbeat-gated; a 2pm cutoff avoids a stale "midday" if the
 bot was down), deduped by `scan.already_intraday_today`/`mark_intraday`
 (`_meta("last_intraday_date")`). Built by `scan.run_intraday_scan` →
 `scan.format_intraday_digest`:
+- **Live market header:** **live** indices + India VIX (`scan.live_market_context` →
+  `nse_api.live_indices` off `/api/allIndices`, full sectoral coverage) · FII/DII cash ·
+  FII-futures positioning · USD/INR (FBIL) · **gold/silver/crude** (MCX, live). FII/DII and
+  positioning are **prior-session** until they publish after close.
+- **📅 Upcoming:** the watchlist's events in the next ~35 days (same `watchlist_upcoming`).
 - **Movers (live):** every watchlist stock's **live** price, day %change, day range and
-  **intraday delivery %**, sorted by absolute move — from NSE's NextApi live quote
+  **intraday delivery %**, sorted by absolute move — NSE NextApi live quote
   (`nse_api.live_quotes_batch` → `getSymbolData`; the old `quote-equity`/`equity-stockIndices`
   paths are dead). Best-effort per symbol (a few small/SME names may not quote on `EQ`/`N`).
-- **📄 Filed today:** the watchlist's non-routine corporate filings dated *today*
+- **Events (filed today):** the watchlist's non-routine corporate filings dated *today*
   (`corporate_announcements_batch` → `alerts._categorise`); **no** heavy per-PDF Gemini read
   here (kept fast) — the 18:00 digest does the deep read.
 - **🔬 Insider & promoter (today):** today's *material* PIT disclosures (`_intraday_insider`).
 
-It's a **live snapshot** — it does NOT touch the daily dedup markers or carry EOD-only signals
-(bhavcopy delivery, FII positioning, valuation); the **18:00 digest stays the authoritative,
-deduped record**. Mild, expected overlap between the two.
+It's a **live snapshot** — no EOD ingest (today's bhavcopy doesn't exist yet) and it does NOT
+touch the daily dedup markers; the **18:00 digest stays the authoritative, deduped record**
+(with EOD delivery/valuation + the deep filing analysis). Mild, expected overlap between the two.
 
 ## Events
 

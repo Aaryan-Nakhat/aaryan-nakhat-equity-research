@@ -354,6 +354,32 @@ def insider_trades_batch(symbols: list[str]) -> dict[str, list[dict]]:
     return out
 
 
+def live_indices() -> dict:
+    """Live intraday index values from /api/allIndices → {INDEXNAME_UPPER: (last, pct)}.
+    Covers all ~140 indices incl. sectorals + India VIX. {} on failure."""
+    try:
+        d = fetch_api("/api/allIndices")
+    except Exception:  # noqa: BLE001 — best-effort
+        return {}
+    rows = d.get("data") if isinstance(d, dict) else (d if isinstance(d, list) else None)
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    out: dict[str, tuple] = {}
+    for r in rows or []:
+        nm = (r.get("index") or r.get("indexName") or "").strip().upper()
+        last = num(r.get("last"))
+        if nm and last is not None:
+            pct = num(r.get("percentChange") if r.get("percentChange") is not None
+                      else r.get("percChange"))
+            out[nm] = (last, pct)
+    return out
+
+
 def option_chain_equity(symbol: str) -> Any:
     """Stock option chain (strike-wise OI) for ``symbol`` (e.g. ``RELIANCE``)."""
     return fetch_api(f"/api/option-chain-equities?symbol={q(symbol)}")
