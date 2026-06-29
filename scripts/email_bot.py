@@ -43,6 +43,8 @@ from equity_research.reports.resolve import resolve  # noqa: E402
 
 IST = ZoneInfo("Asia/Kolkata")
 SCAN_HOUR = 18
+INTRADAY_HOUR, INTRADAY_MIN = 12, 30    # midday same-day digest (12:30 IST)
+INTRADAY_CUTOFF_HOUR = 14               # don't fire a stale "midday" digest after 2pm
 IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
 PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
 
@@ -264,6 +266,41 @@ def _push_digest(sr: "scan.ScanResult") -> bool:
     return True
 
 
+def _push_intraday(sr: "scan.IntradayResult") -> bool:
+    """Midday same-day digest: live movers + today's filings/insider. Returns True if sent."""
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send intraday digest")
+        return False
+    if not sr.movers and not sr.filings and not sr.insider:
+        log.info("intraday: nothing to report — no email sent")
+        return False
+    md = scan.format_intraday_digest(sr)
+    hhmm = (sr.asof or datetime.now(IST)).strftime("%H:%M")
+    emailer.send_report(f"🔔 Watchlist — same-day ({hhmm})", md, to=to,
+                        html=emailer.body_html(md, "Watchlist — same-day"))
+    log.info("intraday digest sent to %s (%d movers, %d filings, %d insider)",
+             to, len(sr.movers), len(sr.filings), len(sr.insider))
+    return True
+
+
+def maybe_intraday() -> None:
+    """Fire the midday same-day digest once per trading day, in the 12:30–14:00 IST window."""
+    now = datetime.now(IST)
+    if not (INTRADAY_HOUR, INTRADAY_MIN) <= (now.hour, now.minute) or now.hour >= INTRADAY_CUTOFF_HOUR:
+        return
+    if scan.already_intraday_today() or not scan.market_open_today():
+        return
+    log.info("midday intraday digest firing")
+    try:
+        sr = scan.run_intraday_scan()
+    except Exception:  # noqa: BLE001
+        log.exception("intraday scan failed")
+        return                                  # no mark → retried next heartbeat (still in window)
+    _push_intraday(sr)
+    scan.mark_intraday()
+
+
 def maybe_scan() -> None:
     """Fire the watchlist scan once per trading day, first heartbeat at/after 18:00 IST."""
     now = datetime.now(IST)
@@ -311,7 +348,8 @@ def main() -> None:
                 activity = inbox.wait(timeout=IDLE_TIMEOUT)
                 if activity:
                     _drain(inbox)
-                maybe_scan()         # heartbeat: fires at most once/day
+                maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
+                maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")
         finally:
