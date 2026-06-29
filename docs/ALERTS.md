@@ -62,8 +62,9 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   notable **document-bearing** events (results / concall / scheme / rights / QIP),
   the attached filing PDF is **auto-downloaded and read by Gemini** — a concise
   investor analysis (guidance, key numbers, contingent-liability / related-party
-  flags) is shown **inline** as a quote block (`scan._enrich_event_docs` →
-  `synthesize.analyze_filing`; capped at 5/scan). No PDFs attached.
+  flags) is shown **inline**, point-wise and **uncapped in length** (`scan._enrich_event_docs`
+  → `synthesize.analyze_filing`; every doc-bearing event is read, a generous 25/scan safety
+  bound). No PDFs attached.
 - **🔬 Insider & promoter trades (when they happen):** SEBI PIT Reg 7(2) disclosures for
   watchlist names — promoter/director buys & sells and open-market trades, with the ₹ size and
   the holding % before→after (`nse_api.insider_trades_batch` → `scan._insider_alerts`).
