@@ -11,20 +11,28 @@ Personal use. Not a hosted product.
 ## What it does
 
 - **Scrape** primary sources for prices, filings, financials, corporate actions,
-  and delivery/derivatives data (via `scrapling`).
-- **Analyse** — fundamental (multi-year statements, ratios, quality/forensic
-  scores, FCFF/FCFE, CFO-quality, valuation vs own history & sector) and
-  technical (trend, momentum, volume, delivery-% conviction, relative strength).
-- **Report** — Gemini reads the quant brief (+ optional filing PDF) and writes a
-  forensic thesis, delivered via a **Telegram bot** *or an **email bot*** (chosen
-  by the `CHANNELS` flag) — both interactive (ask for a stock) and push (daily
-  watchlist digest), with formatted inline output + a styled PDF.
+  delivery/derivatives data, and **live intraday quotes** (NSE), plus the daily
+  **USD/INR** reference rate (FBIL) and **gold/silver/crude** futures (MCX) — via
+  `scrapling` (Camoufox browser tier for the anti-bot `/api/*`).
+- **Analyse** — fundamental (multi-year statements, ratios, quality/forensic scores,
+  FCFF/FCFE, CFO-quality); **sector-appropriate valuation** (P/B-on-ROE for financials,
+  EV/EBITDA + mid-cycle for cyclicals, P/E elsewhere; current multiple as an own-history
+  percentile; **reverse-DCF** as the centrepiece; a **forward multiple** from management's
+  own guidance); and technical (trend, momentum, delivery-% conviction).
+- **Signals** — FII F&O positioning (smart-money sentiment), **insider/promoter (SEBI PIT)
+  trades**, promoter pledge, bulk/block deals.
+- **Report** — Gemini reads the quant brief (+ filing PDFs) and writes a forensic thesis,
+  delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
+  (name a stock → styled PDF + inline thesis) and **push** — a **full daily digest at
+  18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
+  USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
+  lighter **midday "same-day" digest at 12:30** (live movers + today's filings/insider).
 
 ## Status
 
-Working end-to-end (NSE/BSE → DuckDB → fundamentals/forensics/technicals/
-valuation → Gemini report → Telegram **or email** bot, always-on). Phases 1–5
-done (on-demand reports + daily watchlist alerts); an email channel mirrors the
+Working end-to-end (NSE/BSE/MCX/FBIL → DuckDB → fundamentals/forensics/technicals/
+valuation + signals → Gemini report → email **or** Telegram bot, always-on). On-demand
+reports + a midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
 Telegram one for when Telegram is ISP-blocked. Docs:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
