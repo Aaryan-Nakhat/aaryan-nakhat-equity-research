@@ -3,11 +3,16 @@
 > **Initial-thinking inventory** of primary/official Indian equity data sources
 > and their scrapability. This was a *first pass from reasoning*.
 >
-> ⚠️ **Partially validated (2026-06-13).** Key sources have now been probed with
+> ⚠️ **Validated & extended (updated 2026-06-29).** Sources have been probed with
 > `scrapling` — see [`SCRAPING.md`](SCRAPING.md) for empirical results, which
-> **supersede** the ratings below where they differ. Notably: NSE bhavcopy +
-> delivery % is **plain-HTTP** via the archive host (easier than the 🟡 below),
-> while NSE `/api/quote-equity` is currently **WAF-blocked** even in a browser.
+> **supersede** the ratings below. Notably since cracked: NSE bhavcopy + delivery % is
+> **plain-HTTP** via the archive host; the old `/api/quote-equity` (now 403) and
+> `/api/equity-stockIndices` (404) moved to NSE's **NextApi** live-quote endpoint;
+> **insider/promoter trades** via `/api/corporates-pit`; **post-Dec-2024 financials** via
+> SEBI's **integrated-filing** feed (`in-capmkt` XBRL). And beyond NSE — **USD/INR** (FBIL
+> JSON, no browser) and **gold/silver/crude** futures (MCX, via an `X-Requested-With`
+> header) are now wired into the digest header. (The 10-yr G-Sec yield — RBI/FBIL/CCIL —
+> remains the one deferred macro feed.)
 
 ## Ground rules
 
