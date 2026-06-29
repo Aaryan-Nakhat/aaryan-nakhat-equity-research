@@ -26,7 +26,8 @@ Personal use. Not a hosted product.
   (name a stock → styled PDF + inline thesis) and **push** — a **full daily digest at
   18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
-  lighter **midday "same-day" digest at 12:30** (live movers + today's filings/insider).
+  **midday "same-day" digest at 12:30** with the same sections on **live** intraday data
+  (live indices/VIX/commodities, Upcoming, live movers, today's filings/insider).
 
 ## Status
 
