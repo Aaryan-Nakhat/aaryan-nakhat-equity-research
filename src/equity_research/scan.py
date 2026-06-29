@@ -129,10 +129,13 @@ def live_market_context() -> str:
 
 
 def _fii_dii_line(data) -> str:
-    """One-line FII/DII net cash flows from the fiidiiTradeReact feed (best-effort)."""
+    """One-line FII/DII net cash flows from the fiidiiTradeReact feed (best-effort).
+    Tagged with the feed's trade date (it's published after close, so prior-session intraday)."""
     out: dict[str, float] = {}
+    asof = None
     for r in data if isinstance(data, list) else []:
         cat = (r.get("category") or "").upper()
+        asof = asof or r.get("date")
         try:
             net = float(r["netValue"]) if r.get("netValue") is not None else None
         except (TypeError, ValueError, KeyError):
@@ -145,7 +148,11 @@ def _fii_dii_line(data) -> str:
             out["DII"] = net
     parts = [f"{k} {'+' if v >= 0 else '−'}₹{abs(v):,.0f} cr"
              for k in ("FII", "DII") if (v := out.get(k)) is not None]
-    return "- 💸 **FII / DII (cash)** — " + " · ".join(parts) if parts else ""
+    if not parts:
+        return ""
+    d = _parse_dt(asof)
+    tag = f" (as of {d:%d-%b})" if d else (f" (as of {asof})" if asof else "")
+    return "- 💸 **FII / DII (cash)** — " + " · ".join(parts) + tag
 
 
 def _fii_futures_line(d: dict) -> str:
@@ -159,7 +166,9 @@ def _fii_futures_line(d: dict) -> str:
     trend = f"; was {prev:.0f}% last wk" if prev is not None else ""
     retail = d.get("retail_net_long_pct")
     rtxt = f" · retail {retail:.0f}% long" if retail is not None else ""
-    return f"- 🌍 **FII index futures** — {nl:.0f}% net-long ({label}{trend}){rtxt}"
+    dt = d.get("date")                          # participant-OI is EOD (prior-session intraday)
+    asof = f" (as of {dt:%d-%b})" if dt else ""
+    return f"- 🌍 **FII index futures** — {nl:.0f}% net-long ({label}{trend}){rtxt}{asof}"
 
 
 def _money_lines(usd: float | None, comm: dict) -> str:
@@ -391,13 +400,23 @@ def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30, labeler=Non
         except Exception:  # noqa: BLE001 — labeling is best-effort
             log.exception("LLM event labeling failed — using heuristic purposes")
 
+    bm_dates: set = set()
+
     def _bm(i, r):
+        sym, d = r.get("bm_symbol"), _parse_dt(r.get("bm_date"))
         purpose = llm.get(i) or _bm_purpose(r.get("bm_desc") or "", r.get("bm_purpose") or "")
-        add(r.get("bm_symbol"), _parse_dt(r.get("bm_date")), f"Board meeting — {purpose}"[:70])
+        add(sym, d, f"Board meeting — {purpose}")          # no length cap — full purpose
+        if sym and d:
+            bm_dates.add((sym, d))
 
     _each(bms, _bm)
-    _each(feeds.get("event_calendar"), lambda i, r: add(
-        r.get("symbol"), _parse_dt(r.get("date")), r.get("purpose") or "Event"))
+
+    def _cal(i, r):           # skip the calendar entry a board meeting already covers (same sym+date)
+        sym, d = r.get("symbol"), _parse_dt(r.get("date"))
+        if (sym, d) not in bm_dates:
+            add(sym, d, r.get("purpose") or "Event")
+
+    _each(feeds.get("event_calendar"), _cal)
     _each(feeds.get("corp_actions"), lambda i, r: add(
         r.get("symbol"), _parse_dt(r.get("exDate")),
         f"{(r.get('subject') or 'Corporate action')} (ex-date)"))
