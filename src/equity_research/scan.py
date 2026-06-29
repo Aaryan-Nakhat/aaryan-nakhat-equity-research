@@ -73,10 +73,13 @@ def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = 
 
 @dataclass
 class IntradayResult:
-    """Lighter midday snapshot — live movers + today's filings/insider (no EOD data)."""
+    """Midday snapshot — the full digest's sections with LIVE data (live indices + movers +
+    commodities; FII/DII & positioning are prior-session until published after close)."""
     movers: list[dict] = field(default_factory=list)
     filings: list[dict] = field(default_factory=list)
     insider: list[str] = field(default_factory=list)
+    market: str = ""
+    upcoming: list[dict] = field(default_factory=list)
     asof: "datetime | None" = None
 
 
@@ -91,16 +94,8 @@ _INDEX_EMOJI = {"Nifty 50": "🇮🇳", "Nifty Bank": "🏦", "Nifty Financial S
                 "Nifty Realty": "🏠"}
 
 
-def market_context(con: duckdb.DuckDBPyConnection) -> str:
-    """Market header — Nifty 50 + the key sectoral indices + India VIX (latest close
-    and day move), so a stock's move reads against the market and its sector."""
-    wanted = _HEADER_INDICES + ["India VIX"]
-    rows = con.execute(
-        "SELECT index_name, close, pct_change FROM index_close WHERE index_name IN ({}) "
-        "AND trade_date = (SELECT max(trade_date) FROM index_close)".format(
-            ",".join("?" * len(wanted))), wanted).fetchall()
-    by_name = {r[0]: (r[1], r[2]) for r in rows if r[1] is not None}
-
+def _index_header_bullets(by_name: dict) -> str:
+    """Point-wise indices + India VIX header from {display-name: (value, pct)}."""
     def val(close, chg, nd=0):
         return f"{close:,.{nd}f}" + (f" ({chg:+.1f}%)" if chg is not None else "")
 
@@ -112,6 +107,25 @@ def market_context(con: duckdb.DuckDBPyConnection) -> str:
     if "India VIX" in by_name:
         lines.append("- 😨 **India VIX** — " + val(*by_name["India VIX"], nd=1))
     return "\n".join(lines)
+
+
+def market_context(con: duckdb.DuckDBPyConnection) -> str:
+    """Market header — Nifty 50 + the key sectoral indices + India VIX from the latest
+    EOD close (for the 18:00 digest)."""
+    wanted = _HEADER_INDICES + ["India VIX"]
+    rows = con.execute(
+        "SELECT index_name, close, pct_change FROM index_close WHERE index_name IN ({}) "
+        "AND trade_date = (SELECT max(trade_date) FROM index_close)".format(
+            ",".join("?" * len(wanted))), wanted).fetchall()
+    return _index_header_bullets({r[0]: (r[1], r[2]) for r in rows if r[1] is not None})
+
+
+def live_market_context() -> str:
+    """Market header from **live** index values (NSE /api/allIndices) for the midday digest."""
+    quotes = nse_api.live_indices()
+    by_name = {n: quotes[n.upper()] for n in (_HEADER_INDICES + ["India VIX"])
+               if n.upper() in quotes}
+    return _index_header_bullets(by_name)
 
 
 def _fii_dii_line(data) -> str:
@@ -659,8 +673,10 @@ def _intraday_insider(insider_by_sym: dict) -> list[str]:
 
 
 def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayResult:
-    """Midday snapshot — live movers + today's filings + today's insider trades. No EOD
-    ingest (today's bhavcopy doesn't exist yet); every feed best-effort."""
+    """Midday snapshot — the full digest's sections with LIVE data: live market header
+    (live indices · VIX · FII/DII · FII-futures · USD/INR · commodities), Upcoming, live
+    Movers, today's filings + insider. No EOD ingest (today's bhavcopy doesn't exist yet);
+    FII/DII & positioning are prior-session until published after close. All best-effort."""
     own = con is None
     con = con or connect()
     try:
@@ -674,17 +690,31 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
                 log.exception("intraday section failed: %s", getattr(fn, "__name__", fn))
                 return default
 
+        def _labeler(descs):
+            from equity_research.reports import synthesize
+            return synthesize.label_events(descs)
+
         quotes = _safe(lambda: nse_api.live_quotes_batch(syms) if syms else {}, {})
         anns = _safe(lambda: nse_api.corporate_announcements_batch(syms) if syms else {}, {})
         insider = _safe(lambda: nse_api.insider_trades_batch(syms) if syms else {}, {})
-        # fill any missing company names from the live quote
-        for s in syms:
+        feeds = _safe(lambda: nse_api.market_feeds() if syms else {}, {})
+        usd = _safe(lambda: fbil.usd_inr(), None)
+        comm = _safe(lambda: mcx.commodities(), {})
+        for s in syms:                                  # fill missing names from the live quote
             if names.get(s) in (None, s) and (quotes.get(s) or {}).get("company"):
                 names[s] = quotes[s]["company"]
+        market = "\n".join(x for x in (
+            _safe(lambda: live_market_context(), ""),    # LIVE indices + VIX
+            _safe(lambda: _fii_dii_line(feeds.get("fiidii") or []), ""),
+            _safe(lambda: _fii_futures_line(positioning.fii_index_futures(con)), ""),
+            _safe(lambda: _money_lines(usd, comm), ""),   # USD/INR + live commodities
+        ) if x)
         return IntradayResult(
             movers=_safe(lambda: _intraday_movers(syms, quotes), []),
             filings=_safe(lambda: _intraday_filings(anns, names), []),
             insider=_safe(lambda: _intraday_insider(insider), []),
+            market=market,
+            upcoming=_safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
             asof=datetime.now(_IST),
         )
     finally:
@@ -693,9 +723,18 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
 
 
 def format_intraday_digest(sr: IntradayResult) -> str:
-    """Lighter midday digest — live movers + today's filings/insider. By company name."""
+    """Midday digest — live market header, Upcoming, live Movers, today's Events + Insider."""
     asof = sr.asof or datetime.now(_IST)
+    names = {m["symbol"]: m["company"] for m in sr.movers}
     parts = [f"# 🔔 Watchlist — same-day ({asof:%d-%b %H:%M} IST)"]
+    if sr.market:
+        parts.append(sr.market)
+    if sr.upcoming:
+        rows = ["## 📅 Upcoming"]
+        for u in sr.upcoming:
+            nm = names.get(u["symbol"]) or u["symbol"]
+            rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
+        parts.append("\n".join(rows))
     if sr.movers:
         rows = ["## Movers (live)"]
         for m in sr.movers:
@@ -709,7 +748,7 @@ def format_intraday_digest(sr: IntradayResult) -> str:
                         f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}")
         parts.append("\n".join(rows))
     if sr.filings:
-        rows = ["## 📄 Filed today"]
+        rows = ["## Events (filed today)"]
         for f in sr.filings:
             emo = alerts.EMOJI.get(f["sev"], "🔔")
             rows.append(f"- {emo} **{f['company']}** ({f['symbol']}) — {f['title']}"
@@ -719,8 +758,9 @@ def format_intraday_digest(sr: IntradayResult) -> str:
         rows = ["## 🔬 Insider & promoter (today)"]
         rows += [f"- {ln}" for ln in sr.insider]
         parts.append("\n".join(rows))
-    parts.append("_Same-day snapshot — the full review (delivery, positioning, valuation) "
-                 "is the 6 PM digest. Reply with a company name for its report._")
+    parts.append("_Same-day snapshot — FII/DII & positioning are prior-session; the deep "
+                 "filing analysis + EOD delivery/valuation come in the 6 PM digest. "
+                 "Reply with a company name for its report._")
     return "\n\n".join(parts)
 
 
