@@ -111,7 +111,7 @@ def _insider_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
     else:
         L.append("- _Recent activity is routine (off-market / designated-person ESOP); "
                  "no material promoter/open-market signal._")
-    for r in recs[:8]:
+    for r in recs:                                   # all disclosures, newest-first — no cap
         t = (r["txn"] or "").lower()
         emo = "🟢" if "buy" in t else "🔴" if "sell" in t else "🔹"
         size = (f"₹{r['val']:,.2f} cr" if r["val"] and r["val"] >= 0.01
