@@ -1,10 +1,11 @@
 [project]
 name = "equity-research"
 version = "0.1.0"
-description = "Private equity-research workbench for Indian stocks (NSE/BSE) from primary/official sources."
+description = "Personal equity-research workbench for Indian stocks (NSE/BSE) from primary/official sources."
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [{ name = "Aaryan Nakhat", email = "aaryan.nakhat@gmail.com" }]
+license = { file = "LICENSE" }
+authors = [{ name = "Aaryan Nakhat" }]
 dependencies = [
     "scrapling[fetchers]>=0.4",
     "duckdb>=1.0",
