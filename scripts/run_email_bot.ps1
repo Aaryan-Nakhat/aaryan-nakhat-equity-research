@@ -19,7 +19,7 @@ Get-Content (Join-Path $root ".env") | ForEach-Object {
 $env:PYTHONUNBUFFERED = "1"
 
 $uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
-if (-not $uv) { $uv = "C:\Users\Aaryan Nakhat\.local\bin\uv.exe" }
+if (-not $uv) { $uv = "$env:USERPROFILE\.local\bin\uv.exe" }
 
 # Launcher markers go to a separate file; the bot logs to email_bot.log itself.
 $launchlog = Join-Path $root "data\processed\email_launcher.log"
