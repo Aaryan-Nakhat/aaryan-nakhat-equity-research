@@ -359,6 +359,73 @@ def option_chain_equity(symbol: str) -> Any:
     return fetch_api(f"/api/option-chain-equities?symbol={q(symbol)}")
 
 
+# Live intraday quote — NSE moved these off /api/quote-equity (403) and
+# /api/equity-stockIndices (404) to the new /api/NextApi/ structure.
+_QUOTE = ("/api/NextApi/apiClient/GetQuoteApi?functionName=getSymbolData"
+          "&marketType=N&series=EQ&symbol=")
+
+
+def _parse_quote(data: Any) -> dict:
+    """Live price snapshot from getSymbolData's ``equityResponse[0]`` ({} on bad shape)."""
+    try:
+        r = (data.get("equityResponse") or [None])[0]
+    except (AttributeError, TypeError):
+        return {}
+    if not r:
+        return {}
+    m, t = r.get("metaData") or {}, r.get("tradeInfo") or {}
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    mcap = num(t.get("totalMarketCap"))
+    return {
+        "company": (m.get("companyName") or "").strip() or None,
+        "last": num(t.get("lastPrice")) or num(m.get("lastPrice")),
+        "pchange": num(m.get("pChange")),
+        "change": num(m.get("change")),
+        "open": num(m.get("open")),
+        "high": num(m.get("dayHigh")),
+        "low": num(m.get("dayLow")),
+        "prev_close": num(m.get("previousClose")),
+        "volume": num(t.get("totalTradedVolume")),
+        "deliv_pct": num(t.get("deliveryToTradedQuantity")),
+        "mcap_cr": mcap / 1e7 if mcap else None,
+    }
+
+
+def live_quote(symbol: str) -> dict:
+    """Live intraday quote for ``symbol`` ({} if unavailable). During market hours;
+    off-hours returns the last close."""
+    try:
+        return _parse_quote(fetch_api(_QUOTE + q(symbol)))
+    except Exception:  # noqa: BLE001 — best-effort, never break the scan
+        return {}
+
+
+def live_quotes_batch(symbols: list[str]) -> dict[str, dict]:
+    """Live quotes for many symbols in ONE Camoufox session (warm once, in-page XHR
+    per symbol). {symbol: parsed-quote-or-{}}."""
+    paths = {s: _QUOTE + q(s) for s in symbols}
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, dict] = {}
+    for sym, body in captured.items():
+        try:
+            out[sym] = _parse_quote(json.loads(body)) if body else {}
+        except (json.JSONDecodeError, TypeError):
+            out[sym] = {}
+    return out
+
+
 def trading_holidays() -> set:
     """NSE equity (CM segment) trading holidays as a set of ``date`` objects."""
     from datetime import datetime as _dt

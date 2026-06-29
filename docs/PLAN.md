@@ -193,7 +193,9 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 
 **Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
 `positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +
-deep-report section (`nse_api.insider_trades`, `insider_trades` table).
+deep-report section (`nse_api.insider_trades`, `insider_trades` table); **midday same-day
+digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email_bot.maybe_intraday`)
+— live movers + today's filings/insider via NSE's NextApi live quote (`live_quotes_batch`).
 - Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
   holdings overlap).
 - Macro overlay (RBI / MOSPI) feeding sector calls.

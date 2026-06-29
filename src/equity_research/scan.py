@@ -71,6 +71,15 @@ def commit_scan_state(sr: "ScanResult", con: duckdb.DuckDBPyConnection | None = 
             con.close()
 
 
+@dataclass
+class IntradayResult:
+    """Lighter midday snapshot — live movers + today's filings/insider (no EOD data)."""
+    movers: list[dict] = field(default_factory=list)
+    filings: list[dict] = field(default_factory=list)
+    insider: list[str] = field(default_factory=list)
+    asof: "datetime | None" = None
+
+
 # Digest header: headline + sectoral Nifty indices (display name = strip "Nifty ",
 # except where shortened below). India VIX is appended after. Easy to adjust.
 _HEADER_INDICES = ["Nifty 50", "Nifty Bank", "Nifty Financial Services", "Nifty IT",
@@ -216,6 +225,26 @@ def mark_scanned(con: duckdb.DuckDBPyConnection | None = None) -> None:
     con = con or connect()
     try:
         _set_meta(con, "last_scan_date", datetime.now(_IST).date().isoformat())
+    finally:
+        if own:
+            con.close()
+
+
+def already_intraday_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_intraday_date") == datetime.now(_IST).date().isoformat()
+    finally:
+        if own:
+            con.close()
+
+
+def mark_intraday(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_intraday_date", datetime.now(_IST).date().isoformat())
     finally:
         if own:
             con.close()
@@ -575,6 +604,124 @@ def _insider_alerts(con: duckdb.DuckDBPyConnection, insider_by_sym: dict) -> lis
             if did and (sym, did) not in seen and _is_material_insider(r) and recent(r):
                 lines.append(_fmt_insider(sym, r))
     return lines
+
+
+def _intraday_movers(syms: list[str], quotes: dict) -> list[dict]:
+    rows = []
+    for s in syms:
+        d = quotes.get(s) or {}
+        if d.get("last") is None or d.get("pchange") is None:
+            continue
+        rows.append({"symbol": s, "company": d.get("company") or s, **d})
+    rows.sort(key=lambda r: abs(r.get("pchange") or 0), reverse=True)
+    return rows
+
+
+def _intraday_filings(anns_by_sym: dict, names: dict) -> list[dict]:
+    """Today's (IST) non-routine corporate filings across the watchlist."""
+    from equity_research.analysis.alerts import _categorise, _clip
+    today = datetime.now(_IST).date()
+    out, seen = [], set()
+    for sym, anns in (anns_by_sym or {}).items():
+        for a in anns or []:
+            try:
+                adt = datetime.strptime(a.get("an_dt", "")[:20].strip(), "%d-%b-%Y %H:%M:%S")
+            except (ValueError, TypeError):
+                continue
+            if adt.date() != today:
+                continue
+            title, sev, _ = _categorise(a.get("desc", ""), a.get("attchmntText", ""),
+                                        str(a.get("hasXbrl", "")).lower() == "true")
+            if title is None or (sym, title) in seen:        # routine noise / repeat
+                continue
+            seen.add((sym, title))
+            out.append({"symbol": sym, "company": names.get(sym, sym), "sev": sev, "title": title,
+                        "body": _clip(a.get("attchmntText") or a.get("desc") or ""), "time": adt})
+    out.sort(key=lambda r: r["time"], reverse=True)
+    return out
+
+
+def _intraday_insider(insider_by_sym: dict) -> list[str]:
+    """Today's (IST) material insider/promoter disclosures, formatted."""
+    today = datetime.now(_IST).date()
+    out = []
+    for sym, rows in (insider_by_sym or {}).items():
+        for r in rows or []:
+            if not _is_material_insider(r):
+                continue
+            try:
+                ddt = datetime.strptime((r.get("disclosure_dt") or "").strip(), "%d-%b-%Y %H:%M")
+            except (ValueError, TypeError):
+                continue
+            if ddt.date() == today:
+                out.append(_fmt_insider(sym, r))
+    return out
+
+
+def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayResult:
+    """Midday snapshot — live movers + today's filings + today's insider trades. No EOD
+    ingest (today's bhavcopy doesn't exist yet); every feed best-effort."""
+    own = con is None
+    con = con or connect()
+    try:
+        syms = watchlist.symbols(con)
+        names = {s: (c or s) for s, c in watchlist.entries(con)}
+
+        def _safe(fn, default):
+            try:
+                return fn()
+            except Exception:  # noqa: BLE001
+                log.exception("intraday section failed: %s", getattr(fn, "__name__", fn))
+                return default
+
+        quotes = _safe(lambda: nse_api.live_quotes_batch(syms) if syms else {}, {})
+        anns = _safe(lambda: nse_api.corporate_announcements_batch(syms) if syms else {}, {})
+        insider = _safe(lambda: nse_api.insider_trades_batch(syms) if syms else {}, {})
+        # fill any missing company names from the live quote
+        for s in syms:
+            if names.get(s) in (None, s) and (quotes.get(s) or {}).get("company"):
+                names[s] = quotes[s]["company"]
+        return IntradayResult(
+            movers=_safe(lambda: _intraday_movers(syms, quotes), []),
+            filings=_safe(lambda: _intraday_filings(anns, names), []),
+            insider=_safe(lambda: _intraday_insider(insider), []),
+            asof=datetime.now(_IST),
+        )
+    finally:
+        if own:
+            con.close()
+
+
+def format_intraday_digest(sr: IntradayResult) -> str:
+    """Lighter midday digest — live movers + today's filings/insider. By company name."""
+    asof = sr.asof or datetime.now(_IST)
+    parts = [f"# 🔔 Watchlist — same-day ({asof:%d-%b %H:%M} IST)"]
+    if sr.movers:
+        rows = ["## Movers (live)"]
+        for m in sr.movers:
+            pc = m.get("pchange")
+            emo = "🟢" if pc and pc > 0 else "🔴" if pc and pc < 0 else "⚪"
+            rng = (f" · day {_fmt_price(m['low'])}–{_fmt_price(m['high'])}"
+                   if m.get("low") and m.get("high") else "")
+            deliv = f" · deliv {m['deliv_pct']:.0f}%" if m.get("deliv_pct") is not None else ""
+            pct = f"{pc:+.1f}%" if pc is not None else "n/a"
+            rows.append(f"- {emo} **{m['company']}** ({m['symbol']}) — "
+                        f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}")
+        parts.append("\n".join(rows))
+    if sr.filings:
+        rows = ["## 📄 Filed today"]
+        for f in sr.filings:
+            emo = alerts.EMOJI.get(f["sev"], "🔔")
+            rows.append(f"- {emo} **{f['company']}** ({f['symbol']}) — {f['title']}"
+                        + (f": {f['body']}" if f["body"] else ""))
+        parts.append("\n".join(rows))
+    if sr.insider:
+        rows = ["## 🔬 Insider & promoter (today)"]
+        rows += [f"- {ln}" for ln in sr.insider]
+        parts.append("\n".join(rows))
+    parts.append("_Same-day snapshot — the full review (delivery, positioning, valuation) "
+                 "is the 6 PM digest. Reply with a company name for its report._")
+    return "\n\n".join(parts)
 
 
 def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResult:

@@ -75,6 +75,27 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
 Built by `scan.format_digest`; all market-wide feeds come from `nse_api.market_feeds`
 in one browser session. Shared by the email + Telegram channels.
 
+## The midday digest (same-day, 12:30 IST)
+
+A second, **lighter** digest at ~12:30 PM for same-day opportunities — `🔔 Watchlist —
+same-day (HH:MM)`. Fired once per trading day in the **12:30–14:00 IST** window by
+`email_bot.maybe_intraday` (heartbeat-gated; a 2pm cutoff avoids a stale "midday" if the
+bot was down), deduped by `scan.already_intraday_today`/`mark_intraday`
+(`_meta("last_intraday_date")`). Built by `scan.run_intraday_scan` →
+`scan.format_intraday_digest`:
+- **Movers (live):** every watchlist stock's **live** price, day %change, day range and
+  **intraday delivery %**, sorted by absolute move — from NSE's NextApi live quote
+  (`nse_api.live_quotes_batch` → `getSymbolData`; the old `quote-equity`/`equity-stockIndices`
+  paths are dead). Best-effort per symbol (a few small/SME names may not quote on `EQ`/`N`).
+- **📄 Filed today:** the watchlist's non-routine corporate filings dated *today*
+  (`corporate_announcements_batch` → `alerts._categorise`); **no** heavy per-PDF Gemini read
+  here (kept fast) — the 18:00 digest does the deep read.
+- **🔬 Insider & promoter (today):** today's *material* PIT disclosures (`_intraday_insider`).
+
+It's a **live snapshot** — it does NOT touch the daily dedup markers or carry EOD-only signals
+(bhavcopy delivery, FII positioning, valuation); the **18:00 digest stays the authoritative,
+deduped record**. Mild, expected overlap between the two.
+
 ## Events
 
 The pure momentum/trading signals were **dropped** (golden/death cross,
