@@ -424,15 +424,21 @@ def ingest_mf_holdings(con: duckdb.DuckDBPyConnection, amc_name: str,
     scheme/month/holding). Returns rows written (0 if the AMC is uncovered or the
     month isn't published yet).
     """
+    import calendar as _cal
     from datetime import timedelta
     from equity_research.scrapers import mf_holdings as mfh
     if as_of is None:                            # default: most recent published month-end
         as_of = date.today().replace(day=1) - timedelta(days=1)
+    me = date(as_of.year, as_of.month, _cal.monthrange(as_of.year, as_of.month)[1])
+    # monthly guard: if we already hold this AMC's month, skip the (heavy) fetch entirely
+    have = con.execute(
+        "SELECT count(*) FROM mf_holdings h JOIN mf_scheme s USING(scheme_code) "
+        "WHERE s.amc = ? AND h.as_of = ?", [amc_name, me]).fetchone()[0]
+    if have:
+        return 0
     url, rows = mfh.fetch_amc_holdings(amc_name, as_of)
     if not rows:
         return 0
-    import calendar as _cal
-    me = date(as_of.year, as_of.month, _cal.monthrange(as_of.year, as_of.month)[1])
     code_cache: dict[str, int | None] = {}
     out = []
     for r in rows:

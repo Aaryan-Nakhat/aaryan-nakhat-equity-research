@@ -23,7 +23,8 @@ Personal use. Not a hosted product.
   trades**, promoter pledge, bulk/block deals.
 - **Mutual funds** *(new track)* — AMFI NAV backbone (`mf_scheme`/`mf_nav`, accumulated daily)
   + returns/risk analytics (CAGR, Sharpe, Sortino, max drawdown, rolling returns) + per-AMC
-  monthly **holdings** (`mf_holdings`, registry of parsers — PPFAS live). **Email `fund: <name>`**
+  monthly **holdings** (`mf_holdings`, registry of parsers over a generic SEBI-format reader —
+  PPFAS + HDFC live). **Email `fund: <name>`**
   → a fund deep-report: returns · risk · rolling consistency · category percentile · portfolio
   concentration · **watchlist overlap** (which of your stocks the fund holds). Broader AMC
   holdings coverage + forensic look-through are the next steps (see [`docs/PLAN.md`](docs/PLAN.md)).

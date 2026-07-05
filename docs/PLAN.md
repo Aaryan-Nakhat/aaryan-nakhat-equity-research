@@ -166,8 +166,8 @@ Turn the workbench into a fund-aware tool: MF as an institutional-conviction sig
 watchlist, fund research deep-reports, and forensic look-through. Sequenced so the hard
 per-AMC holdings scraping is quarantined to its own phase. **Live now:** email `fund: <name>`
 → a returns/risk/rolling report with portfolio + watchlist-overlap look-through (any AMFI fund;
-holdings for AMCs registered so far — PPFAS). Remaining work is per-item below (mostly broader
-AMC holdings coverage + report enrichment).
+holdings for AMCs registered so far — **PPFAS + HDFC**). Remaining work is per-item below (mostly
+broader AMC holdings coverage + report enrichment).
 
 - **Phase 1 — NAV backbone + analytics ✅ done.** AMFI is the primary source (no bot wall):
   `scrapers/amfi.py` — `fetch_navall()` parses the daily `NAVAll.txt` (14.2k schemes: code,
@@ -194,15 +194,20 @@ AMC holdings coverage + report enrichment).
   therefore better derived from Phase 3's monthly holdings (monthly not quarterly, and yields
   *which* funds). The **fund report already shows the reverse** (watchlist overlap per fund); the
   stock-side digest line ("which funds hold stock X") lands once holdings coverage is broad (below).
-- **Phase 3 — monthly holdings look-through ✅ done (PPFAS; coverage grows per-AMC).** No
-  consolidated primary feed exists — each AMC posts its own file, so `scrapers/mf_holdings.py` is
-  a **registry of per-AMC parsers** (`REGISTRY[amc] → fetcher`). First AMC: **PPFAS** (deterministic
-  monthly-XLSX URL; one worksheet per scheme; 597 holdings across its 7 schemes landed). Table
-  `mf_holdings` (scheme, as_of, ISIN, instrument, industry, qty, value ₹cr, %NAV); ingest
-  `ingest_mf_holdings` (maps each sheet → AMFI scheme_code) + `ingest_mf_holdings_all` (runs in
-  the daily scan, best-effort). Needs `openpyxl` (added). *Next:* register more AMCs (SBI/ICICI/
-  HDFC/Nippon/Kotak/…) — each is a `(url_builder, parser)` pair; and once ~15 AMCs are in, add the
-  stock-side digest line ("which funds accumulated/exited watchlist name X, MoM").
+- **Phase 3 — monthly holdings look-through ✅ done (PPFAS + HDFC live; coverage grows per-AMC).**
+  No consolidated primary feed — each AMC posts its own file, so `scrapers/mf_holdings.py` is a
+  **registry of per-AMC fetchers** (`REGISTRY[amc] → fetcher`) over one **generic SEBI-format
+  parser** (`parse_generic`: detects the header row + columns by label, auto-scales %NAV
+  fraction-vs-% and market-value ₹lakh-vs-₹cr) — so each new AMC is mostly just a URL. Two source
+  patterns proven: **PPFAS** (one workbook, sheet per scheme; deterministic URL; 597 holdings) and
+  **HDFC** (one direct-CDN file per scheme, listed on a JS page → `_capture_links` grabs the file
+  list, then parse each; 7,210 holdings across 92 schemes). Table `mf_holdings`; ingest
+  `ingest_mf_holdings` (maps each sheet/file → AMFI scheme_code; **monthly guard** skips the heavy
+  fetch when the month is already stored) + `ingest_mf_holdings_all` (daily scan, best-effort).
+  Needs `openpyxl`. *Next:* register more AMCs — SBI/ICICI/Kotak/Nippon/etc. (each is a small
+  fetcher; **ICICI** = WAF'd JSON API at `apimf.icicipruamc.com/nms/v1/downloads/…` + CORS, so it
+  needs its own crack; the AMFI disclosure page is the directory of each AMC's file host). Once
+  ~15 AMCs are in, add the stock-side digest line ("which funds accumulated/exited name X, MoM").
 - **Phase 4 — fund deep-report ✅ done (live).** `reports/fund_brief.py` — free-text fund resolver
   (`resolve_fund`, prefers Direct-Growth) → on-demand history backfill → returns (CAGR/absolute),
   risk (vol/Sharpe/Sortino/max-DD), rolling-1y, category percentile (best-effort), portfolio
