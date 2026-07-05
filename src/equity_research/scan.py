@@ -19,7 +19,12 @@ import duckdb
 from equity_research.analysis import alerts, fundamentals, positioning, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
-from equity_research.ingest import ingest_eod, store_pledge
+from equity_research.ingest import (
+    ingest_eod,
+    ingest_mf_holdings_all,
+    ingest_mf_navall,
+    store_pledge,
+)
 from equity_research.scrapers import fbil, mcx, nse_api
 from equity_research import watchlist
 
@@ -789,6 +794,11 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
     con = con or connect()
     try:
         refresh_eod(con)
+        try:                                 # accumulate the day's MF NAV universe
+            ingest_mf_navall(con)
+            ingest_mf_holdings_all(con)      # refresh covered AMCs' month-end holdings
+        except Exception:  # noqa: BLE001 — MF data is a bonus, never break the scan
+            pass
         syms = watchlist.symbols(con)
         # one batched browser session for all symbols' announcements
         try:

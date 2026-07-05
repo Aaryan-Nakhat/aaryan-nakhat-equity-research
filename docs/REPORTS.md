@@ -271,6 +271,27 @@ Always-on: `scripts/run_email_bot.ps1` (auto-restart loop, mirrors the Telegram
 launcher) → scheduled task **`EquityResearchEmailBot`**. Bot logs to
 `data/processed/email_bot.log`; launcher markers to `email_launcher.log`.
 
+## Fund report (`reports/fund_brief.py`) — mutual funds
+
+The fund-side analogue of the stock deep-brief. Email **`fund: <name>`** (or `mf: <name>`)
+in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
+(`resolve_fund`, token-AND match, disambiguation reuses the "which one?" pending UX with an
+`MF:` tag), backfills its NAV history on demand via the AMC-code map
+(`ingest.backfill_mf_scheme_history`), and renders a deterministic markdown report from
+`analysis/funds.py`:
+
+- **Returns** — trailing (CAGR ≥1y, absolute <1y) incl. since-inception.
+- **Risk** — annualised vol, Sharpe, Sortino, max drawdown (from daily NAV).
+- **Rolling 1-year** returns (worst/median/best — a consistency read).
+- **Category percentile** — rank vs same-category Direct-Growth peers (best-effort; needs
+  peer history, so thin until a broad backfill).
+- **Portfolio** (where `mf_holdings` coverage exists — PPFAS live): # holdings, top-10
+  concentration, biggest sector, top holdings, and **overlap with the user's stock
+  watchlist** (which of *your* names the fund holds, by weight).
+
+No LLM call yet (deterministic); a Gemini fund thesis + charted PDF + expense/AUM/manager
+lines are the planned enrichments (`docs/PLAN.md` → Mutual-fund module).
+
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.

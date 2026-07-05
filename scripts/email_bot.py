@@ -40,6 +40,7 @@ from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
 from equity_research.reports.pipeline import generate_report  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
+from equity_research.reports import fund_brief  # noqa: E402
 
 IST = ZoneInfo("Asia/Kolkata")
 SCAN_HOUR = 18
@@ -213,6 +214,54 @@ def _reply_text(req: EmailRequest, text: str) -> None:
                         in_reply_to=req.message_id, references=req.references or req.message_id)
 
 
+# ----------------- fund (mutual-fund) reports -----------------
+class _FundCand:
+    """Minimal Candidate shim so fund matches reuse the pending/disambiguation UX."""
+    def __init__(self, scheme_code: int, name: str) -> None:
+        self.symbol = f"MF:{scheme_code}"
+        self.name = name
+
+
+def _fund_query(subject: str) -> str | None:
+    """Return the fund name if the subject is a fund request ('fund: X' / 'mf: X'), else None."""
+    m = re.match(r"^\s*(?:re:\s*)?(?:fund|mf)\s*[:\-]\s*(.+)$", subject, flags=re.I)
+    return m.group(1).strip() if m else None
+
+
+def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
+    log.info("generating fund report for scheme %s (req from %s)", scheme_code, req.sender)
+    _reply_text(req, f"Got it — pulling the fund report for **{name}** (fetching NAV history). "
+                     "One moment…")
+    con = connect()
+    try:
+        md = fund_brief.build_fund_brief(con, scheme_code)
+    finally:
+        con.close()
+    if not md:
+        _reply_text(req, f"Couldn't build a report for '{name}' — no NAV history found.")
+        return
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md), in_reply_to=req.message_id,
+                        references=req.references or req.message_id)
+    log.info("sent fund report (scheme %s) to %s", scheme_code, req.sender)
+
+
+def _handle_fund(query: str, req: EmailRequest) -> None:
+    con = connect()
+    try:
+        cands = fund_brief.resolve_fund(con, query)
+    finally:
+        con.close()
+    if not cands:
+        _reply_text(req, f"Couldn't find a fund matching '{query}'. Try the fuller name, "
+                         "e.g. 'fund: Parag Parikh Flexi Cap'.")
+    elif len(cands) == 1:
+        _send_fund_report(cands[0][0], req, cands[0][1])
+    else:
+        _set_pending(req.sender, query, [_FundCand(c, n) for c, n in cands])
+        _send_choices(query, [_FundCand(c, n) for c, n in cands], req)
+
+
 # ----------------- request handling -----------------
 def handle_request(req: EmailRequest) -> None:
     basis = _basis(req.subject)                 # consolidated / standalone / auto (from the subject)
@@ -222,7 +271,16 @@ def handle_request(req: EmailRequest) -> None:
     if pending and sel is not None and 1 <= sel <= len(pending):
         symbol, name = pending[sel - 1]
         _clear_pending(req.sender)
-        _send_report(symbol, req, resolved_name=name, consolidated=basis)
+        if str(symbol).startswith("MF:"):       # a fund choice
+            _send_fund_report(int(symbol[3:]), req, name)
+        else:
+            _send_report(symbol, req, resolved_name=name, consolidated=basis)
+        return
+
+    # 1b) explicit fund request ('fund: <name>' / 'mf: <name>')
+    fq = _fund_query(req.subject)
+    if fq:
+        _handle_fund(fq, req)
         return
 
     # 2) fresh query from the subject

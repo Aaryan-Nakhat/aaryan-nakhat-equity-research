@@ -161,6 +161,60 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
   peers on demand** (`_ensure_peer_financials`); §9 adds a Beneish **false-positive caveat** when
   accruals + cash conversion are clean.
 
+### Mutual-fund module (new track — core shipped)
+Turn the workbench into a fund-aware tool: MF as an institutional-conviction signal on the
+watchlist, fund research deep-reports, and forensic look-through. Sequenced so the hard
+per-AMC holdings scraping is quarantined to its own phase. **Live now:** email `fund: <name>`
+→ a returns/risk/rolling report with portfolio + watchlist-overlap look-through (any AMFI fund;
+holdings for AMCs registered so far — PPFAS). Remaining work is per-item below (mostly broader
+AMC holdings coverage + report enrichment).
+
+- **Phase 1 — NAV backbone + analytics ✅ done.** AMFI is the primary source (no bot wall):
+  `scrapers/amfi.py` — `fetch_navall()` parses the daily `NAVAll.txt` (14.2k schemes: code,
+  ISINs, name, AMC, category → coarse asset-class + Direct/Regular + Growth/IDCW) and
+  `fetch_nav_history(amc_code, frm, to)` pulls per-AMC history (the report caps the range, so
+  ingest fetches in ~180-day windows). Tables `mf_scheme` + `mf_nav` (`common/db.py`); ingest
+  `ingest_mf_navall` (universe + daily point, accumulated forward → a NAV series) and
+  `ingest_mf_nav_history` (chunked backfill). `ingest_mf_navall` runs in the daily 6pm scan
+  (`scan.run_watchlist_scan`, best-effort). `analysis/funds.py` — point returns (CAGR ≥1y,
+  absolute <1y), risk (annualised vol, Sharpe, Sortino, max drawdown), rolling-1y distribution,
+  and a `summary()` bundle. Validated on Axis Large Cap (5.5y backfill).
+  - *Small follow-up:* AMFI name→numeric-AMC-code map so arbitrary funds can be one-shot
+    backfilled (history needs the `mf` code; the dropdown loads via JS, not static HTML —
+    scrape the postback JSON once, or hardcode the ~44 codes). Forward accumulation needs no map.
+- **Phase 1b — AMC-code map ✅ done.** `mf_amc` table + `ingest.build_mf_amc_map` (scrapes the
+  55 active AMC codes from the disclosure page's `RssNAV` links, resolves each → name via the
+  history report's AMC header). **50/51** `mf_scheme` AMCs resolvable → any fund's history is
+  one-shot backfillable by name (`ingest.backfill_mf_scheme_history`).
+- **Phase 2 — MF-ownership signal per watchlist stock (folded into Phase 3).** Intended as a
+  digest line ("MF holding 12.3% +0.8pp QoQ"). *Finding:* the NSE SHP **summary** endpoint —
+  `/api/NextApi/apiClient/GetQuoteApi?functionName=getShareholdingPattern&symbol=X` (cracked,
+  browser tier) — only exposes **promoter-vs-public + an `ndsid`**, not the MF/FII institutional
+  breakdown (its detail call's `functionName` is unknown — variants 400). The per-stock MF% is
+  therefore better derived from Phase 3's monthly holdings (monthly not quarterly, and yields
+  *which* funds). The **fund report already shows the reverse** (watchlist overlap per fund); the
+  stock-side digest line ("which funds hold stock X") lands once holdings coverage is broad (below).
+- **Phase 3 — monthly holdings look-through ✅ done (PPFAS; coverage grows per-AMC).** No
+  consolidated primary feed exists — each AMC posts its own file, so `scrapers/mf_holdings.py` is
+  a **registry of per-AMC parsers** (`REGISTRY[amc] → fetcher`). First AMC: **PPFAS** (deterministic
+  monthly-XLSX URL; one worksheet per scheme; 597 holdings across its 7 schemes landed). Table
+  `mf_holdings` (scheme, as_of, ISIN, instrument, industry, qty, value ₹cr, %NAV); ingest
+  `ingest_mf_holdings` (maps each sheet → AMFI scheme_code) + `ingest_mf_holdings_all` (runs in
+  the daily scan, best-effort). Needs `openpyxl` (added). *Next:* register more AMCs (SBI/ICICI/
+  HDFC/Nippon/Kotak/…) — each is a `(url_builder, parser)` pair; and once ~15 AMCs are in, add the
+  stock-side digest line ("which funds accumulated/exited watchlist name X, MoM").
+- **Phase 4 — fund deep-report ✅ done (live).** `reports/fund_brief.py` — free-text fund resolver
+  (`resolve_fund`, prefers Direct-Growth) → on-demand history backfill → returns (CAGR/absolute),
+  risk (vol/Sharpe/Sortino/max-DD), rolling-1y, category percentile (best-effort), portfolio
+  snapshot + watchlist overlap. Wired into the **email bot**: `fund: <name>` (or `mf: <name>`) in
+  the subject → fund report; disambiguation reuses the pending "which one?" UX (`MF:` tag). *Later:*
+  expense ratio (AMFI TER), AUM trajectory, manager/tenure, an LLM thesis, and a charted PDF.
+- **Phase 5 — forensic look-through ✅ started.** Lean version live: portfolio concentration
+  (top-10, biggest sector) + **watchlist overlap** (holdings ∩ the user's forensic-vetted names,
+  by company-name match) in the fund report. *Deeper:* run Altman-Z / Piotroski / Beneish across
+  all holdings for a portfolio-quality score — needs an ISIN→NSE-symbol map + financials ingested
+  for the holdings (currently only the watchlist universe has them).
+
 ### Later (deferred)
 - **Verdict track record — make the tool grade itself** *(top-priority next build; the honest
   gap — we issue Buy/Accumulate/Hold/Reduce/Avoid verdicts and never check if they were right).*
@@ -196,8 +250,9 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. 27-stock watchlist populat
 deep-report section (`nse_api.insider_trades`, `insider_trades` table); **midday same-day
 digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email_bot.maybe_intraday`)
 — live movers + today's filings/insider via NSE's NextApi live quote (`live_quotes_batch`).
-- Mutual-fund switching analytics (NAV, rolling returns, risk-adjusted,
-  holdings overlap).
+- Mutual-fund analytics — see the **Mutual-fund module** track above (Phase 1 shipped;
+  holdings/overlap/reports/forensic-look-through are Phases 3–5). Personal MF portfolio
+  tracking (overlap, XIRR, concentration) was scoped but deprioritised vs signal + research.
 - Macro overlay (RBI / MOSPI) feeding sector calls.
 - **Idea-generation screener** across a broad universe to *find* ideas, not just analyse known
   ones (the system's biggest "monitor → discover" gap). Two phases:

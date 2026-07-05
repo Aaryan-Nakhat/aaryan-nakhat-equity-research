@@ -12,8 +12,8 @@ Personal use. Not a hosted product.
 
 - **Scrape** primary sources for prices, filings, financials, corporate actions,
   delivery/derivatives data, and **live intraday quotes** (NSE), plus the daily
-  **USD/INR** reference rate (FBIL) and **gold/silver/crude** futures (MCX) — via
-  `scrapling` (Camoufox browser tier for the anti-bot `/api/*`).
+  **USD/INR** reference rate (FBIL), **gold/silver/crude** futures (MCX), and **mutual-fund
+  NAVs** (AMFI) — via `scrapling` (Camoufox browser tier for the anti-bot `/api/*`).
 - **Analyse** — fundamental (multi-year statements, ratios, quality/forensic scores,
   FCFF/FCFE, CFO-quality); **sector-appropriate valuation** (P/B-on-ROE for financials,
   EV/EBITDA + mid-cycle for cyclicals, P/E elsewhere; current multiple as an own-history
@@ -21,6 +21,12 @@ Personal use. Not a hosted product.
   own guidance); and technical (trend, momentum, delivery-% conviction).
 - **Signals** — FII F&O positioning (smart-money sentiment), **insider/promoter (SEBI PIT)
   trades**, promoter pledge, bulk/block deals.
+- **Mutual funds** *(new track)* — AMFI NAV backbone (`mf_scheme`/`mf_nav`, accumulated daily)
+  + returns/risk analytics (CAGR, Sharpe, Sortino, max drawdown, rolling returns) + per-AMC
+  monthly **holdings** (`mf_holdings`, registry of parsers — PPFAS live). **Email `fund: <name>`**
+  → a fund deep-report: returns · risk · rolling consistency · category percentile · portfolio
+  concentration · **watchlist overlap** (which of your stocks the fund holds). Broader AMC
+  holdings coverage + forensic look-through are the next steps (see [`docs/PLAN.md`](docs/PLAN.md)).
 - **Report** — Gemini reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis) and **push** — a **full daily digest at

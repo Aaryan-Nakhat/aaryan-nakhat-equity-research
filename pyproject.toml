@@ -17,6 +17,7 @@ dependencies = [
     "markdown>=3.10.2",
     "imapclient>=3.0",
     "matplotlib>=3.9",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
