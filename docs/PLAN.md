@@ -212,8 +212,10 @@ broader AMC holdings coverage + report enrichment).
   (`resolve_fund`, prefers Direct-Growth) → on-demand history backfill → returns (CAGR/absolute),
   risk (vol/Sharpe/Sortino/max-DD), rolling-1y, category percentile (best-effort), portfolio
   snapshot + watchlist overlap. Wired into the **email bot**: `fund: <name>` (or `mf: <name>`) in
-  the subject → fund report; disambiguation reuses the pending "which one?" UX (`MF:` tag). *Later:*
-  expense ratio (AMFI TER), AUM trajectory, manager/tenure, an LLM thesis, and a charted PDF.
+  the subject → fund report; disambiguation reuses the pending "which one?" UX (`MF:` tag).
+  **Attachments:** a charted PDF (NAV-growth + rolling-return distribution, `charts.fund_charts`)
+  and a mutual-fund metrics guide PDF (`glossary.fund_guide_pdf`). *Later:* expense ratio (AMFI
+  TER), AUM trajectory, manager/tenure, an LLM thesis.
 - **Phase 5 — forensic look-through ✅ started.** Lean version live: portfolio concentration
   (top-10, biggest sector) + **watchlist overlap** (holdings ∩ the user's forensic-vetted names,
   by company-name match) in the fund report. *Deeper:* run Altman-Z / Piotroski / Beneish across
