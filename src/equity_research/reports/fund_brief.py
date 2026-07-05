@@ -16,11 +16,18 @@ from equity_research.analysis import funds
 from equity_research.ingest import backfill_mf_scheme_history
 
 # share classes people actually research; a bare name resolves to Direct-Growth
-_CANON = "plan = 'Direct' AND (option = 'Growth' OR option IS NULL)"
+# (exclude bonus/institutional/direct-payout variants that also parse as 'Growth')
+_CANON = ("plan = 'Direct' AND (option = 'Growth' OR option IS NULL) "
+          "AND scheme_name NOT ILIKE '%bonus%' AND scheme_name NOT ILIKE '%institutional%'")
+
+
+# share-class / filler words to drop from a query (share class is handled by _CANON)
+_FUND_STOP = {"fund", "plan", "the", "direct", "regular", "growth", "idcw", "dividend",
+              "option", "scheme", "of", "an"}
 
 
 def _tokens(s: str) -> list[str]:
-    return [t for t in re.findall(r"[a-z0-9]+", s.lower()) if t not in {"fund", "plan", "the"}]
+    return [t for t in re.findall(r"[a-z0-9]+", s.lower()) if t not in _FUND_STOP]
 
 
 def _family_key(name: str) -> str:
@@ -40,7 +47,9 @@ def resolve_fund(con: duckdb.DuckDBPyConnection, query: str, limit: int = 5) -> 
     toks = _tokens(query)
     if not toks:
         return []
-    where = " AND ".join(["scheme_name ILIKE ?"] * len(toks))
+    # match on a space/punctuation-collapsed name so 'midcap' hits 'Mid Cap Fund'
+    col = "regexp_replace(lower(scheme_name), '[^a-z0-9]', '', 'g')"
+    where = " AND ".join([f"{col} LIKE ?"] * len(toks))
     params = [f"%{t}%" for t in toks]
     for extra in (f"AND {_CANON}", ""):        # prefer canonical share class, then anything
         rows = con.execute(
