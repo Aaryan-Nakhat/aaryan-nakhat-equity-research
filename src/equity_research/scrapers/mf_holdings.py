@@ -1,15 +1,13 @@
 """Monthly scheme-portfolio (holdings) scrapers — the per-AMC piece.
 
 SEBI mandates every scheme disclose its full month-end portfolio, but there is **no
-consolidated primary feed** — each AMC posts its own file (usually an XLSX, layouts
-vary). So this is a **registry of per-AMC parsers**; coverage grows one AMC at a time.
-Each parser returns normalised rows the ingest layer maps to AMFI scheme codes.
+consolidated primary feed** — each AMC posts its own file (usually an XLSX). The good
+news: most follow SEBI's prescribed layout (Name of the Instrument · ISIN ·
+Industry/Rating · Quantity · Market/Fair Value · % to Net Assets), so a single
+**header-detecting generic parser** handles the bulk; each AMC is then just a URL +
+a couple of hints. Coverage grows one AMC at a time via ``REGISTRY``.
 
 Row shape: ``{fund_name, isin, instrument, industry, quantity, market_value_cr, pct_nav}``.
-
-Started with **PPFAS** (single-AMC, clean layout: one worksheet per scheme; columns
-code | name | ISIN | industry | qty | market-value-₹lakh | %-to-NAV). Add more AMCs by
-registering a ``(url_builder, parser)`` in ``REGISTRY``.
 """
 
 from __future__ import annotations
@@ -33,74 +31,139 @@ def _month_end(d: date) -> date:
 
 
 def _load_xlsx(raw: bytes) -> openpyxl.Workbook:
-    """Load an XLSX from bytes (PPFAS serves xlsx bytes under a .xls name; openpyxl's
+    """Load an XLSX from bytes (some AMCs serve xlsx bytes under a .xls name; openpyxl's
     extension gate is bypassed by handing it a BytesIO)."""
     return openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
 
 
-# ---------------- PPFAS ----------------
-_PPFAS_URL = ("https://amc.ppfas.com/downloads/portfolio-disclosure/"
-              "{y}/PPFAS_Monthly_Portfolio_Report_{mon}_{d}_{y}.xls")
-
-
-def _ppfas_url(as_of: date) -> str:
-    me = _month_end(as_of)
-    return _PPFAS_URL.format(y=me.year, mon=_MONTHS[me.month], d=me.day)
-
-
 def _num(v) -> float | None:
     try:
-        return float(str(v).replace(",", "").strip())
+        return float(str(v).replace(",", "").replace("%", "").strip())
     except (TypeError, ValueError):
         return None
 
 
-def _parse_ppfas(wb: openpyxl.Workbook) -> list[dict]:
+# ---------------- generic SEBI-format parser ----------------
+def _match_col(text: str) -> str | None:
+    """Map a header-cell string to one of our logical columns."""
+    t = text.lower()
+    if "isin" in t:
+        return "isin"
+    if "% to net" in t or "% of net" in t or "% to nav" in t or "percentage to net" in t \
+            or ("% " in t and "net asset" in t):
+        return "pct"
+    if "name of the instrument" in t or "name of instrument" in t or t.strip() == "instrument":
+        return "name"
+    if "industry" in t or "rating" in t:
+        return "industry"
+    if "quantity" in t:
+        return "quantity"
+    if "market" in t or "fair value" in t:
+        return "mv"
+    return None
+
+
+def _header_map(row) -> dict[str, int]:
+    m: dict[str, int] = {}
+    for idx, c in enumerate(row or []):
+        if c is None:
+            continue
+        col = _match_col(str(c))
+        if col and col not in m:
+            m[col] = idx
+    return m
+
+
+def _find_header(rows) -> tuple[int, dict[str, int]]:
+    """First row that carries an ISIN column + a name/instrument column → (idx, colmap)."""
+    for i, r in enumerate(rows[:25]):
+        m = _header_map(r)
+        if "isin" in m and "name" in m:
+            return i, m
+    return -1, {}
+
+
+def _title(rows, header_idx: int, sheet: str) -> str:
+    """Scheme title = first meaningful text cell above the header band."""
+    for r in rows[:header_idx or 6]:
+        for c in (r or [])[:4]:
+            t = str(c).strip() if c else ""
+            if len(t) > 6 and re.search(r"[A-Za-z]{3}", t) and "portfolio" not in t.lower() \
+                    and "name of" not in t.lower():
+                return t
+    return sheet
+
+
+def _mv_to_cr(v: float | None, header_text: str) -> float | None:
+    if v is None:
+        return None
+    h = header_text.lower()
+    if "lakh" in h:
+        return v / 100
+    if "crore" in h or "cr." in h or "(rs. in cr" in h:
+        return v
+    return v / 100          # SEBI default disclosure unit is ₹ lakh
+
+
+def parse_generic(wb: openpyxl.Workbook) -> list[dict]:
+    """Parse any SEBI-format monthly-portfolio workbook (one or many scheme sheets)."""
     out: list[dict] = []
     for sheet in wb.sheetnames:
-        ws = wb[sheet]
-        rows = list(ws.iter_rows(values_only=True))
-        # the scheme title is the first meaningful text cell in the header band
-        fund_name = sheet
-        for r in rows[:6]:
-            for c in (r or [])[:3]:
-                t = str(c).strip() if c else ""
-                if len(t) > 6 and re.search(r"[A-Za-z]{3}", t) and "portfolio" not in t.lower():
-                    fund_name = t
-                    break
-            if fund_name != sheet:
-                break
-        for r in rows:
-            if not r or len(r) < 7:
+        rows = list(wb[sheet].iter_rows(values_only=True))
+        hi, cm = _find_header(rows)
+        if hi < 0 or "pct" not in cm:
+            continue
+        fund_name = _title(rows, hi, sheet)
+        mv_hdr = str(rows[hi][cm["mv"]]) if "mv" in cm and rows[hi][cm["mv"]] else ""
+        sheet_rows: list[dict] = []
+        for r in rows[hi + 1:]:
+            if not r or len(r) <= cm["isin"]:
                 continue
-            isin = str(r[2]).strip() if r[2] else ""
-            if not _ISIN.match(isin):          # data rows have a real ISIN in col 2
+            isin = str(r[cm["isin"]]).strip() if r[cm["isin"]] else ""
+            if not _ISIN.match(isin):
                 continue
-            qty, mv_lakh, pct = _num(r[4]), _num(r[5]), _num(r[6])
-            out.append({
-                "fund_name": fund_name,
-                "isin": isin,
-                "instrument": str(r[1]).strip() if r[1] else "",
-                "industry": str(r[3]).strip() if r[3] else "",
-                "quantity": qty,
-                "market_value_cr": mv_lakh / 100 if mv_lakh is not None else None,  # ₹lakh → ₹cr
-                "pct_nav": pct * 100 if pct is not None else None,                  # fraction → %
+            sheet_rows.append({
+                "fund_name": fund_name, "isin": isin,
+                "instrument": (str(r[cm["name"]]).strip() if r[cm["name"]] else ""),
+                "industry": (str(r[cm["industry"]]).strip() if cm.get("industry") is not None
+                             and len(r) > cm["industry"] and r[cm["industry"]] else ""),
+                "quantity": _num(r[cm["quantity"]]) if cm.get("quantity") is not None
+                            and len(r) > cm["quantity"] else None,
+                "market_value_cr": _mv_to_cr(_num(r[cm["mv"]]), mv_hdr) if cm.get("mv") is not None
+                                   and len(r) > cm["mv"] else None,
+                "pct_nav": _num(r[cm["pct"]]),
             })
+        # per-sheet: %NAV disclosed as a fraction (sums to ~1) vs a percentage (~100)
+        pcts = [x["pct_nav"] for x in sheet_rows if x["pct_nav"] is not None]
+        if pcts and max(pcts) <= 1.5:
+            for x in sheet_rows:
+                if x["pct_nav"] is not None:
+                    x["pct_nav"] *= 100
+        out.extend(sheet_rows)
     return out
 
 
-def fetch_ppfas(as_of: date) -> tuple[str, list[dict]]:
-    """PPFAS month-end holdings across all its schemes → ``(source_url, rows)``.
-    ``rows`` is ``[]`` if that month isn't published yet."""
-    url = _ppfas_url(as_of)
+def _fetch_xlsx(url: str) -> tuple[str, list[dict]]:
+    """Download an XLSX at ``url`` and parse it with the generic SEBI parser."""
     try:
         raw = fetch_bytes(url, timeout=60)
-    except Exception:  # noqa: BLE001 — month may not be out yet
+    except Exception:  # noqa: BLE001 — month may not be published yet
         return url, []
     try:
-        return url, _parse_ppfas(_load_xlsx(raw))
+        return url, parse_generic(_load_xlsx(raw))
     except Exception:  # noqa: BLE001 — layout surprise; degrade, don't crash
         return url, []
+
+
+# ---------------- per-AMC URL builders ----------------
+_PPFAS_URL = ("https://amc.ppfas.com/downloads/portfolio-disclosure/"
+              "{y}/PPFAS_Monthly_Portfolio_Report_{mon}_{d}_{y}.xls")
+
+
+def fetch_ppfas(as_of: date) -> tuple[str, list[dict]]:
+    """PPFAS month-end holdings across all its schemes (one workbook, sheet per scheme)."""
+    me = _month_end(as_of)
+    return _fetch_xlsx(_PPFAS_URL.format(y=me.year, mon=_MONTHS[me.month], d=me.day))
 
 
 # AMC display-name (as in ``mf_scheme.amc``) -> fetcher(as_of) -> (url, rows)
