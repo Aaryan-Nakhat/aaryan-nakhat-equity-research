@@ -127,6 +127,27 @@ sites only for gaps.
 
 ---
 
+## 8. AMFI — Association of Mutual Funds in India (amfiindia.com)
+
+The primary, authoritative source for Indian mutual-fund NAVs. Plain-HTTP text, **no
+browser tier** (the `www` host 302-redirects to `portal.amfiindia.com`). Backbone of the
+mutual-fund module (`scrapers/amfi.py`).
+
+| Data | Access | Notes |
+|---|---|---|
+| Daily NAV — all schemes (`/spages/NAVAll.txt`) | 🟢 | Semicolon-delimited, grouped by category then AMC; ~14k schemes/day (code, ISINs, name, NAV, date). Universe + daily NAV point. |
+| Historical NAV (`DownloadNAVHistoryReport_Po.aspx?frmdt=&todt=&mf=`) | 🟢 | Per-AMC over a date range; **caps the range** (wide ranges return empty) → fetch in ~180-day windows. `mf` = AMFI numeric AMC code. |
+| AMC name → numeric code map | 🟢 | 55 active AMCs from the disclosure page's `RssNAV.aspx?mf=N` links; resolved to names via the history report header. Needed to backfill a fund by name (`mf_amc`). |
+| Scheme TER / expense ratio | 🟢 | Monthly AMFI disclosure (for fund-report enrichment — later). |
+| Monthly scheme portfolio holdings | 🟡 | **Not** consolidated on AMFI — SEBI-mandated but published **per-AMC** as XLSX (layouts vary). Handled by a **registry of per-AMC parsers** (`scrapers/mf_holdings.py`); coverage grows one AMC at a time. First: **PPFAS** (deterministic monthly-XLSX URL, one sheet per scheme). |
+
+*MF-holding-per-stock note:* NSE's SHP **summary**
+(`/api/NextApi/apiClient/GetQuoteApi?functionName=getShareholdingPattern&symbol=X`) only
+exposes promoter-vs-public (+ an `ndsid`), **not** the MF/FII institutional breakdown — so
+per-stock MF ownership is derived from the Phase-3 monthly holdings, not the SHP summary.
+
+---
+
 ## Practical takeaways for the scraping plan
 
 1. **BSE is the friendlier primary** for fundamentals/filings/actions; **NSE for

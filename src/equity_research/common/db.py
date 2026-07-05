@@ -140,6 +140,52 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS mf_scheme (
+        scheme_code   INTEGER,          -- AMFI scheme code (unique per plan/option)
+        isin_growth   VARCHAR,          -- ISIN (Div Payout / Growth)
+        isin_reinvest VARCHAR,          -- ISIN (Div Reinvestment)
+        scheme_name   VARCHAR,
+        amc           VARCHAR,          -- fund house (e.g. 'Axis Mutual Fund')
+        category      VARCHAR,          -- AMFI category header (e.g. 'Equity Scheme - Multi Cap Fund')
+        asset_class   VARCHAR,          -- coarse: Equity | Debt | Hybrid | Solution | Other
+        plan          VARCHAR,          -- Direct | Regular (parsed from name)
+        option        VARCHAR,          -- Growth | IDCW (parsed from name)
+        updated_at    TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (scheme_code)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mf_nav (
+        scheme_code  INTEGER,
+        nav_date     DATE,
+        nav          DOUBLE,
+        PRIMARY KEY (scheme_code, nav_date)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mf_holdings (
+        scheme_code  INTEGER,          -- AMFI scheme (the Direct-Growth share class we report on)
+        as_of        DATE,             -- portfolio 'as of' month-end
+        isin         VARCHAR,          -- holding's ISIN (stock/bond); '' for non-ISIN lines
+        instrument   VARCHAR,          -- holding name as disclosed
+        industry     VARCHAR,          -- industry / rating as disclosed
+        quantity     DOUBLE,
+        market_value_cr DOUBLE,        -- market/fair value, ₹ crore
+        pct_nav      DOUBLE,           -- % to net assets
+        source_url   VARCHAR,
+        updated_at   TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (scheme_code, as_of, isin, instrument)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mf_amc (
+        amc_code    INTEGER,          -- AMFI numeric fund-house id (history report 'mf' param)
+        amc_name    VARCHAR,          -- as it appears in NAVAll / mf_scheme.amc
+        updated_at  TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (amc_code)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS alert_state (
         symbol      VARCHAR,
         key         VARCHAR,

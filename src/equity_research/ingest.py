@@ -13,7 +13,7 @@ import pandas as pd
 
 from equity_research.common.db import replace_for_date
 from equity_research.common.http import ScrapeError, fetch_bytes
-from equity_research.scrapers import nse_api, nse_archives, nse_financials
+from equity_research.scrapers import amfi, nse_api, nse_archives, nse_financials
 
 # Source-column -> schema-column maps (schema order preserved on write).
 _EOD_MAP = {
@@ -265,6 +265,205 @@ def store_insider_trades(con: duckdb.DuckDBPyConnection, data: dict[str, list[di
     for s, rows in (data or {}).items():
         n += _write_insider(con, _insider_rows(s, rows))
     return n
+
+
+_MF_SCHEME_COLS = ["scheme_code", "isin_growth", "isin_reinvest", "scheme_name", "amc",
+                   "category", "asset_class", "plan", "option"]
+
+
+def ingest_mf_navall(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
+    """Land the full AMFI daily NAV universe: refresh the ``mf_scheme`` master and
+    append today's point to ``mf_nav`` (accumulated forward → a NAV time series).
+
+    Idempotent per day: re-running overwrites the scheme master and the day's NAV.
+    Returns ``{"schemes": n, "navs": m}`` (both 0 if the feed was unreachable).
+    """
+    rows = amfi.fetch_navall()
+    if not rows:
+        return {"schemes": 0, "navs": 0}
+
+    sch = pd.DataFrame(
+        [{c: getattr(r, c) for c in _MF_SCHEME_COLS} for r in rows],
+        columns=_MF_SCHEME_COLS,
+    ).drop_duplicates(subset=["scheme_code"], keep="last")
+    con.register("_mfsch", sch)
+    try:
+        con.execute(f"INSERT OR REPLACE INTO mf_scheme ({', '.join(_MF_SCHEME_COLS)}) "
+                    "SELECT * FROM _mfsch")
+    finally:
+        con.unregister("_mfsch")
+
+    nav = pd.DataFrame(
+        [{"scheme_code": r.scheme_code, "nav_date": r.nav_date, "nav": r.nav}
+         for r in rows if r.nav is not None and r.nav_date is not None],
+        columns=["scheme_code", "nav_date", "nav"],
+    ).drop_duplicates(subset=["scheme_code", "nav_date"], keep="last")
+    con.register("_mfnav", nav)
+    try:
+        con.execute("INSERT OR REPLACE INTO mf_nav (scheme_code, nav_date, nav) "
+                    "SELECT * FROM _mfnav")
+    finally:
+        con.unregister("_mfnav")
+    return {"schemes": len(sch), "navs": len(nav)}
+
+
+_MF_HIST_WINDOW = 180        # AMFI's history report caps the range; fetch in windows
+
+
+def ingest_mf_nav_history(amc_code: int, frm: date, to: date,
+                          con: duckdb.DuckDBPyConnection) -> int:
+    """Backfill ``mf_nav`` for one AMC over [frm, to] from AMFI's history report.
+
+    The report silently returns nothing for wide ranges, so we fetch in ~180-day
+    windows and upsert each. ``amc_code`` is AMFI's numeric fund-house id.
+    Idempotent (upsert on ``(scheme_code, nav_date)``). Returns points written.
+    """
+    from datetime import timedelta
+    written = 0
+    start = frm
+    while start <= to:
+        end = min(start + timedelta(days=_MF_HIST_WINDOW), to)
+        hist = amfi.fetch_nav_history(amc_code, start, end)
+        if hist:
+            df = pd.DataFrame(hist, columns=["scheme_code", "nav_date", "nav"]) \
+                .drop_duplicates(subset=["scheme_code", "nav_date"], keep="last")
+            con.register("_mfhist", df)
+            try:
+                con.execute("INSERT OR REPLACE INTO mf_nav (scheme_code, nav_date, nav) "
+                            "SELECT * FROM _mfhist")
+            finally:
+                con.unregister("_mfhist")
+            written += len(df)
+        start = end + timedelta(days=1)
+    return written
+
+
+def build_mf_amc_map(con: duckdb.DuckDBPyConnection, on: date | None = None) -> int:
+    """Resolve every active AMFI AMC code → name (one-time, cached in ``mf_amc``).
+
+    Needed to backfill an arbitrary fund's history (the report needs the numeric
+    ``mf`` code, which NAVAll doesn't carry). Idempotent. ``on`` is the probe date
+    (defaults to a recent weekday). Returns the number of AMCs mapped.
+    """
+    from datetime import timedelta
+    if on is None:
+        on = date.today() - timedelta(days=1)
+        while on.weekday() >= 5:
+            on -= timedelta(days=1)
+    rows = []
+    for code in amfi.amc_codes():
+        name = amfi.amc_name(code, on)
+        if name:
+            rows.append({"amc_code": code, "amc_name": name})
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows, columns=["amc_code", "amc_name"])
+    con.register("_mfamc", df)
+    try:
+        con.execute("INSERT OR REPLACE INTO mf_amc (amc_code, amc_name) SELECT * FROM _mfamc")
+    finally:
+        con.unregister("_mfamc")
+    return len(df)
+
+
+def amc_code_for(con: duckdb.DuckDBPyConnection, amc_name: str) -> int | None:
+    """AMFI numeric AMC code for a fund-house name (from ``mf_amc``), or None."""
+    row = con.execute("SELECT amc_code FROM mf_amc WHERE amc_name = ?", [amc_name]).fetchone()
+    return row[0] if row else None
+
+
+def backfill_mf_scheme_history(con: duckdb.DuckDBPyConnection, scheme_code: int,
+                               years: float = 5.5) -> int:
+    """Backfill one scheme's NAV history by resolving its AMC → code and pulling that
+    AMC's history (then keeping just this scheme's rows land via the shared upsert).
+
+    Returns points written for the AMC over the window (0 if the AMC is unmapped).
+    """
+    from datetime import timedelta
+    row = con.execute("SELECT amc FROM mf_scheme WHERE scheme_code = ?", [scheme_code]).fetchone()
+    if not row or not row[0]:
+        return 0
+    code = amc_code_for(con, row[0])
+    if code is None:
+        return 0
+    to = date.today()
+    frm = date(to.year - int(years), to.month, to.day) - timedelta(days=int((years % 1) * 365))
+    return ingest_mf_nav_history(code, frm, to, con)
+
+
+_MF_HOLD_COLS = ["scheme_code", "as_of", "isin", "instrument", "industry",
+                 "quantity", "market_value_cr", "pct_nav", "source_url"]
+
+
+def _match_scheme(con: duckdb.DuckDBPyConnection, amc_name: str, fund_name: str) -> int | None:
+    """Map a disclosure sheet's fund name → the AMFI Direct-Growth scheme_code for it.
+    Token-AND match within the AMC, preferring the tightest Direct-Growth name."""
+    import re as _re
+    base = fund_name.split("(")[0]               # drop the parenthetical scheme description
+    _STOP = {"fund", "plan", "the", "of", "scheme", "an", "open", "ended", "equity",
+             "growth", "direct", "regular", "investing", "predominantly", "a"}
+    toks = [t for t in _re.findall(r"[a-z0-9]+", base.lower()) if t not in _STOP]
+    if not toks:
+        return None
+    where = " AND ".join(["scheme_name ILIKE ?"] * len(toks))
+    params = [amc_name] + [f"%{t}%" for t in toks]
+    for extra in ("AND plan = 'Direct' AND (option = 'Growth' OR option IS NULL)", ""):
+        row = con.execute(
+            f"SELECT scheme_code FROM mf_scheme WHERE amc = ? AND {where} {extra} "
+            "ORDER BY length(scheme_name) LIMIT 1", params).fetchone()
+        if row:
+            return row[0]
+    return None
+
+
+def ingest_mf_holdings(con: duckdb.DuckDBPyConnection, amc_name: str,
+                       as_of: date | None = None) -> int:
+    """Land a registered AMC's month-end scheme holdings into ``mf_holdings``.
+
+    Maps each disclosure sheet to its AMFI scheme_code and upserts (idempotent per
+    scheme/month/holding). Returns rows written (0 if the AMC is uncovered or the
+    month isn't published yet).
+    """
+    from datetime import timedelta
+    from equity_research.scrapers import mf_holdings as mfh
+    if as_of is None:                            # default: most recent published month-end
+        as_of = date.today().replace(day=1) - timedelta(days=1)
+    url, rows = mfh.fetch_amc_holdings(amc_name, as_of)
+    if not rows:
+        return 0
+    import calendar as _cal
+    me = date(as_of.year, as_of.month, _cal.monthrange(as_of.year, as_of.month)[1])
+    code_cache: dict[str, int | None] = {}
+    out = []
+    for r in rows:
+        fn = r["fund_name"]
+        if fn not in code_cache:
+            code_cache[fn] = _match_scheme(con, amc_name, fn)
+        code = code_cache[fn]
+        if code is None:
+            continue
+        out.append({"scheme_code": code, "as_of": me, "isin": r["isin"],
+                    "instrument": r["instrument"], "industry": r["industry"],
+                    "quantity": r["quantity"], "market_value_cr": r["market_value_cr"],
+                    "pct_nav": r["pct_nav"], "source_url": url})
+    if not out:
+        return 0
+    df = pd.DataFrame(out, columns=_MF_HOLD_COLS).drop_duplicates(
+        subset=["scheme_code", "as_of", "isin", "instrument"], keep="last")
+    con.register("_mfh", df)
+    try:
+        con.execute(f"INSERT OR REPLACE INTO mf_holdings ({', '.join(_MF_HOLD_COLS)}) "
+                    "SELECT * FROM _mfh")
+    finally:
+        con.unregister("_mfh")
+    return len(df)
+
+
+def ingest_mf_holdings_all(con: duckdb.DuckDBPyConnection, as_of: date | None = None) -> int:
+    """Land month-end holdings for every AMC with a registered parser (idempotent).
+    Cheap to run daily (one fetch per covered AMC; upsert is a no-op mid-month)."""
+    from equity_research.scrapers import mf_holdings as mfh
+    return sum(ingest_mf_holdings(con, amc, as_of) for amc in mfh.REGISTRY)
 
 
 def ingest_sector_map(con: duckdb.DuckDBPyConnection, index: str = "nifty500") -> int:
