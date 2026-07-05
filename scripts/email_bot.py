@@ -228,6 +228,24 @@ def _fund_query(subject: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _fund_pdf(con, scheme_code: int, report_md: str, name: str) -> bytes | None:
+    """Charted fund-report PDF (NAV growth + rolling-returns), best-effort with a
+    HARD timeout — the report is already in the body, so never block the send."""
+    try:
+        images = charts.fund_charts(con, scheme_code)
+    except Exception:  # noqa: BLE001
+        log.exception("fund charts failed for scheme %s", scheme_code)
+        images = []
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(report_to_pdf, report_md, name, images).result(timeout=150)
+    except Exception:  # noqa: BLE001
+        log.exception("fund PDF failed/timed out for scheme %s — body-only", scheme_code)
+        return None
+    finally:
+        ex.shutdown(wait=False)
+
+
 def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
     log.info("generating fund report for scheme %s (req from %s)", scheme_code, req.sender)
     _reply_text(req, f"Got it — pulling the fund report for **{name}** (fetching NAV history). "
@@ -235,14 +253,22 @@ def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
     con = connect()
     try:
         md = fund_brief.build_fund_brief(con, scheme_code)
+        if not md:
+            _reply_text(req, f"Couldn't build a report for '{name}' — no NAV history found.")
+            return
+        pdf = _fund_pdf(con, scheme_code, md, name)
     finally:
         con.close()
-    if not md:
-        _reply_text(req, f"Couldn't build a report for '{name}' — no NAV history found.")
-        return
-    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
-                        html=emailer.body_html(md), in_reply_to=req.message_id,
-                        references=req.references or req.message_id)
+    body = md
+    attachments = [("Mutual_fund_metrics_guide.pdf", glossary.fund_guide_pdf())]
+    if pdf:
+        today = datetime.now(IST).date().isoformat()
+        attachments.insert(0, (f"{name[:40].strip()}_{today}.pdf", pdf))
+    else:
+        body += "\n\n_(The charted PDF couldn't be generated this time — the full report is above.)_"
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body), attachments=attachments,
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent fund report (scheme %s) to %s", scheme_code, req.sender)
 
 

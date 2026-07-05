@@ -35,6 +35,50 @@ def _png(fig) -> bytes:
     return buf.getvalue()
 
 
+def fund_charts(con: duckdb.DuckDBPyConnection, scheme_code: int) -> list[tuple[str, bytes]]:
+    """Charts for a mutual-fund report: NAV growth (₹100 rebased) + the rolling
+    1-year return distribution. Each is skipped when its data is too thin."""
+    from equity_research.analysis import funds
+    s = funds.nav_series(con, scheme_code)
+    out: list[tuple[str, bytes]] = []
+    if s.empty:
+        return out
+
+    # 1) Growth of ₹100 invested (NAV rebased) — the compounding story.
+    fig, ax = plt.subplots(figsize=(7, 3.2))
+    rebased = s / float(s.iloc[0]) * 100
+    ax.plot(rebased.index, rebased.values, color=_BLUE, lw=1.3)
+    ax.axhline(100, color=_GREY, lw=0.8, ls="--")
+    ax.set_title("Growth of ₹100 invested (NAV, rebased)")
+    ax.set_ylabel("Value of ₹100")
+    ax.grid(True, alpha=0.3)
+    out.append(("NAV growth — ₹100 rebased over the history on file", _png(fig)))
+
+    # 2) Rolling 1-year return distribution — the consistency read.
+    end = s.index[-1]
+    vals = []
+    for ts, nav in s.items():
+        tgt = ts + pd.Timedelta(days=365)
+        if tgt > end:
+            break
+        fnav = s.asof(tgt)
+        if fnav and nav and nav > 0:
+            vals.append((fnav / nav - 1) * 100)
+    if len(vals) >= 30:
+        arr = np.array(vals)
+        fig, ax = plt.subplots(figsize=(7, 3.2))
+        ax.hist(arr, bins=30, color=_BLUE, alpha=0.75)
+        ax.axvline(0, color=_RED, lw=1.0)
+        ax.axvline(float(np.median(arr)), color=_GREEN, lw=1.2,
+                   label=f"median {np.median(arr):.0f}%")
+        ax.set_title("Rolling 1-year returns — distribution")
+        ax.set_xlabel("1-year return (%)")
+        ax.set_ylabel("Frequency")
+        ax.legend(fontsize=8)
+        out.append(("Rolling 1-year returns — every 1-yr holding period in the history", _png(fig)))
+    return out
+
+
 def _series(af: pd.DataFrame, el: str) -> pd.Series:
     return af[el] if el in af.columns else pd.Series(np.nan, index=af.index)
 

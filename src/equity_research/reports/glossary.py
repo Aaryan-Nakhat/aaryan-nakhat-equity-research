@@ -278,3 +278,59 @@ def guide_pdf() -> bytes:
         from equity_research.reports.pdf import report_to_pdf
         _GUIDE_PDF = report_to_pdf(guide_markdown(), "Metrics & ratings guide")
     return _GUIDE_PDF
+
+
+# --- Mutual-fund report metrics (separate guide; the fund report uses different numbers) ---
+FUND_METRICS: list[tuple[str, str]] = [
+    ("CAGR (compound annual growth rate)",
+     "The annualised return — what the fund compounded at per year, on average, over the "
+     "horizon. For periods under a year we show the plain (non-annualised) return instead. "
+     "Only compare funds of the *same category and horizon*."),
+    ("Sharpe ratio",
+     "Return earned per unit of total risk (volatility), above a ~6.5% risk-free rate. Higher "
+     "is better — >1 is good, >2 excellent. Lets you fairly compare a steady fund vs a jumpy one."),
+    ("Sortino ratio",
+     "Like Sharpe, but penalises only *downside* volatility (ignores upside swings) — often a "
+     "fairer risk-adjusted read. Higher is better."),
+    ("Annualised volatility",
+     "How much the NAV swings, per year. Higher = a rougher ride. Equity funds are typically ~11–18%."),
+    ("Max drawdown",
+     "The worst peak-to-trough fall in NAV over the period — the deepest loss you'd have sat "
+     "through. Closer to 0 is better."),
+    ("Rolling 1-year returns (worst / median / best)",
+     "Every possible 1-year holding period across the fund's history, summarised. The **median** "
+     "is a typical year; the **worst** shows how bad one year got. A more honest consistency read "
+     "than a single point-to-point number."),
+    ("Category percentile / rank",
+     "Where the fund's return sits among its same-category Direct-Growth peers. 'Top 10%' = it beat "
+     "90% of peers over that horizon. (Shows once enough peer history is on file.)"),
+    ("Top-10 concentration",
+     "Share of NAV in the 10 largest holdings. Higher = more concentrated — higher conviction, but "
+     "more single-stock risk."),
+    ("Watchlist overlap",
+     "How many of *your* tracked stocks the fund holds and their combined weight — so you can see "
+     "whether a fund is actually buying the names you follow."),
+]
+
+
+def fund_guide_markdown() -> str:
+    """Plain-English guide to every number in the mutual-fund report."""
+    lines = ["# Mutual-fund metrics guide",
+             "_What each number in the fund report means, and how to read it._\n",
+             "## Returns, risk & portfolio"]
+    lines += [f"- **{k}** — {v}" for k, v in FUND_METRICS]
+    lines.append("\n_Source: NAV & returns from **AMFI** (the official industry body); holdings from "
+                 "each AMC's **SEBI-mandated monthly portfolio disclosure**. Both are primary sources._")
+    return "\n".join(lines)
+
+
+_FUND_GUIDE_PDF: bytes | None = None
+
+
+def fund_guide_pdf() -> bytes:
+    """The fund-metrics guide as a constant PDF (built once, cached)."""
+    global _FUND_GUIDE_PDF
+    if _FUND_GUIDE_PDF is None:
+        from equity_research.reports.pdf import report_to_pdf
+        _FUND_GUIDE_PDF = report_to_pdf(fund_guide_markdown(), "Mutual-fund metrics guide")
+    return _FUND_GUIDE_PDF

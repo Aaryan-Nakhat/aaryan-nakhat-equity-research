@@ -289,8 +289,14 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
   concentration, biggest sector, top holdings, and **overlap with the user's stock
   watchlist** (which of *your* names the fund holds, by weight).
 
-No LLM call yet (deterministic); a Gemini fund thesis + charted PDF + expense/AUM/manager
-lines are the planned enrichments (`docs/PLAN.md` → Mutual-fund module).
+**Attachments** (mirrors the stock report): a **charted PDF** (`charts.fund_charts` — NAV
+growth of ₹100 rebased + the rolling-1-year return distribution → `report_to_pdf`) and a
+**mutual-fund metrics guide PDF** (`glossary.fund_guide_pdf` — plain-English on CAGR, Sharpe,
+Sortino, max drawdown, rolling returns, concentration, overlap). PDF is best-effort with a hard
+timeout (`_fund_pdf`); on failure the report still goes out body-only.
+
+No LLM call yet (deterministic); a Gemini fund thesis + expense/AUM/manager lines are the
+remaining enrichments (`docs/PLAN.md` → Mutual-fund module).
 
 ## Status / follow-ups
 
