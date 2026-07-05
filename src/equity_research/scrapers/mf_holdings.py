@@ -155,6 +155,36 @@ def _fetch_xlsx(url: str) -> tuple[str, list[dict]]:
         return url, []
 
 
+def _capture_links(page_url: str, pattern: str, wait_ms: int = 8000) -> list[str]:
+    """Load a JS download page in the browser tier and return anchor hrefs matching
+    ``pattern`` (a JS regex source). Used for AMCs that list files client-side."""
+    from scrapling.fetchers import StealthyFetcher
+    js = ("() => { const re=new RegExp(" + _repr_js(pattern) + ",'i'); "
+          "return JSON.stringify([...new Set([...document.querySelectorAll('a[href]')]"
+          ".map(a=>a.href).filter(h=>re.test(h)))]); }")
+    cap: dict = {}
+
+    def act(page):
+        try:
+            page.wait_for_timeout(wait_ms)
+        except Exception:  # noqa: BLE001
+            pass
+        cap["u"] = page.evaluate(js)
+        return page
+
+    try:
+        StealthyFetcher.fetch(page_url, headless=True, network_idle=True, page_action=act)
+        import json
+        return json.loads(cap.get("u", "[]"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _repr_js(s: str) -> str:
+    """JS string literal for a regex source (escape backslashes/quotes)."""
+    return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
 # ---------------- per-AMC URL builders ----------------
 _PPFAS_URL = ("https://amc.ppfas.com/downloads/portfolio-disclosure/"
               "{y}/PPFAS_Monthly_Portfolio_Report_{mon}_{d}_{y}.xls")
@@ -166,9 +196,29 @@ def fetch_ppfas(as_of: date) -> tuple[str, list[dict]]:
     return _fetch_xlsx(_PPFAS_URL.format(y=me.year, mon=_MONTHS[me.month], d=me.day))
 
 
+_HDFC_PAGE = "https://www.hdfcfund.com/statutory-disclosure/monthly-portfolio"
+_HDFC_FILE = re.compile(r"files\.hdfcfund\.com/.*Monthly.*\.xlsx?$", re.I)
+
+
+def fetch_hdfc(as_of: date) -> tuple[str, list[dict]]:
+    """HDFC posts one file per scheme on a direct CDN; the monthly page lists them all.
+    Capture the file links, then parse each with the generic parser."""
+    me = _month_end(as_of)
+    tag = f"{me.day:02d} {_MONTHS[me.month][:3]}"        # e.g. '31 May' — keep only this month's files
+    links = [ln for ln in _capture_links(_HDFC_PAGE, r"files\.hdfcfund\.com/.*Monthly.*\.xlsx?")
+             if _HDFC_FILE.search(ln)]
+    from urllib.parse import unquote
+    links = [ln for ln in links if tag.lower() in unquote(ln).lower()]
+    rows: list[dict] = []
+    for ln in links:
+        rows.extend(_fetch_xlsx(ln)[1])
+    return _HDFC_PAGE, rows
+
+
 # AMC display-name (as in ``mf_scheme.amc``) -> fetcher(as_of) -> (url, rows)
 REGISTRY = {
     "PPFAS Mutual Fund": fetch_ppfas,
+    "HDFC Mutual Fund": fetch_hdfc,
 }
 
 
