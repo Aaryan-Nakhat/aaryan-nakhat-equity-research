@@ -165,14 +165,6 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
         ex.shutdown(wait=False)            # don't block on a hung render thread
 
 
-# Deeper-cut menu appended to every deep report; reply with the number to trigger one.
-# Extensible — add rows here and a matching prefix branch in handle_request.
-_FOLLOWUP_MENU = ("---\n\n**Deeper cuts** — reply to this email with just the number:\n\n"
-                  "  **1) Growth-triggers 1-pager** — forward-looking catalysts, quantified & "
-                  "conviction-tagged (HIGH / MEDIUM / OPTIONALITY), grounded in the concalls & "
-                  "investor presentations.")
-
-
 class _MenuItem:
     """Pending-state shim for a follow-up menu choice (reuses the numbered-reply UX).
     ``symbol`` is prefixed by action, e.g. ``GT:RELIANCE`` → growth triggers."""
@@ -182,9 +174,29 @@ class _MenuItem:
 
 
 def _set_followup(sender: str, symbol: str, name: str | None) -> None:
-    """After a deep report, arm the numbered follow-up menu for this sender (silently —
-    the menu itself is printed in the report body)."""
+    """Arm the numbered follow-up menu for this sender so a bare-number reply maps back
+    to a deeper cut for ``symbol`` (24h TTL, via the shared pending state)."""
     _set_pending(sender, f"__followup__:{symbol}", [_MenuItem(f"GT:{symbol}", name)])
+
+
+def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None) -> None:
+    """A short, separate in-thread email sent right AFTER the report — asks whether you
+    want a deeper cut, and arms the numbered reply. Extensible: add a menu row + a matching
+    prefix branch in handle_request for the next cut."""
+    md = (f"✅ Full report for **{symbol}**" + (f" — {name}" if name else "")
+          + " is in the previous email (body + PDF).\n\n"
+          "**Want a deeper cut on this stock?** Just reply to this email with the number:\n\n"
+          "  **1) Growth-triggers 1-pager** — forward-looking catalysts, each quantified, "
+          "timeline-tagged and rated HIGH / MEDIUM / OPTIONALITY conviction, grounded in the "
+          "company's concalls & investor presentations.\n\n"
+          "_(More deeper cuts coming soon.)_")
+    emailer.send_report(
+        _re_subject(req.subject, " — want a deeper cut?"),
+        md, to=req.sender, html=emailer.body_html(md, symbol),
+        in_reply_to=req.message_id, references=req.references or req.message_id,
+    )
+    _set_followup(req.sender, symbol, name)
+    log.info("sent deeper-cut menu for %s to %s", symbol, req.sender)
 
 
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
@@ -196,7 +208,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
-    body = f"{head}\n\n{report_md}\n\n{_FOLLOWUP_MENU}"
+    body = f"{head}\n\n{report_md}"
     attachments = [("Metrics_and_ratings_guide.pdf", glossary.guide_pdf())]
     if pdf:
         attachments.insert(0, (f"{symbol}_{today}.pdf", pdf))
@@ -211,8 +223,8 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
     )
-    _set_followup(req.sender, symbol, resolved_name)      # arm the "reply 1" deeper-cut menu
     log.info("sent report for %s to %s", symbol, req.sender)
+    _send_followup_menu(symbol, req, resolved_name)      # separate "want a deeper cut?" prompt
 
 
 def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = None) -> None:

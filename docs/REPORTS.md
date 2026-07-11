@@ -273,7 +273,7 @@ PULL  you email a stock name (Subject) from an allowlisted address
         ▼  resolve → one match runs; several → "which one?" reply, you reply a number
         ▼  instant ack → reply in-thread: the FULL deep report in the body
            + the same report (tables + charts) as the attached PDF
-           + a "reply 1) growth triggers" deeper-cut menu (opt-in follow-ups)
+           ▼  then a separate "want a deeper cut? reply 1) growth triggers" email
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
@@ -288,9 +288,11 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
 - **Disambiguation** is *ask-first*: ambiguous names get a numbered reply; your
   numeric reply is matched to the pending candidates (stored in `alert_state`
   under `__email__`, 24h TTL) and the chosen report is sent.
-- **Deeper-cut menu** (opt-in follow-ups): every deep report ends with a numbered
-  menu; replying with a number runs that deeper analysis *for the same stock*,
-  in-thread. Today: **`1) Growth-triggers 1-pager`** —
+- **Deeper-cut menu** (opt-in follow-ups): right **after** each deep report the bot
+  sends a **separate short in-thread email** — "want a deeper cut? reply with the
+  number" (`_send_followup_menu`); replying with a bare number runs that deeper
+  analysis *for the same stock*, in-thread. (Kept separate rather than tacked onto the
+  end of the long report so it's actually seen.) Today: **`1) Growth-triggers 1-pager`** —
   `pipeline.generate_growth_triggers` → `synthesize.growth_triggers`, a
   forward-looking catalysts note (5–7 concrete triggers, each quantified +
   timeline + **HIGH / MEDIUM / OPTIONALITY** conviction tag, a "what's in the
