@@ -38,7 +38,7 @@ from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import generate_report  # noqa: E402
+from equity_research.reports.pipeline import generate_report, generate_growth_triggers  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 from equity_research.reports import fund_brief  # noqa: E402
 
@@ -165,6 +165,28 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
         ex.shutdown(wait=False)            # don't block on a hung render thread
 
 
+# Deeper-cut menu appended to every deep report; reply with the number to trigger one.
+# Extensible — add rows here and a matching prefix branch in handle_request.
+_FOLLOWUP_MENU = ("---\n\n**Deeper cuts** — reply to this email with just the number:\n\n"
+                  "  **1) Growth-triggers 1-pager** — forward-looking catalysts, quantified & "
+                  "conviction-tagged (HIGH / MEDIUM / OPTIONALITY), grounded in the concalls & "
+                  "investor presentations.")
+
+
+class _MenuItem:
+    """Pending-state shim for a follow-up menu choice (reuses the numbered-reply UX).
+    ``symbol`` is prefixed by action, e.g. ``GT:RELIANCE`` → growth triggers."""
+    def __init__(self, symbol: str, name: str | None) -> None:
+        self.symbol = symbol
+        self.name = name or ""
+
+
+def _set_followup(sender: str, symbol: str, name: str | None) -> None:
+    """After a deep report, arm the numbered follow-up menu for this sender (silently —
+    the menu itself is printed in the report body)."""
+    _set_pending(sender, f"__followup__:{symbol}", [_MenuItem(f"GT:{symbol}", name)])
+
+
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
                  consolidated: bool | None = None) -> None:
     log.info("generating report for %s (req from %s, basis=%s)", symbol, req.sender,
@@ -174,7 +196,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
-    body = f"{head}\n\n{report_md}"
+    body = f"{head}\n\n{report_md}\n\n{_FOLLOWUP_MENU}"
     attachments = [("Metrics_and_ratings_guide.pdf", glossary.guide_pdf())]
     if pdf:
         attachments.insert(0, (f"{symbol}_{today}.pdf", pdf))
@@ -189,7 +211,52 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
     )
+    _set_followup(req.sender, symbol, resolved_name)      # arm the "reply 1" deeper-cut menu
     log.info("sent report for %s to %s", symbol, req.sender)
+
+
+def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = None) -> None:
+    """Growth-triggers 1-pager (opt-in deeper cut) — email body + PDF, in-thread."""
+    log.info("generating growth triggers for %s (req from %s)", symbol, req.sender)
+    _reply_text(req, f"🚀 Building the growth-triggers 1-pager for **{symbol}**"
+                     + (f" ({name})" if name else "") + " — ~1–2 min; it'll land in this thread.")
+    md = generate_growth_triggers(symbol)
+    if not md:
+        _reply_text(req, f"Couldn't build growth triggers for {symbol} — no filings "
+                         "(concalls / presentations) were available to ground it.")
+        return
+    pdf = _growth_pdf(symbol, md)
+    today = datetime.now(IST).date().isoformat()
+    head = f"Growth triggers — **{symbol}**" + (f" — {name}" if name else "")
+    body = f"{head}\n\n{md}"
+    attachments = []
+    if pdf:
+        attachments.append((f"{symbol}_growth_triggers_{today}.pdf", pdf))
+    else:
+        body += "\n\n_(The PDF couldn't be generated this time — the full 1-pager is above.)_"
+    emailer.send_report(
+        _re_subject(req.subject, " — growth triggers"),
+        body,
+        to=req.sender,
+        html=emailer.body_html(body, f"{symbol} — growth triggers"),
+        attachments=attachments,
+        in_reply_to=req.message_id,
+        references=req.references or req.message_id,
+    )
+    log.info("sent growth triggers for %s to %s", symbol, req.sender)
+
+
+def _growth_pdf(symbol: str, report_md: str) -> bytes | None:
+    """Text-only growth-triggers PDF (no charts) — best-effort with a HARD timeout so a
+    hung Chromium render never blocks; the 1-pager is already in the email body."""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(report_to_pdf, report_md, f"{symbol} — Growth Triggers", []).result(timeout=150)
+    except Exception:  # noqa: BLE001 — timeout or render failure
+        log.exception("growth-triggers PDF failed/timed out for %s — sending body-only", symbol)
+        return None
+    finally:
+        ex.shutdown(wait=False)
 
 
 def _send_choices(query: str, cands: list, req: EmailRequest) -> None:
@@ -296,6 +363,9 @@ def handle_request(req: EmailRequest) -> None:
     sel = _selection(req.body) if req.body and len(req.body.strip()) <= 4 else None
     if pending and sel is not None and 1 <= sel <= len(pending):
         symbol, name = pending[sel - 1]
+        if str(symbol).startswith("GT:"):       # deeper-cut menu: growth triggers
+            _send_growth_triggers(symbol[3:], req, name)   # keep the menu armed for other cuts
+            return
         _clear_pending(req.sender)
         if str(symbol).startswith("MF:"):       # a fund choice
             _send_fund_report(int(symbol[3:]), req, name)
