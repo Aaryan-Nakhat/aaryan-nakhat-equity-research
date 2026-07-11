@@ -19,7 +19,8 @@ from equity_research.ingest import (ingest_annual_financials, ingest_financials,
                                     ingest_insider_trades, ingest_shareholding)
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
-from equity_research.reports.synthesize import extract_guidance, synthesize_thesis
+from equity_research.reports.synthesize import (business_overview, extract_guidance,
+                                                growth_triggers, synthesize_thesis)
 from equity_research.scrapers import nse_api
 
 CR = 1e7
@@ -214,27 +215,26 @@ def _ensure_peer_financials(con: duckdb.DuckDBPyConnection, symbol: str, cap: in
 
 
 def _prefer_consolidated(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
-    """Auto-pick consolidated when it exists AND subsidiaries add materially — i.e.
-    consolidated revenue or PAT is ≥25% larger than standalone (RIL's Jio/Retail,
-    Tata Motors' JLR, etc.). Else standalone (where the two are ~equal)."""
+    """Default to **consolidated whenever it exists** — it's the whole group (parent +
+    subsidiaries + JVs) and the economically complete, industry-standard primary lens.
+    Standalone deliberately excludes subsidiaries, so it only wins when consolidated is
+    unavailable — or when consolidated's XBRL history is materially thinner than
+    standalone's (don't trade a complete *entity* for an incomplete *history*)."""
     cons = fundamentals.load_annual(con, symbol, consolidated=True)
     if cons.empty:
-        return False
+        return False                                    # no group statements → standalone
     std = fundamentals.load_annual(con, symbol, consolidated=False)
     if std.empty:
         return True
 
-    def latest(df, k):
-        if k not in df.columns:
-            return None
-        s = df[k].dropna()
-        return float(s.iloc[-1]) if len(s) else None
+    def usable_years(df) -> int:                        # years with a real revenue figure
+        if "RevenueFromOperations" not in df.columns:
+            return 0
+        return int(df["RevenueFromOperations"].dropna().shape[0])
 
-    for k in ("ProfitLossForPeriod", "RevenueFromOperations"):
-        c, s = latest(cons, k), latest(std, k)
-        if c and s and s > 0 and c / s >= 1.25:        # consolidated ≥25% larger
-            return True
-    return False
+    # Prefer consolidated unless it's ≥2 years shallower than standalone (consolidated
+    # commonly starts a year later, so tolerate a 1-year gap).
+    return usable_years(cons) >= usable_years(std) - 1
 
 
 def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None = None,
@@ -248,27 +248,36 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     con = connect()
     try:
         have = ensure_ingested(symbol, con)
-        # Gather filings + management guidance up-front (deep, auto-synthesize) so the
-        # brief's valuation can show a forward multiple; the PDFs are reused for the
-        # thesis below (no double fetch).
-        pdfs = guidance = None
-        if have and deep and synthesize and not pdf_path:
+        # Gather filings up-front (deep, auto-synthesize): reused for the leading business
+        # overview, the forward-guidance multiple, and the thesis below (no double fetch).
+        # Fetched even when financials are missing (REIT/InvIT/newly listed) so the report
+        # still leads with a real business overview + technicals instead of "not found".
+        pdfs = guidance = overview = None
+        if deep and synthesize and not pdf_path:
             pdfs = _filings_for_analysis(symbol)
-            guidance = extract_guidance(pdfs)
+            if have:
+                guidance = extract_guidance(pdfs)
+            industry = sector.industry_of(con, symbol)
+            mc = valuation.market_cap(con, symbol, False)      # rupees
+            overview = business_overview(
+                pdfs, symbol, market_cap_cr=(mc / CR if mc else None),
+                industry=industry, order_driven=sector.is_order_driven(industry))
         if deep:
             _ensure_peer_financials(con, symbol)   # populate peers so §10's table is real
         basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
         if deep:
             brief = build_deep_brief(con, symbol, consolidated=basis,
-                                     target_shares=target_shares, guidance=guidance)
+                                     target_shares=target_shares, guidance=guidance,
+                                     overview=overview)
         else:
             brief = build_brief(con, symbol, consolidated=basis, target_shares=target_shares)
     finally:
         con.close()
     if not have:
-        return (f"No structured financials could be ingested for **{symbol}** — NSE may not "
-                "publish result XBRL for it (newly listed / recently renamed), or the lookup "
-                "returned nothing. Price/technical data may still be available.\n\n" + brief)
+        # No XBRL statements (REIT/InvIT, newly listed/renamed). The brief already leads
+        # with the business overview + an honest note + the technical snapshot, so return it
+        # as-is rather than a bare "couldn't find" message.
+        return brief
     if not synthesize:
         return brief
     if pdf_path:                               # explicit filing supplied (CLI --pdf)
@@ -278,6 +287,67 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
                                    pdfs=pdfs if pdfs is not None else _filings_for_analysis(symbol),
                                    deep=deep)
     return f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
+
+
+def _ok(v) -> bool:
+    return v is not None and v == v            # not None and not NaN
+
+
+def _snapshot_facts(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool) -> list[str]:
+    """Verified, deterministic snapshot numbers to ground the growth-triggers Section 1 —
+    market cap / CMP / TTM revenue & EBITDA margin / ROE / ROCE / P/E / P/B / promoter
+    holding (+ recent change). The LLM must use these verbatim instead of estimating."""
+    facts: list[str] = []
+    ind = sector.industry_of(con, symbol)
+    if ind:
+        facts.append(f"NSE industry: {ind}")
+    snap = valuation.snapshot(con, symbol, consolidated)
+    if _ok(snap.get("price")):
+        facts.append(f"CMP: ₹{snap['price']:,.2f}")
+    if _ok(snap.get("market_cap_cr")):
+        facts.append(f"Market cap: ₹{snap['market_cap_cr']:,.0f} cr")
+    t = fundamentals.ttm(con, symbol, consolidated)
+    if _ok(t.get("ttm_revenue_cr")):
+        facts.append(f"TTM revenue: ₹{t['ttm_revenue_cr']:,.0f} cr")
+    if _ok(t.get("ttm_ebitda_margin_%")):
+        facts.append(f"TTM EBITDA margin: {t['ttm_ebitda_margin_%']:.1f}%")
+    if _ok(t.get("ttm_net_margin_%")):
+        facts.append(f"TTM net margin: {t['ttm_net_margin_%']:.1f}%")
+    r = quant._ratios(con, symbol, consolidated)
+    for key, label, nd in (("ROE%", "ROE", 1), ("ROCE%", "ROCE", 1),
+                           ("P/E", "P/E (TTM)", 1), ("P/B", "P/B", 2)):
+        if _ok(r.get(key)):
+            facts.append(f"{label}: {r[key]:.{nd}f}{'%' if key.endswith('%') else ''}")
+    rows = con.execute(
+        "SELECT promoter_holding_pct FROM shareholding WHERE symbol = ? "
+        "AND promoter_holding_pct IS NOT NULL ORDER BY period_end DESC LIMIT 2", [symbol]).fetchall()
+    if rows and rows[0][0] is not None:
+        line = f"Promoter holding: {rows[0][0]:.2f}%"
+        if len(rows) > 1 and rows[1][0] is not None:
+            d = rows[0][0] - rows[1][0]
+            if abs(d) >= 0.01:
+                line += f" ({d:+.2f} pp vs prior quarter)"
+        facts.append(line)
+    return facts
+
+
+def generate_growth_triggers(symbol: str, *, consolidated: bool | None = None) -> str | None:
+    """Forward-looking **growth-triggers 1-pager** for ``symbol`` — an opt-in deeper cut
+    offered after a deep report. Grounded in the same primary filings the deep report reads
+    plus the verified deterministic snapshot. Returns the markdown, or ``None`` if there are
+    no filings to ground it (so the caller can reply gracefully)."""
+    symbol = symbol.upper()
+    con = connect()
+    try:
+        ensure_ingested(symbol, con)               # fresh financials + shareholding (cooldown-guarded)
+        basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
+        facts = _snapshot_facts(con, symbol, basis)
+    finally:
+        con.close()
+    pdfs = _filings_for_analysis(symbol)
+    if not pdfs:
+        return None
+    return growth_triggers(pdfs, symbol, facts=facts)
 
 
 def report_summary(symbol: str, *, consolidated: bool = False) -> str:

@@ -548,7 +548,9 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
     if movers:
         rows = ["## Movers (today)"]
         for m in movers:
-            chg = f"{m['chg_pct']:+.1f}%" if m["chg_pct"] is not None else "n/a"
+            pc = m["chg_pct"]
+            emo = "🟢" if pc and pc > 0 else "🔴" if pc and pc < 0 else "⚪"
+            chg = f"{pc:+.1f}%" if pc is not None else "n/a"
             deliv = f"deliv {m['deliv']:.0f}%" if m["deliv"] is not None else "deliv n/a"
             tail = f" · {_pos_label(m['pos_52w'])}" if _pos_label(m["pos_52w"]) else ""
             val = ""
@@ -560,7 +562,7 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
                     val += f" ({rel} 5y-med {med:.0f})"
             elif m.get("pe_note"):                      # explain why there's no P/E
                 val = f" · P/E n/a ({m['pe_note']})"
-            rows.append(f"- **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
+            rows.append(f"- {emo} **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
                         f"{chg} · {deliv}{tail}{val}")
         parts.append("\n".join(rows))
 

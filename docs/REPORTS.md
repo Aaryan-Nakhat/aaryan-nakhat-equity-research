@@ -78,8 +78,21 @@ margins, ROE/ROCE/ROIC/ROA, leverage, liquidity, working-capital &
 cash-conversion days, **FCF / FCFF / FCFE**, CFO/PAT & CFO/EBITDA (incl. 3- and
 5-yr rolled), the quarterly trend, and forensic scores with full component
 breakdowns. The Gemini call uses a section-by-section forensic prompt and is
-**output-uncapped**. (Order book/backlog isn't in XBRL — order-driven sectors
-only; needs a PDF read.)
+**output-uncapped**.
+
+**Business overview (leads the report).** Before any table, the deep report opens
+with a `## 🏢 Business overview` section — an LLM read of the company's own filings
+(`synthesize.business_overview`, fed the same PDFs as the thesis): *what the company
+does*, its *business segments with approximate revenue-mix %*, and *market cap / TAM /
+penetration* (grounded in filings; market sizing kept approximate, never fabricated).
+For **order-driven** sectors (`sector.is_order_driven` — EPC / capital goods / infra /
+defence / IT services) it also surfaces the **order book / backlog + book-to-bill** from
+the filings. The old hardcoded §14 "order book n/a" note (which fired for **every**
+company regardless of type) is gone — §14 now carries a one-line order-book pointer
+**only** for order-driven names. The overview is best-effort — omitted if there are no
+filings to read. It also renders for symbols with **no XBRL financials** (REITs / InvITs,
+newly listed / renamed): the report leads with the overview + a technical snapshot instead
+of a bare "no financials" message.
 
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
@@ -148,11 +161,12 @@ the same way when older than ~80 days. (Ingests are idempotent upserts, so this
 re-lands the latest and appends any new period.) This is what keeps the statement
 tables current instead of frozen at the first-seen fiscal year.
 
-**Quarter-level P&L (TTM column):** the §1 Income statement and §2 margins tables
-carry a **TTM** column (trailing-4-quarters sum, via `fundamentals.ttm_pl`) next to
-the fiscal years, so a quarterly filer's freshest 12-month view sits beside the
-annuals. Balance sheet / cash flow stay annual (quarterly XBRL carries no BS/CF).
-The §8 quarterly-trend label now reflects the **actual** quarter count.
+**Annual P&L columns:** the §1 Income statement and §2 margins tables show the
+fiscal years only. (A trailing-12-month **TTM** column was removed — with financials
+current it just duplicated the latest FY, adding a column of no information.) Balance
+sheet / cash flow stay annual (quarterly XBRL carries no BS/CF). The §8 quarterly-trend
+label reflects the **actual** quarter count. P/E(TTM) in the valuation lens is unrelated
+— that's the trailing-twelve-month earnings yield, still shown.
 
 **Real peer table:** before building a deep report, `pipeline._ensure_peer_financials`
 best-effort ingests **annual** financials for up to ~6 same-sector peers that lack
@@ -161,9 +175,14 @@ one-or-two stocks that happened to be ingested. When fewer than 3 peers have a
 comparable P/E, the sector-percentile line is replaced by an "insufficient peer
 data" note (the peer table still renders).
 
-**Consolidated vs standalone:** `generate_report(consolidated=None)` auto-picks
-**consolidated** when it exists and subsidiaries add materially (consolidated
-revenue/PAT ≥25% larger — RIL's Jio/Retail, etc.), else standalone. Override by
+**Consolidated vs standalone:** `generate_report(consolidated=None)` **defaults to
+consolidated whenever it exists** — the whole group (parent + subs + JVs) is the
+economically complete, industry-standard primary lens. It falls back to standalone only
+when consolidated is unavailable, or when consolidated's XBRL history is ≥2 years thinner
+than standalone's (don't trade a complete *entity* for an incomplete *history*). This
+keeps the statement tables aligned with the (consolidated-based) business overview /
+thesis — e.g. EIEL, whose renewables growth sits entirely in acquired subsidiaries, now
+shows consolidated tables instead of standalone ones that omit that business. Override by
 putting **"consolidated"/"standalone"** in the email subject (`email_bot._basis`).
 
 ### Charts in the PDF (`reports/charts.py`)
@@ -178,6 +197,12 @@ interest cover, FCF/FCFF, and the **Monte-Carlo fair-value histogram**.
 Every headline metric is annotated so the report stands on its own:
 - **Inline band tags** on forensic/quant/pledge lines (e.g. `ROCE 9.5% — weak`,
   `pledge 2.4% — good`, `margin of safety 19% — some`) via `glossary.read/label`.
+- **"How to read this" explainer blocks** close each of §10 Valuation, §11
+  reverse-DCF, §12 statistical forensics and §13 technical snapshot — multi-line,
+  bolded definitions of every metric shown (P/E · P/B · earnings yield · EV/EBITDA ·
+  own-history percentile · forward multiple; reverse-DCF · Monte-Carlo range · margin
+  of safety · WACC · terminal growth; Benford MAD · sector z-scores; SMA · RSI ·
+  golden/death cross) so a non-expert can read the numbers without the separate guide.
 - A standalone **Metrics & ratings guide** — what each metric is (typical values,
   sector caveats) **plus the categorical outputs and their possible values**: the
   **Verdict** scale (Buy / Accumulate / Hold / Reduce / Avoid), why a Movers P/E
@@ -248,6 +273,7 @@ PULL  you email a stock name (Subject) from an allowlisted address
         ▼  resolve → one match runs; several → "which one?" reply, you reply a number
         ▼  instant ack → reply in-thread: the FULL deep report in the body
            + the same report (tables + charts) as the attached PDF
+           + a "reply 1) growth triggers" deeper-cut menu (opt-in follow-ups)
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
@@ -262,6 +288,19 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
 - **Disambiguation** is *ask-first*: ambiguous names get a numbered reply; your
   numeric reply is matched to the pending candidates (stored in `alert_state`
   under `__email__`, 24h TTL) and the chosen report is sent.
+- **Deeper-cut menu** (opt-in follow-ups): every deep report ends with a numbered
+  menu; replying with a number runs that deeper analysis *for the same stock*,
+  in-thread. Today: **`1) Growth-triggers 1-pager`** —
+  `pipeline.generate_growth_triggers` → `synthesize.growth_triggers`, a
+  forward-looking catalysts note (5–7 concrete triggers, each quantified +
+  timeline + **HIGH / MEDIUM / OPTIONALITY** conviction tag, a "what's in the
+  price" read, risks, and a scoreboard table). It's **grounded in the same primary
+  filings** the deep report reads (concalls / investor presentations / results —
+  *not* the open web), and its Section-1 snapshot is injected from the deterministic
+  numbers (`_snapshot_facts`: mcap/CMP/TTM revenue & margins/ROE/ROCE/P·E/P·B/promoter
+  holding) so they're exact. Delivered as **email body + a text PDF**. The menu is
+  armed via the same numbered-reply state (`_set_followup` → `GT:<SYM>` items), and
+  is **extensible** — add a row + a prefix branch for the next cut (bear case, etc.).
 - **Config**: `CHANNELS`, `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
   `REPORT_FROM` / `REPORT_TO`, and `EMAIL_ALLOWED_SENDERS`. Send requests *from*
   a different address you own (e.g. work) *to* the bot's Gmail, so requests never

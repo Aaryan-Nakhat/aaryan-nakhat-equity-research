@@ -142,7 +142,7 @@ def _cover(ebit, fin) -> str:
 
 def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      consolidated: bool = False, target_shares: float | None = None,
-                     guidance: dict | None = None) -> str:
+                     guidance: dict | None = None, overview: str | None = None) -> str:
     af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
     label = "consolidated" if consolidated else "standalone"
     L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
@@ -150,8 +150,23 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
          "noted. History depth is data-bound: P&L is multi-year; balance sheet & "
          "cash flow are present only for years where the result XBRL carried them "
          "(typically FY2023+)._\n"]
+    if overview:                                        # business overview leads the report
+        L += [overview, ""]
     if af.empty:
-        return "\n".join(L) + "\nNo annual financials ingested for this symbol."
+        # No structured statements (e.g. a REIT/InvIT, or a newly listed/renamed entity).
+        # Still deliver the business overview above + whatever price/technical context exists.
+        L += ["_No structured annual financials are published for this symbol on NSE's result "
+              "XBRL feed (typical for REITs / InvITs, or a newly listed / recently renamed "
+              "entity), so the statement tables are omitted. The business overview above and "
+              "the price/technical snapshot below still apply._", ""]
+        ts = technical.snapshot(con, symbol)
+        if ts:
+            L += ["## Technical snapshot",
+                  f"- Close ₹{_f(ts['close'],2)} · SMA20/50/200 {_f(ts['sma20'],0)}/{_f(ts['sma50'],0)}/"
+                  f"{_f(ts['sma200'],0)} · RSI {_f(ts['rsi14'],0)} · "
+                  f"{_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
+                  f"- Signals: {', '.join(ts['signals'])}"]
+        return "\n".join(L)
 
     def s(el: str) -> pd.Series:
         return af[el] if el in af.columns else pd.Series(np.nan, index=af.index)
@@ -198,32 +213,9 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     fcff = cfo - capex + fin * (1 - tax_rate)
     fcfe = cfo - capex + net_borrow
 
-    # ---- trailing-12-month (TTM) P&L column (last 4 consecutive quarters) ----
-    tpl = fundamentals.ttm_pl(con, symbol, consolidated)
-
-    def tg(el):                       # TTM scalar for an element (₹); NaN if absent
-        v = tpl.get(el)
-        return float(v) if v is not None and not pd.isna(v) else np.nan
-
-    t_rev, t_oi, t_inc = tg("RevenueFromOperations"), tg("OtherIncome"), tg("Income")
-    has_ttm = not tpl.empty and not pd.isna(t_rev)
-    t_cm = tg("CostOfMaterialsConsumed")
-    t_cogs = (np.nan if pd.isna(t_cm) else
-              np.nansum([t_cm, tg("PurchasesOfStockInTrade"),
-                         tg("ChangesInInventoriesOfFinishedGoodsWorkInProgressAndStockInTrade")]))
-    t_emp, t_fin = tg("EmployeeBenefitExpense"), tg("FinanceCosts")
-    t_dep, t_oexp, t_texp = tg("DepreciationDepletionAndAmortisationExpense"), tg("OtherExpenses"), tg("Expenses")
-    t_pbeit, t_exc = tg("ProfitBeforeExceptionalItemsAndTax"), tg("ExceptionalItemsBeforeTax")
-    t_pbt, t_ctax, t_dtax, t_tax = tg("ProfitBeforeTax"), tg("CurrentTax"), tg("DeferredTax"), tg("TaxExpense")
-    t_pat, t_ci = tg("ProfitLossForPeriod"), tg("ComprehensiveIncomeForThePeriod")
-    t_ebit, t_ebitda, t_gp = t_pbt + t_fin, t_pbt + t_fin + t_dep, t_rev - t_cogs
-
-    def _rt(num, den, mul=100.0):     # safe ratio (no div-by-zero / NaN warnings)
-        return mul * num / den if (den == den and den) else np.nan
-
     # ===================== INCOME STATEMENT =====================
     years = [y for y in yrs if not pd.isna(rev.get(y))]
-    hdr = ["Income statement"] + [f"FY{y.year}" for y in years] + (["TTM"] if has_ttm else [])
+    hdr = ["Income statement"] + [f"FY{y.year}" for y in years]
     rows1 = [
         ["Revenue from operations"] + cells(rev),
         ["Other income"] + cells(oi),
@@ -245,11 +237,6 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         ["Net profit (PAT)"] + cells(pat),
         ["Comprehensive income"] + cells(ci),
     ]
-    if has_ttm:
-        ttm_is = [t_rev, t_oi, t_inc, t_cogs, t_emp, t_fin, t_dep, t_oexp, t_texp,
-                  t_ebitda, t_ebit, t_pbeit, t_exc, t_pbt, t_ctax, t_dtax, t_tax, t_pat, t_ci]
-        for row, val in zip(rows1, ttm_is):
-            row.append(_f(None if pd.isna(val) else val / CR, 0))
     L += ["## 1. Income statement", _table(hdr, rows1), ""]
 
     # ---- margins & growth ----
@@ -266,22 +253,8 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         ["PAT YoY"] + [_f(None if pd.isna(yoy(pat).get(y)) else 100 * yoy(pat).get(y), 1, pct=True, lo=-100, hi=500) for y in years],
         ["Other income / PBT"] + [_f(None if pd.isna(oi.get(y)) or pd.isna(pbt.get(y)) else 100 * oi.get(y) / pbt.get(y), 1, pct=True, lo=-200, hi=300) for y in years],
     ]
-    if has_ttm:
-        ttm_m = [
-            _f(_rt(t_gp, t_rev), 1, pct=True, lo=-100, hi=100),
-            _f(_rt(t_ebitda, t_rev), 1, pct=True, lo=-100, hi=100),
-            _f(_rt(t_ebit, t_rev), 1, pct=True, lo=-100, hi=100),
-            _f(_rt(t_pbt, t_rev), 1, pct=True, lo=-100, hi=100),
-            _f(_rt(t_pat, t_rev), 1, pct=True, lo=-100, hi=100),
-            _f(_rt(t_tax, t_pbt), 1, pct=True, lo=0, hi=80),
-            "n/a",   # YoY needs the prior-year TTM (not computed)
-            "n/a",
-            _f(_rt(t_oi, t_pbt), 1, pct=True, lo=-200, hi=300),
-        ]
-        for row, val in zip(rows2, ttm_m):
-            row.append(val)
     L += ["## 2. Profitability, margins & growth", _table(
-        ["Metric"] + [f"FY{y.year}" for y in years] + (["TTM"] if has_ttm else []), rows2), ""]
+        ["Metric"] + [f"FY{y.year}" for y in years], rows2), ""]
 
     # ===================== BALANCE SHEET =====================
     by = [y for y in yrs if not pd.isna(assets.get(y))]
@@ -518,6 +491,28 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         # blank lines around the table so the following "## 11." renders as a heading
         # (a table glued straight to a heading makes the renderer swallow the '##')
         L += ["", "### Peer comparison", "", _table(["Company"] + pcols, prows), ""]
+    L += [
+        "",
+        "**How to read the valuation numbers:**",
+        "- **P/E (price ÷ trailing-12-month EPS)** — rupees paid for ₹1 of yearly profit. Lower "
+        "looks cheaper, but a low P/E can flag a cyclical peak or a value trap; it's only "
+        "meaningful against the stock's *own* history and its peers, never in isolation.",
+        "- **P/B (price ÷ book value per share)** — rupees paid for ₹1 of net worth. The primary "
+        "lens for banks/NBFCs, where it must be paired with **ROE** — a rich P/B is justified only "
+        "by a durably high ROE.",
+        "- **Earnings yield (1 ÷ P/E)** — profit as a % of the price you pay; compare it to the "
+        "~7% 10-year government-bond yield, your risk-free alternative.",
+        "- **EV/EBITDA** — enterprise value (market cap **+** net debt) per ₹1 of operating profit; "
+        "it strips out leverage, so it's the fair lens for capital-heavy / cyclical names — judge "
+        "it on **mid-cycle** margins, not a single peak or trough year.",
+        "- **Own-history percentile** — where today's multiple sits within the stock's own range: "
+        "**< 35th = cheap**, **> 65th = rich**, relative to itself (more intuitive than a median).",
+        "- **Forward multiple** — the same ratio on management's *guided* next-year profit; shown "
+        "only when guidance is explicit, so it's a real signpost rather than a projection we invented.",
+        "- The **Lens** line auto-selects the metric most appropriate to this company's sector "
+        "(financial → P/B-on-ROE · cyclical → EV/EBITDA · everything else → P/E).",
+        "",
+    ]
 
     # =============== VALUATION — WHAT THE PRICE IMPLIES (reverse-DCF first) ===============
     inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
@@ -564,7 +559,24 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      "lean on the reverse-DCF above and the sector-appropriate multiples in §10.")
         if inp.note:
             L.append(f"- _{inp.note.strip()}_")
-    L.append("- _DCF is assumption-driven — read the distribution/range, not a point estimate._")
+    L += [
+        "",
+        "**How to read this section:**",
+        "- A **DCF** values a business as the present value of all the cash it will hand its owners "
+        "over time. Rather than *guess* that cash, the **reverse-DCF** flips the question — it "
+        "solves for the growth rate today's *price* already assumes, then asks whether that bar is "
+        "realistic next to what the company has actually delivered. That's the robust read, so it "
+        "leads: clear the implied bar and the stock is cheap; fall short and it's rich.",
+        "- The **Monte-Carlo FCFF-DCF** runs thousands of scenarios (varying growth, margin and "
+        "discount rate) to produce an intrinsic-value **range**, not a single number. **Margin of "
+        "safety** is how far the price sits *below* that range — your cushion for being wrong; a "
+        "price *above* the range means you're paying a premium with no cushion.",
+        "- **WACC** is the blended cost of the company's debt + equity (the discount rate); "
+        "**terminal growth** is the modest rate cash is assumed to grow at forever after the "
+        "forecast. For lenders and deeply cyclical / capex-heavy names a point DCF is unreliable, "
+        "so there the reverse-DCF and the §10 multiples carry the weight.",
+        "- _DCF is assumption-driven — read the distribution/range, not a point estimate._",
+    ]
     L.append("")
 
     # ===================== STATISTICAL FORENSICS =====================
@@ -580,12 +592,21 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _f(v["z"], 2)]
                 for k, v in zs["ratios"].items()]
         L += [f"- Sector-relative z-scores ({zs.get('industry', '?')}, vs {len(rows)} ratios over peers):",
-              _table(["Ratio", "Value", "Peer mean", "z"], rows),
-              "  _z = standard deviations from the peer mean: |z|<1 in line with peers, >2 an "
-              "outlier. High z is **good** for ROE/ROCE/margins, **expensive** for P/E·P/B, "
-              "**more levered** for D/E._"]
+              _table(["Ratio", "Value", "Peer mean", "z"], rows)]
     else:
         L.append(f"- Sector z-scores: {zs.get('note', 'n/a')}.")
+    L += [
+        "",
+        "**How to read this section:**",
+        "- **Benford's Law** — in large sets of naturally occurring financial figures the *leading* "
+        "digit isn't uniform: a **1** starts a number ~30% of the time, a 9 only ~5%. **MAD** "
+        "(mean absolute deviation) measures how far the reported numbers stray from that expected "
+        "shape — **low = conforms** (looks natural), **high = numbers look 'engineered'**. It's a "
+        "soft flag to dig into, never proof of anything on its own.",
+        "- **Sector z-scores** put each ratio in **standard deviations from the peer average**: "
+        "**|z| < 1** is in line with peers, **> 2** is a genuine outlier. A high z reads as "
+        "**good** for ROE/ROCE/margins, **expensive** for P/E·P/B, and **more levered** for D/E.",
+    ]
     L.append("")
 
     ts = technical.snapshot(con, symbol)
@@ -593,14 +614,25 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         L += ["## 13. Technical snapshot",
               f"- Close ₹{_f(ts['close'],2)} · SMA20/50/200 {_f(ts['sma20'],0)}/{_f(ts['sma50'],0)}/{_f(ts['sma200'],0)} · "
               f"RSI {_f(ts['rsi14'],0)} · {_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
-              f"- Signals: {', '.join(ts['signals'])}"]
+              f"- Signals: {', '.join(ts['signals'])}",
+              "",
+              "**How to read this section:**",
+              "- **SMA 20 / 50 / 200** are the average closing prices over the last 20, 50 and 200 "
+              "trading days — smoothing daily noise to reveal the trend. Price **above the 200-day** "
+              "signals a long-term uptrend; the **50-day crossing above the 200-day** is a bullish "
+              "'**golden cross**' regime (the reverse is a bearish '**death cross**').",
+              "- **RSI(14)** measures momentum on a 0–100 scale: **> 70 overbought**, **< 30 "
+              "oversold**, **~40–60 neutral**.",
+              "- **% from 52-week high** shows how far the stock has pulled back from its peak.",
+              "- Technicals describe price **behaviour and timing** — they complement, never "
+              "replace, the fundamentals and valuation above."]
 
-    L += ["", "## 14. Notes",
-          "- **Order book / backlog** is not in the structured XBRL filings and is "
-          "only relevant to order-driven businesses (EPC / capital goods / IT services); "
-          "n/a for this company type. It would need separate extraction from the annual "
-          "report / investor presentation (a Phase-4 PDF read).",
-          f"- Statements are {label}; pass the consolidated flag for group-level figures.",
+    L += ["", "## 14. Notes"]
+    if sector.is_order_driven(industry):     # only relevant to order-book-driven businesses
+        L.append("- **Order book / backlog** is read from the filings and, when disclosed, appears "
+                 "in the **Business overview** at the top — it is not part of the structured XBRL "
+                 "statements.")
+    L += [f"- Statements are {label}; pass the consolidated flag for group-level figures.",
           "- COGS, EBITDA and FCFF/FCFE use documented approximations "
           "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "
           "FCFF adds back after-tax interest; FCFE adds net borrowing)."]

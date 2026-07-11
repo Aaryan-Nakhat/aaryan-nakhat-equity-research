@@ -54,8 +54,8 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   Every record is parsed best-effort and each digest section is built
   independently, so one malformed filing can never abort the whole scan.
 - **Movers (always present):** a per-stock daily snapshot for the whole watchlist
-  — close, day %change, delivery%, 52-week position, and **P/E vs the stock's own
-  5-yr median** (cheap/rich lens) — sorted biggest-move first
+  — a 🟢/🔴 up/down marker, close, day %change, delivery%, 52-week position, and
+  **P/E vs the stock's own 5-yr median** (cheap/rich lens) — sorted biggest-move first
   (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
   the digest substantive even on quiet event days.
 - **Events (when they happen):** the alerts below, grouped under each company. For

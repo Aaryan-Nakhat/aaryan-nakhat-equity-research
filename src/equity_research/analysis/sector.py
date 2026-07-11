@@ -28,6 +28,22 @@ _CYCLICAL_WORDS = ("metal", "mining", "oil", "gas", "petrol", "fuel", "power",
                    "realty", "real estate", "chemical", "infrastructure", "shipping")
 
 
+# Order-driven = revenue booked against a backlog of confirmed orders, so an order
+# book / book-to-bill is a real forward indicator (unlike FMCG/lenders/etc.).
+_ORDER_DRIVEN_WORDS = ("construction", "engineering", "capital goods", "infrastructure",
+                       "defence", "defense", "epc", "railway", "shipbuild", "aerospace",
+                       "software", "it services", "it consulting", "power equipment",
+                       "electrical equipment", "industrial")
+
+
+def is_order_driven(industry: str | None) -> bool:
+    """True for sectors whose revenue runs off a confirmed order book / backlog
+    (EPC / capital goods / infra / defence / IT services) — where an order-book line
+    is a meaningful forward signal worth surfacing in the report."""
+    ind = (industry or "").lower()
+    return any(w in ind for w in _ORDER_DRIVEN_WORDS)
+
+
 def valuation_lens(industry: str | None) -> str:
     """How to value this sector: ``"financial"`` (P/B + ROE), ``"cyclical"``
     (EV/EBITDA + P/B, mid-cycle), or ``"earnings"`` (P/E) — the default."""

@@ -171,6 +171,181 @@ def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None
     return "".join(out).strip()
 
 
+_OVERVIEW_SYS = """You are an equity analyst writing the opening "Business overview" \
+section of a deep research report on an Indian listed company, for a sophisticated \
+personal investor. You are given the company's own recent filings as PDFs (results, \
+concall transcripts, investor presentations, annual report) and a few hard facts \
+(market cap, sector). GROUND everything in these filings first.
+
+Write in markdown, starting with the exact heading '## 🏢 Business overview', then \
+these '###' subsections (omit a subsection only if you genuinely have nothing grounded \
+to say):
+
+### What the company does
+2-4 plain-English sentences: the actual business, products/services, and how it makes money.
+
+### Business segments & revenue mix
+One bullet per operating segment / business line with its **approximate % of revenue** \
+(latest disclosed year — from the investor presentation or annual report). If the company \
+does several things, list them all with their shares (e.g. '- Retail lending — ~55% of \
+AUM'). If the split isn't disclosed in the filings, list the segments qualitatively and \
+say the exact mix isn't disclosed. NEVER invent percentages.
+
+### Market size & positioning
+State the **market cap** (use the figure given). Then the **total addressable market / \
+industry size** and the company's **penetration / market share and runway** — grounded in \
+the filings where stated; you may add well-established, widely-known public industry facts \
+but keep them clearly approximate ('~', 'roughly') and NEVER fabricate a precise figure. \
+If unknown, say the company doesn't disclose it.
+
+{order_line}
+
+Rules: be specific and concise (~300-400 words total). Cite figures from the filings. \
+Do NOT give a buy/sell view or valuation opinion here — this is context only; the verdict \
+comes later. If the filings are thin, say what you can and note the limitation. Never \
+invent data."""
+
+_OVERVIEW_ORDER = """### Order book / backlog
+This is an order-driven business, so state the **latest disclosed order book / backlog** \
+value, its trend, and the **book-to-bill** or order-inflow if the filings give them. If \
+the filings you were given don't disclose an order book, say so explicitly (do not guess)."""
+
+
+def business_overview(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
+                      market_cap_cr: float | None = None, industry: str | None = None,
+                      order_driven: bool = False, model: str = MODEL) -> str | None:
+    """Opening 'Business overview' markdown (what it does, segment revenue mix, market
+    size / TAM / penetration, and — for order-driven names — order book) read from the
+    company's own filings. Best-effort: returns None if there are no filings to read or
+    the call fails, so the report simply omits the section rather than breaking."""
+    docs = list(pdfs or [])
+    if not docs:
+        return None
+    facts = [f"Company (NSE symbol): {symbol}"]
+    if market_cap_cr and market_cap_cr == market_cap_cr:
+        facts.append(f"Market capitalisation: ~₹{market_cap_cr:,.0f} crore")
+    if industry:
+        facts.append(f"NSE industry classification: {industry}")
+    parts: list[types.Part] = []
+    for label, data in docs:
+        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
+        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
+    parts.append(types.Part.from_text(
+        text="Hard facts:\n" + "\n".join(facts) + "\n\nWrite the Business overview section."))
+    system = _OVERVIEW_SYS.format(order_line=_OVERVIEW_ORDER if order_driven else "")
+    try:
+        out: list[str] = []
+        for chunk in _client().models.generate_content_stream(
+            model=model, contents=parts,
+            config=types.GenerateContentConfig(system_instruction=system),
+        ):
+            if chunk.text:
+                out.append(chunk.text)
+        text = "".join(out).strip()
+    except Exception:  # noqa: BLE001 — overview is best-effort context, never block the report
+        return None
+    return text or None
+
+
+_GROWTH_TRIGGERS_SYS = """You are a senior equity research analyst at a top-tier \
+Indian institutional brokerage (Kotak Institutional / Motilal Oswal / Ambit Capital \
+caliber). Produce a single, high-density **growth-triggers document** for the company \
+that a fund manager can glance at and immediately grasp why this business could re-rate \
+over the next 12–36 months. You are given the company's own recent filings as PDFs \
+(concall transcripts, investor presentations, results, annual report) plus a block of \
+verified snapshot numbers. GROUND every quantified claim in those filings.
+
+Structure it exactly as follows (markdown):
+
+## 🚀 Growth triggers — [Company] (NSE: [Ticker])
+
+### 1. Company snapshot (4–5 lines)
+- What the company does, in one jargon-free sentence a non-sector analyst understands.
+- Current market cap, CMP, TTM revenue, TTM EBITDA margin, TTM ROE/ROCE — **use the \
+verified numbers supplied; do not recompute or estimate them**.
+- Promoter holding % and any recent change.
+- Where it sits in the value chain (upstream/midstream/downstream) and who the end customers are.
+- **Business uniqueness:** what is genuinely unique/moated vs. whether it competes in a \
+commoditized industry — say which, plainly.
+
+### 2. Core growth triggers
+5–7 specific, concrete triggers (never generic tailwinds), each in this exact shape:
+
+**[Trigger name — crisp 5–7 words]**
+- **What's happening:** 2–3 sentences — the specific capex, order win, capacity addition, \
+product launch, policy change, or structural shift.
+- **Quantified impact:** numbers wherever the filings allow — incremental revenue (₹ cr), \
+margin expansion (bps), volume growth (%), capacity/utilisation, addressable market, \
+order-book/bid-pipeline value.
+- **Timeline:** when it starts flowing into the P&L (e.g. "H2 FY27", "commissioning Q1 FY28").
+- **Conviction:** **HIGH CONVICTION** (already visible in order book / capex / policy), \
+**MEDIUM CONVICTION** (management-guided, not yet contracted), or **OPTIONALITY** \
+(asymmetric upside, not in consensus).
+
+Order the triggers by this priority: (1) capacity/capex-led volume, (2) new \
+product/segment/geography, (3) margin-expansion drivers, (4) policy/regulatory catalysts, \
+(5) industry-structure shifts (consolidation, competitor exit, import substitution, China+1), \
+(6) balance-sheet triggers (deleveraging, asset monetisation, subsidiary value unlock), \
+(7) management/governance upgrades.
+
+### 3. What's already in the price? (2–3 lines)
+What is consensus already discounting, and where is the incremental surprise vs. street.
+
+### 4. Key risks to the trigger thesis (3–4 bullets)
+What can delay or derail each high-conviction trigger — execution, regulatory, input-cost, \
+demand-cyclicality, or balance-sheet risk.
+
+### 5. Trigger scoreboard
+A markdown table: | # | Trigger | Revenue/earnings impact | Timeline | Conviction |
+
+**Quality & sourcing rules (strict):**
+- Every trigger must be **company-specific and verifiable** from the filings — cite the \
+source inline (e.g. "(Q4FY26 concall)", "(May-2026 investor presentation, p.17)"). NO filler \
+like "India's growing economy" or "rising middle class".
+- Every ₹cr / bps / % figure must be **sourced to a filing** OR flagged as an explicit \
+estimate with the assumption stated. If the data for a trigger isn't disclosed, write \
+"*awaiting disclosure*" — never guess a number.
+- Use the model's own knowledge only for industry framing, and label it as context — never \
+present it as a company-specific fact.
+- Write like a conviction note briefing a PM before a position-sizing meeting: dense, \
+specific, no fluff. Length is fine — cover every real trigger; do not artificially compress \
+or truncate. If the filings are thin, say so and give what is grounded.
+- Output ONLY the finished document — do NOT echo these instructions, the section \
+descriptions, or the bracketed placeholders; start directly at the '## 🚀 Growth triggers' heading."""
+
+
+def growth_triggers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
+                    facts: list[str] | None = None, model: str = MODEL) -> str | None:
+    """Forward-looking **growth-triggers 1-pager** for ``symbol`` — catalysts, quantified
+    and conviction-tagged — read from the company's own filings and grounded on a block of
+    verified snapshot numbers (``facts``). Best-effort: returns None if there are no filings
+    to read or the call fails, so the caller can fall back gracefully. Never invents data."""
+    docs = list(pdfs or [])
+    if not docs:
+        return None
+    parts: list[types.Part] = []
+    for label, data in docs:
+        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
+        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
+    facts_block = ("Verified snapshot numbers (use these exact figures in Section 1; do not "
+                   "recompute):\n" + "\n".join(f"- {f}" for f in (facts or []))) if facts else ""
+    parts.append(types.Part.from_text(
+        text=f"Company: {symbol}\n\n{facts_block}\n\nProduce the growth-triggers document, "
+             "grounded in the attached filings."))
+    try:
+        out: list[str] = []
+        for chunk in _client().models.generate_content_stream(
+            model=model, contents=parts,
+            config=types.GenerateContentConfig(system_instruction=_GROWTH_TRIGGERS_SYS),
+        ):
+            if chunk.text:
+                out.append(chunk.text)
+        text = "".join(out).strip()
+    except Exception:  # noqa: BLE001 — best-effort, never block on the follow-up
+        return None
+    return text or None
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \
