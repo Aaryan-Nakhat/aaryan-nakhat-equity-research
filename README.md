@@ -30,7 +30,12 @@ Personal use. Not a hosted product.
   holdings coverage + forensic look-through are the next steps (see [`docs/PLAN.md`](docs/PLAN.md)).
 - **Report** — Gemini reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
-  (name a stock → styled PDF + inline thesis) and **push** — a **full daily digest at
+  (name a stock → styled PDF + inline thesis). The deep report now **leads with a
+  filing-grounded business overview** (what it does, segment revenue-mix %, market cap /
+  TAM / penetration, order book for order-driven names) and every valuation/forensic/
+  technical section carries a plain-English "how to read this"; it also offers an opt-in
+  **growth-triggers 1-pager** (reply `1`) — forward-looking, conviction-tagged catalysts.
+  And **push** — a **full daily digest at
   18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
   **midday "same-day" digest at 12:30** with the same sections on **live** intraday data
