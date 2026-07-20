@@ -281,6 +281,20 @@ def _text_pdf(report_md: str, title: str) -> bytes | None:
 
 
 # ----------------- IPO (pre-listing) -----------------
+def _ipo_list_safe(fn, *, timeout: int = 150):
+    """Run a browser-tier IPO list fetch under a HARD timeout so a wedged Camoufox session
+    can never freeze the request loop. Returns ``None`` (== fetch failure, so the caller
+    replies 'try again') on timeout or error; the healthy fetch takes ~60-90s."""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(fn).result(timeout=timeout)
+    except Exception:  # noqa: BLE001 — timeout or fetch error → signal failure
+        log.exception("IPO list fetch timed out / failed")
+        return None
+    finally:
+        ex.shutdown(wait=False)                # don't block on a hung browser thread
+
+
 def _ipo_query(subject: str) -> tuple[str, str] | None:
     """Parse an 'ipo: ...' subject → ('list','ongoing'|'upcoming') or ('name', <query>);
     None if it isn't an IPO request."""
@@ -306,10 +320,10 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
     """List live / upcoming IPOs as a numbered menu; a numeric reply → that IPO's note.
     'upcoming' is filtered to issues whose RHP is already published (so it's analysable)."""
     if kind == "ongoing":
-        ipos = ipo.list_current()
+        ipos = _ipo_list_safe(ipo.list_current)
         title = "🟢 Live IPOs (open now)"
     else:
-        ipos = ipo.list_upcoming()
+        ipos = _ipo_list_safe(ipo.list_upcoming)
         if ipos is not None:
             ipos = [x for x in ipos if ipo.has_prospectus(x["symbol"])]
         title = "🔜 Upcoming IPOs (RHP available)"
@@ -370,7 +384,7 @@ def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
         return
     # a named IPO — match against live then upcoming by symbol / company substring
     q = val.lower()
-    pool = (ipo.list_current() or []) + (ipo.list_upcoming() or [])
+    pool = (_ipo_list_safe(ipo.list_current) or []) + (_ipo_list_safe(ipo.list_upcoming) or [])
     hits = [x for x in pool if q in x["symbol"].lower() or q in x["company"].lower()]
     if not hits:
         _reply_text(req, f"Couldn't find a live or upcoming IPO matching '{val}'. "
@@ -646,11 +660,33 @@ def main() -> None:
         time.sleep(15)
 
 
+def _dedupe(reqs: list) -> tuple[list, list]:
+    """Collapse identical requests (same sender + subject + body) to one — IMAP/Gmail
+    occasionally serves a message twice, or the user double-sends. Returns
+    (unique_requests, duplicate_uids); the dupes are marked seen but not processed."""
+    unique, dupe_uids, keys = [], [], set()
+    for r in reqs:
+        key = ((r.sender or "").strip().lower(), (r.subject or "").strip().lower(),
+               " ".join((r.body or "").split())[:300])
+        if key in keys:
+            dupe_uids.append(r.uid)
+            continue
+        keys.add(key)
+        unique.append(r)
+    return unique, dupe_uids
+
+
 def _drain(inbox: Inbox) -> None:
     """Handle every pending request from allowlisted senders, then mark them seen."""
     reqs = inbox.fetch_requests(ALLOWED)
-    if reqs:
-        log.info("got %d request(s): %s", len(reqs), [r.subject for r in reqs])
+    if not reqs:
+        return
+    reqs, dupe_uids = _dedupe(reqs)
+    log.info("got %d request(s)%s: %s", len(reqs),
+             f" ({len(dupe_uids)} duplicate(s) skipped)" if dupe_uids else "",
+             [r.subject for r in reqs])
+    if dupe_uids:
+        inbox.mark_seen(dupe_uids)              # drop the dupes without re-processing
     for req in reqs:
         try:
             handle_request(req)
