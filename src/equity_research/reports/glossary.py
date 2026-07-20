@@ -334,3 +334,130 @@ def fund_guide_pdf() -> bytes:
         from equity_research.reports.pdf import report_to_pdf
         _FUND_GUIDE_PDF = report_to_pdf(fund_guide_markdown(), "Mutual-fund metrics guide")
     return _FUND_GUIDE_PDF
+
+
+# IPO jargon, grouped as the pre-listing note presents it. A first-time applicant should
+# be able to read the note end-to-end with only this sheet beside them.
+IPO_METRICS: list[tuple[str, list[tuple[str, str]]]] = [
+    ("The offer — how the issue is structured", [
+        ("Fresh Issue",
+         "**New** shares created by the company; the money goes **to the company** — for capex, "
+         "debt repayment or working capital. Generally the **positive** half of an issue: the "
+         "business actually gets funded."),
+        ("Offer for Sale (OFS)",
+         "**Existing** shareholders (promoters, PE/VC funds) selling their own shares; the money "
+         "goes **to them, not the company**. A large OFS deserves caution — ask *who* is exiting "
+         "and *why now*. A full PE exit reads very differently from a small promoter trim."),
+        ("Price band",
+         "The floor–cap range you may bid in (e.g. ₹402–₹424). Valuation is judged at the **upper "
+         "band**, since that's where a well-demanded issue prices."),
+        ("Lot size / minimum application",
+         "The smallest number of shares you can apply for, and the rupee cost at the upper band — "
+         "the minimum cheque a retail investor must write."),
+        ("Promoter holding (pre → post)",
+         "How much the founders own before and after the issue. A steep drop, or a low post-issue "
+         "stake, means less 'skin in the game'."),
+        ("Objects of the issue (use of proceeds)",
+         "What the fresh-issue money will actually fund. **Concrete** uses (a named capex project, "
+         "debt reduction) give far better visibility than a large 'general corporate purposes' bucket."),
+    ]),
+    ("Demand signals — who's actually buying", [
+        ("Anchor investors",
+         "Large institutions allotted shares the day **before** the issue opens, at a fixed price, "
+         "with a lock-in. Marquee anchors (well-known mutual funds) are a genuine confidence signal."),
+        ("QIB — Qualified Institutional Buyers",
+         "Mutual funds, insurers, banks, FPIs — the professional 'smart money' that does deep "
+         "diligence. **Weak QIB subscription is the single most telling warning sign** in an issue, "
+         "even when retail demand looks frenzied."),
+        ("NII / HNI — Non-Institutional Investors",
+         "Applications above ₹2 lakh (wealthy individuals, corporates). Often leverage-funded and "
+         "chasing listing gains, so high NII demand is momentum, not necessarily conviction."),
+        ("RII — Retail Individual Investors",
+         "Applications up to ₹2 lakh. Sentiment-driven; strong retail demand alone doesn't validate "
+         "an issue's quality."),
+        ("Subscription (x times)",
+         "How many times each category was bid for versus shares reserved. **Read the categories "
+         "separately** — a big headline number can hide a near-empty QIB book."),
+        ("Grey Market Premium (GMP)",
+         "An **unofficial**, unregulated off-market price rumour. It is *not* a primary source and "
+         "is deliberately **excluded** from these reports — official subscription and anchor data "
+         "tell the same story with far more reliability."),
+    ]),
+    ("Valuation at the band", [
+        ("P/E at the upper band",
+         "Offer price ÷ latest-year earnings per share — rupees paid for ₹1 of annual profit. "
+         "Compare it to the **listed peers** in the price-band ad, not in isolation."),
+        ("P/B and NAV per share",
+         "NAV (net asset value) is book value per share; P/B is the offer price ÷ NAV — rupees paid "
+         "for ₹1 of net worth. A high P/B needs a high RoNW to justify it."),
+        ("RoNW — Return on Net Worth",
+         "Profit ÷ shareholders' funds; the company's return on its own capital. Higher is better, "
+         "and a RoNW well above peers can justify paying a higher multiple."),
+        ("EPS (diluted)",
+         "Profit per share after counting all potentially convertible instruments — the conservative "
+         "earnings figure the P/E is built on."),
+    ]),
+    ("Financial & risk terms used in the note", [
+        ("EBITDA / EBITDA margin",
+         "Operating profit before interest, tax, depreciation and amortisation, and that as a % of "
+         "revenue — the cleanest read on core operating profitability and its trend."),
+        ("PAT and CFO",
+         "Profit After Tax versus **Cash Flow from Operations**. CFO consistently tracking (or "
+         "exceeding) PAT means the profit is real cash; persistently negative CFO alongside rising "
+         "profit is a serious quality flag."),
+        ("D/E and DSCR",
+         "Debt-to-Equity measures leverage (≈1x+ is high for most sectors). The Debt Service Coverage "
+         "Ratio shows how comfortably operating cash covers debt repayments — near 1.0x is tight."),
+        ("Contingent liabilities",
+         "Potential obligations that don't sit on the balance sheet (guarantees, disputed tax, "
+         "litigation). Judge them **as a % of net worth** — a large ratio can wipe out equity if they "
+         "crystallise."),
+        ("Related-party transactions (RPTs)",
+         "Business done with promoter-owned entities. Not wrong in itself, but material RPTs — or "
+         "promoters personally guaranteeing company debt — warrant scrutiny of pricing and governance."),
+        ("Customer concentration",
+         "Share of revenue from the largest few clients. Very high concentration (say >50% from the "
+         "top three) makes revenue fragile: losing one contract can reset the business."),
+    ]),
+    ("Sources & the verdict", [
+        ("RHP — Red Herring Prospectus",
+         "The company's own SEBI-filed offer document (often 400–600 pages): restated multi-year "
+         "financials, risk factors, objects of the issue, promoter and litigation detail. **The "
+         "primary source** for everything in the financials, risks and use-of-proceeds sections."),
+        ("Price-band advertisement",
+         "The mandatory newspaper ad carrying the KPI table — EPS, NAV, RoNW, P/E at the band — and "
+         "the **listed-peer comparison**. Source of the valuation section."),
+        ("APPLY / NEUTRAL / AVOID",
+         "The verdict scale. **APPLY** — quality, valuation and demand line up. **NEUTRAL** — a real "
+         "business at a fair price, but with risks or weak institutional demand; suitable only for a "
+         "considered/speculative punt. **AVOID** — the risks, pricing or demand signals outweigh the "
+         "story. It always states *who* the issue suits (listing-gain punt vs. long-term hold)."),
+    ]),
+]
+
+
+def ipo_guide_markdown() -> str:
+    """Plain-English guide to the IPO jargon used in the pre-listing note."""
+    lines = ["# IPO metrics & terminology guide",
+             "_What each term in the IPO analysis means, and how to read it — so the note stands "
+             "on its own even if this is your first application._\n"]
+    for section, items in IPO_METRICS:
+        lines.append(f"## {section}")
+        lines += [f"- **{k}** — {v}" for k, v in items]
+        lines.append("")
+    lines.append("_Source: the issuer's **RHP**, the **price-band advertisement** and the **anchor "
+                 "allotment**, all filed with SEBI and published via NSE, plus NSE's official "
+                 "subscription data. No grey-market or unofficial inputs are used._")
+    return "\n".join(lines)
+
+
+_IPO_GUIDE_PDF: bytes | None = None
+
+
+def ipo_guide_pdf() -> bytes:
+    """The IPO-metrics guide as a constant PDF (built once, cached)."""
+    global _IPO_GUIDE_PDF
+    if _IPO_GUIDE_PDF is None:
+        from equity_research.reports.pdf import report_to_pdf
+        _IPO_GUIDE_PDF = report_to_pdf(ipo_guide_markdown(), "IPO metrics & terminology guide")
+    return _IPO_GUIDE_PDF
