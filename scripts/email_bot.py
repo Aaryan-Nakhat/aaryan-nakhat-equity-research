@@ -309,8 +309,14 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
         ipos = ipo.list_current()
         title = "🟢 Live IPOs (open now)"
     else:
-        ipos = [x for x in ipo.list_upcoming() if ipo.has_prospectus(x["symbol"])]
+        ipos = ipo.list_upcoming()
+        if ipos is not None:
+            ipos = [x for x in ipos if ipo.has_prospectus(x["symbol"])]
         title = "🔜 Upcoming IPOs (RHP available)"
+    if ipos is None:                       # NSE fetch failed (not the same as 'none open')
+        _reply_text(req, "Couldn't reach NSE for the IPO list just now — its bot-protected "
+                         "endpoint is timing out. Please resend `ipo: " + kind + "` in a minute.")
+        return
     if not ipos:
         _reply_text(req, f"No {kind} IPOs "
                     + ("open right now." if kind == "ongoing"
@@ -364,7 +370,7 @@ def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
         return
     # a named IPO — match against live then upcoming by symbol / company substring
     q = val.lower()
-    pool = ipo.list_current() + ipo.list_upcoming()
+    pool = (ipo.list_current() or []) + (ipo.list_upcoming() or [])
     hits = [x for x in pool if q in x["symbol"].lower() or q in x["company"].lower()]
     if not hits:
         _reply_text(req, f"Couldn't find a live or upcoming IPO matching '{val}'. "

@@ -48,21 +48,23 @@ def _norm(item: dict) -> dict:
     }
 
 
-def list_current() -> list[dict]:
-    """Live/open IPOs (with total subscription). Empty list on failure."""
+def list_current() -> list[dict] | None:
+    """Live/open IPOs (with total subscription). ``None`` if the NSE fetch **failed**
+    (so the caller can say 'try again' rather than a misleading 'no IPOs'); ``[]`` means
+    genuinely none open."""
     try:
         data = fetch_api("/api/ipo-current-issue")
-    except Exception:  # noqa: BLE001
-        return []
+    except Exception:  # noqa: BLE001 — signal failure (distinct from an empty list)
+        return None
     return [_norm(x) for x in (data or []) if isinstance(x, dict) and x.get("symbol")]
 
 
-def list_upcoming() -> list[dict]:
-    """Forthcoming IPOs (excludes ones already open — those show under ``list_current``)."""
+def list_upcoming() -> list[dict] | None:
+    """Forthcoming IPOs (excludes ones already open). ``None`` on fetch failure, ``[]`` if none."""
     try:
         data = fetch_api("/api/all-upcoming-issues?category=ipo")
     except Exception:  # noqa: BLE001
-        return []
+        return None
     out = [_norm(x) for x in (data or []) if isinstance(x, dict) and x.get("symbol")]
     return [x for x in out if x["status"].lower() != "active"]
 
