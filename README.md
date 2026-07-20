@@ -21,13 +21,16 @@ Personal use. Not a hosted product.
   own guidance); and technical (trend, momentum, delivery-% conviction).
 - **Signals** — FII F&O positioning (smart-money sentiment), **insider/promoter (SEBI PIT)
   trades**, promoter pledge, bulk/block deals.
-- **Mutual funds** *(new track)* — AMFI NAV backbone (`mf_scheme`/`mf_nav`, accumulated daily)
-  + returns/risk analytics (CAGR, Sharpe, Sortino, max drawdown, rolling returns) + per-AMC
-  monthly **holdings** (`mf_holdings`, registry of parsers over a generic SEBI-format reader —
-  PPFAS + HDFC live). **Email `fund: <name>`**
-  → a fund deep-report: returns · risk · rolling consistency · category percentile · portfolio
-  concentration · **watchlist overlap** (which of your stocks the fund holds). Broader AMC
-  holdings coverage + forensic look-through are the next steps (see [`docs/PLAN.md`](docs/PLAN.md)).
+- **Mutual funds** *(new track)* — AMFI NAV backbone (`mf_scheme`/`mf_nav`, accumulated daily).
+  **Email `fund: <name>`** → a fund deep-report for any of ~14,500 schemes: returns · risk
+  (Sharpe/Sortino/drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo simulation) ·
+  **benchmark-relative alpha/beta/up-down-capture/tracking-error** vs the category's index
+  (~5y history backfilled from NSE archives) · category percentile · and a **Gemini verdict**
+  (Buy/Accumulate/Hold/Switch/Avoid). Where the AMC's SEBI monthly **holdings** are covered
+  (`mf_holdings`, a generic SEBI-format parser over a per-AMC fetch registry — **PPFAS + HDFC**):
+  portfolio concentration · **watchlist overlap** · and **month-over-month churn** (what the
+  manager actually bought/exited). Broader AMC coverage + forensic look-through are next
+  (see [`docs/PLAN.md`](docs/PLAN.md)).
 - **IPOs** *(new track)* — **email `ipo: ongoing` / `ipo: upcoming`** → a numbered list of
   live / forthcoming issues (band · dates · live subscription) → reply a number (or
   `ipo: <name>`) → a **pre-listing note**: business, **fresh-issue vs OFS and what it signals**,
