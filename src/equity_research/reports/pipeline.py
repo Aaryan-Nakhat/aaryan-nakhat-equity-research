@@ -6,6 +6,7 @@ on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 
 import duckdb
@@ -20,8 +21,9 @@ from equity_research.ingest import (ingest_annual_financials, ingest_financials,
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import (business_overview, extract_guidance,
-                                                growth_triggers, synthesize_thesis)
-from equity_research.scrapers import nse_api
+                                                growth_triggers, ipo_analysis,
+                                                synthesize_thesis)
+from equity_research.scrapers import ipo, nse_api
 
 CR = 1e7
 
@@ -331,23 +333,89 @@ def _snapshot_facts(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: b
     return facts
 
 
-def generate_growth_triggers(symbol: str, *, consolidated: bool | None = None) -> str | None:
+def generate_growth_triggers(symbol: str, *, consolidated: bool | None = None,
+                             ipo_mode: bool = False) -> str | None:
     """Forward-looking **growth-triggers 1-pager** for ``symbol`` — an opt-in deeper cut
-    offered after a deep report. Grounded in the same primary filings the deep report reads
-    plus the verified deterministic snapshot. Returns the markdown, or ``None`` if there are
-    no filings to ground it (so the caller can reply gracefully)."""
+    offered after a deep report. Grounded in the primary filings plus the verified snapshot.
+    ``ipo_mode`` grounds it in the IPO offer documents (RHP etc.) for a pre-listing company
+    instead of listed filings. Returns markdown, or ``None`` if there's nothing to ground it."""
     symbol = symbol.upper()
-    con = connect()
-    try:
-        ensure_ingested(symbol, con)               # fresh financials + shareholding (cooldown-guarded)
-        basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
-        facts = _snapshot_facts(con, symbol, basis)
-    finally:
-        con.close()
-    pdfs = _filings_for_analysis(symbol)
+    if ipo_mode:
+        meta, live = _ipo_meta(symbol)
+        facts = _ipo_facts(symbol, meta, live)
+        pdfs = ipo.documents(symbol)
+    else:
+        con = connect()
+        try:
+            ensure_ingested(symbol, con)           # fresh financials + shareholding (cooldown-guarded)
+            basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
+            facts = _snapshot_facts(con, symbol, basis)
+        finally:
+            con.close()
+        pdfs = _filings_for_analysis(symbol)
     if not pdfs:
         return None
     return growth_triggers(pdfs, symbol, facts=facts)
+
+
+# ----------------- IPO (pre-listing) -----------------
+def _upper_band(band: str | None) -> float | None:
+    """Upper end of a price band string like 'Rs.402 to Rs.424' → 424.0."""
+    if not band:
+        return None
+    nums = [float(n) for n in re.findall(r"[0-9]+(?:\.[0-9]+)?", band.replace(",", ""))]
+    return max(nums) if nums else None
+
+
+def _ipo_meta(symbol: str) -> tuple[dict | None, bool]:
+    """(meta, live) for an IPO symbol from the live then upcoming lists; (None, False) if
+    unknown (e.g. just closed) — the report still works off the archived documents."""
+    for x in ipo.list_current():
+        if x["symbol"] == symbol:
+            return x, True
+    for x in ipo.list_upcoming():
+        if x["symbol"] == symbol:
+            return x, False
+    return None, False
+
+
+def _ipo_facts(symbol: str, meta: dict | None, live: bool) -> list[str]:
+    """Verified issue facts to ground the IPO note — band, size, dates, subscription."""
+    if not meta:
+        return []
+    facts = [f"Company: {meta['company']}"] if meta.get("company") else []
+    if meta.get("price_band"):
+        facts.append(f"Price band: {meta['price_band']}")
+    shares, upper = meta.get("issue_size_shares"), _upper_band(meta.get("price_band"))
+    if shares and upper:
+        facts.append(f"Issue size (offered): ~{shares:,.0f} shares "
+                     f"(~₹{shares * upper / CR:,.0f} cr at the upper band)")
+    elif shares:
+        facts.append(f"Issue size (offered): ~{shares:,.0f} shares")
+    if meta.get("start") and meta.get("end"):
+        facts.append(f"Open–close: {meta['start']} to {meta['end']}")
+    if meta.get("status"):
+        facts.append(f"Status: {meta['status']}")
+    if live:
+        if meta.get("subscription_x") is not None:
+            facts.append(f"Total subscription so far: {meta['subscription_x']:.2f}x")
+        for row in ipo.subscription_detail(symbol):
+            facts.append(f"  {row['category']}: {row['times']:.2f}x")
+    return facts
+
+
+def generate_ipo_report(symbol: str) -> str | None:
+    """Pre-listing IPO note for ``symbol`` — offer structure (fresh vs OFS), restated
+    financials, valuation-at-band vs peers, use of proceeds, risks, live demand, and an
+    APPLY / AVOID / NEUTRAL verdict — from the official RHP + price-band ad + anchor docs.
+    ``None`` if the offer documents aren't published yet (so the caller replies gracefully)."""
+    symbol = symbol.upper()
+    meta, live = _ipo_meta(symbol)
+    facts = _ipo_facts(symbol, meta, live)
+    docs = ipo.documents(symbol)
+    if not docs:
+        return None
+    return ipo_analysis(docs, symbol, facts=facts)
 
 
 def report_summary(symbol: str, *, consolidated: bool = False) -> str:

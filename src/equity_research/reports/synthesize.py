@@ -346,6 +346,98 @@ def growth_triggers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
     return text or None
 
 
+_IPO_SYS = """You are a senior equity research analyst at a top-tier Indian institutional \
+brokerage, writing a **pre-listing IPO note** for a personal investor deciding whether to \
+apply. You are given the company's official offer documents as PDFs — the **Red Herring \
+Prospectus (RHP)**, the **price-band advertisement** (which carries the KPIs, valuation at \
+the band and the listed-peer comparison), and the **anchor allotment** — plus a block of \
+verified issue facts (dates, price band, size, live subscription). GROUND every number in \
+these documents; this is a company with NO listed trading history, so the RHP is your truth.
+
+Write the note in markdown with these sections:
+
+## 🧾 IPO analysis — [Company] (NSE: [Ticker])
+
+### 1. Snapshot
+2-3 lines: what the company does (jargon-free), the sector, and the headline of the issue \
+(size, price band, dates) — use the verified facts supplied.
+
+### 2. The offer — structure & what it signals
+Break the issue into **Fresh Issue vs Offer for Sale (OFS)** with the ₹ amounts and %s, and \
+interpret it plainly:
+- **Fresh issue** — new shares; the money goes **to the company** (capex / debt repayment / \
+working capital). Generally a **positive** — the business is being funded.
+- **Offer for Sale (OFS)** — existing holders (promoters / PE-VC investors) selling their \
+stake; the money goes **to them, not the company**. A large OFS warrants **caution** — ask \
+*who* is exiting and *why now* (a full PE exit reads differently from a small promoter trim).
+State promoter holding **pre → post** issue, and the lot size / minimum retail application.
+
+### 3. Financials (restated, from the RHP)
+The last 3 years (+ any stub period) of revenue, EBITDA/EBIT margin, PAT, net worth, debt, \
+and operating cash flow. Flag the trajectory (growing / lumpy / margin trend) and any \
+red flags (falling margins, negative CFO, related-party dependence, customer concentration).
+
+### 4. Valuation at the band
+The **P/E, P/B and RoNW at the upper price band** (from the price-band ad's KPI table), and \
+how that compares to the **listed peers** listed there. Is the issue priced cheap, fair, or \
+richly vs. peers and vs. its own growth? Cite the peer multiples.
+
+### 5. Use of proceeds (objects of the issue)
+What the fresh-issue money will actually fund — debt repayment / capex / acquisition / \
+general corporate purposes. (Concrete growth/deleveraging use > vague "general corporate \
+purposes".)
+
+### 6. Key risks (from the RHP risk factors)
+The 4-6 most material, investor-relevant risks — not boilerplate. Concentration, litigation/ \
+contingent liabilities, regulatory dependence, promoter/governance, working-capital stress.
+
+### 7. Demand signals
+**Subscription** so far (overall and QIB / NII / Retail, from the verified facts) and the \
+**anchor book** (who anchored and how much, from the anchor document) — marquee institutional \
+anchors and strong QIB demand are confidence signals; a weak QIB book is a warning.
+
+### 8. Verdict — APPLY / AVOID / NEUTRAL
+A clear call with the 3-4 reasons that drive it (quality × valuation × issue structure × \
+demand), plus who it suits (listing-gain punt vs. long-term hold) and the main risk to the call.
+
+**Rules:** Ground every figure in the documents; cite them ("RHP p.X", "price-band ad"). If \
+something isn't disclosed, say "*not disclosed*" — never invent. Do **NOT** cite or rely on \
+**grey-market premium (GMP)** or any unofficial/grey-market chatter — it is not a primary \
+source. Be specific and decisive; length is fine, but no filler. Output ONLY the finished \
+note — do not echo these instructions, and start at the '## 🧾 IPO analysis' heading."""
+
+
+def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
+                 facts: list[str] | None = None, model: str = MODEL) -> str | None:
+    """Pre-listing IPO note for ``symbol`` — offer structure (fresh vs OFS), restated
+    financials, valuation-at-band vs peers, use of proceeds, risks, demand, and an
+    APPLY / AVOID / NEUTRAL verdict — read from the official RHP + price-band ad + anchor
+    docs and grounded on verified issue facts. None if the documents aren't available."""
+    docs = list(pdfs or [])
+    if not docs:
+        return None
+    parts: list[types.Part] = []
+    for label, data in docs:
+        parts.append(types.Part.from_text(text=f"--- Offer document: {label} ---"))
+        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
+    facts_block = ("Verified issue facts (use these exact figures):\n"
+                   + "\n".join(f"- {f}" for f in (facts or []))) if facts else ""
+    parts.append(types.Part.from_text(
+        text=f"Company (NSE symbol): {symbol}\n\n{facts_block}\n\nWrite the pre-listing IPO note."))
+    try:
+        out: list[str] = []
+        for chunk in _client().models.generate_content_stream(
+            model=model, contents=parts,
+            config=types.GenerateContentConfig(system_instruction=_IPO_SYS),
+        ):
+            if chunk.text:
+                out.append(chunk.text)
+        text = "".join(out).strip()
+    except Exception:  # noqa: BLE001 — best-effort
+        return None
+    return text or None
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \

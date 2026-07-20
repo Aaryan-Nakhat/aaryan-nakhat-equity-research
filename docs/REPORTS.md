@@ -339,6 +339,29 @@ timeout (`_fund_pdf`); on failure the report still goes out body-only.
 No LLM call yet (deterministic); a Gemini fund thesis + expense/AUM/manager lines are the
 remaining enrichments (`docs/PLAN.md` → Mutual-fund module).
 
+## IPO pre-listing analysis (`scrapers/ipo.py` + `synthesize.ipo_analysis`)
+
+Email **`ipo: ongoing`** or **`ipo: upcoming`** → a numbered list of live / forthcoming
+issues (name · price band · dates · live subscription); reply with a number (or email
+`ipo: <name>`) → a **pre-listing IPO note**. All **primary NSE sources** (no grey-market/GMP):
+
+- **List + live subscription**: `/api/ipo-current-issue`, `/api/all-upcoming-issues?category=ipo`,
+  and category-wise `/api/ipo-detail` (QIB/NII/RII), via the browser tier. `upcoming` is
+  filtered to issues whose **RHP is already published** (`has_prospectus`, a cheap Range request).
+- **Offer documents** (predictable per-symbol archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`):
+  **RHP** (full prospectus), **RATIOS** (price-band ad → KPIs / valuation-at-band / listed-peer
+  table), **ANCHOR** (anchor allotment). `ipo.documents` picks the right PDF from each zip,
+  prioritised within an ~18 MB budget (RHP always kept) since a pre-listing company has **no XBRL**
+  — the analysis is RHP-driven, not the deterministic quant engine.
+
+`synthesize.ipo_analysis` (Gemini reads the RHP + price-band ad + anchor doc, grounded on the
+verified issue facts) produces: snapshot · **offer structure — fresh-issue vs OFS and what it
+signals** (fresh → company funded = positive; heavy OFS → insiders exiting = caution) · restated
+financials · **valuation at the band vs listed peers** · use of proceeds · key risks · demand
+(subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. Delivered as **email body +
+PDF**, then the same **deeper-cut menu** (reply `1` → growth-triggers, here grounded in the RHP
+via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand, no DB table.
+
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.
