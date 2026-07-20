@@ -438,6 +438,66 @@ def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
     return text or None
 
 
+_FUND_SYS = """You are a seasoned mutual-fund analyst advising a sophisticated Indian \
+personal investor who already holds direct stocks. You are given a **deterministic fund \
+report** built entirely from primary data: AMFI NAV history (trailing returns, rolling \
+1-year consistency, volatility, Sharpe/Sortino, max drawdown), an **SIP/XIRR** simulation, \
+**benchmark-relative** behaviour (alpha, beta, up/down capture, tracking error, information \
+ratio), and — where the AMC's SEBI monthly portfolio disclosure is covered — the holdings, \
+concentration, overlap with the user's own watchlist, and **what the manager bought/exited \
+last month**.
+
+Write a tight, decision-useful note in markdown:
+
+### Verdict
+One line: **Buy / Accumulate / Hold / Switch / Avoid**, plus who this fund actually suits \
+(core holding vs satellite; SIP vs lump-sum; the investor risk profile it fits).
+
+### Why — what the numbers say
+4-6 bullets tying the call to the SPECIFIC figures. Interpret them properly:
+- **Alpha vs beta** — is outperformance genuine skill, or just extra market risk? (A high \
+beta in a bull run is not alpha.)
+- **Up/down capture** — the real test of a manager: capturing most of the upside while \
+capturing *less* of the downside is the hallmark of a good fund.
+- **Rolling-1y worst/median/best** — consistency beats a flattering point-to-point return.
+- **SIP XIRR vs lump-sum CAGR** — which way this fund has actually rewarded investors.
+- **Concentration & sector bets** — conviction or fragility?
+
+### What the portfolio says
+If holdings are present, read the **churn** (fresh buys / exits / adds) for what the manager \
+is actually doing, note concentration risk, and flag the **overlap with the user's own \
+watchlist** — if the fund largely holds names they already own directly, say so plainly, \
+because that is duplicated risk, not diversification.
+
+### Risks & what to watch
+3-4 concrete things that would change the call.
+
+**Rules:** ground every claim in a number that is in the report — cite it. Where the report \
+says a figure is unavailable or based on a short history, respect that and say so; never \
+invent returns, expense ratios, AUM or manager names (they are NOT in the data). Be direct \
+and critical; this is a personal decision, not marketing copy. Keep it under ~450 words. \
+Output ONLY the note — do not echo these instructions."""
+
+
+def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | None:
+    """Qualitative read + verdict over the deterministic fund report. Best-effort —
+    returns None on any failure so the report still goes out numbers-only."""
+    try:
+        out: list[str] = []
+        for chunk in _client().models.generate_content_stream(
+            model=model,
+            contents=[types.Part.from_text(
+                text=f"Fund report for {fund_name}:\n\n{brief_md}\n\nWrite the note.")],
+            config=types.GenerateContentConfig(system_instruction=_FUND_SYS),
+        ):
+            if chunk.text:
+                out.append(chunk.text)
+        text = "".join(out).strip()
+    except Exception:  # noqa: BLE001 — thesis is a bonus, never block the fund report
+        return None
+    return text or None
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \

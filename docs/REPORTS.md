@@ -331,20 +331,35 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
 - **Returns** — trailing (CAGR ≥1y, absolute <1y) incl. since-inception.
 - **Risk** — annualised vol, Sharpe, Sortino, max drawdown (from daily NAV).
 - **Rolling 1-year** returns (worst/median/best — a consistency read).
-- **Category percentile** — rank vs same-category Direct-Growth peers (best-effort; needs
-  peer history, so thin until a broad backfill).
-- **Portfolio** (where `mf_holdings` coverage exists — PPFAS live): # holdings, top-10
-  concentration, biggest sector, top holdings, and **overlap with the user's stock
-  watchlist** (which of *your* names the fund holds, by weight).
+- **SIP / XIRR** (`funds.sip_returns`) — simulate ₹10k/month for 1/3/5y: invested vs value
+  today and the **money-weighted XIRR** (what an SIP investor actually earns, ≠ lump-sum CAGR).
+  Bisection XIRR, no scipy.
+- **Versus its benchmark** (`funds.benchmark_metrics`, index chosen by category via
+  `benchmark_for` — Nifty 50 / Midcap 150 / Smallcap 250 / 500): **alpha, beta, up/down
+  capture, tracking error, information ratio**, on the gap-free overlap of daily NAV and
+  `index_close`. Annualised endpoint-to-endpoint and trimmed to the dense recent stretch
+  (`_dense_tail`) so a stray sparse index row can't manufacture a fake outlier day. Our index
+  history (~1y dense) is the binding limit, stated in the report.
+- **Category percentile** — rank vs same-category Direct-Growth peers (best-effort).
+- **Portfolio** (where `mf_holdings` coverage exists — PPFAS + HDFC live): # holdings, top-10
+  concentration, biggest sector, top holdings, **watchlist overlap**, and **month-over-month
+  churn** (`funds.holdings_churn`) — what the manager **bought / exited / added / trimmed**
+  between the two latest SEBI monthly disclosures, **equity-only** (CDs / T-bills / TREPS that
+  roll over monthly are filtered via `_is_equity_holding`, else routine treasury drowns the signal).
+- **Analysis** (`synthesize.fund_thesis`) — a Gemini **verdict** (Buy / Accumulate / Hold /
+  Switch / Avoid + who it suits) over the deterministic report: reads alpha-vs-beta, up/down
+  capture, SIP-XIRR-vs-CAGR, churn and watchlist overlap (flagging duplicated risk when the fund
+  largely holds names you own directly). Best-effort — the report still ships numbers-only if it fails.
 
 **Attachments** (mirrors the stock report): a **charted PDF** (`charts.fund_charts` — NAV
 growth of ₹100 rebased + the rolling-1-year return distribution → `report_to_pdf`) and a
 **mutual-fund metrics guide PDF** (`glossary.fund_guide_pdf` — plain-English on CAGR, Sharpe,
-Sortino, max drawdown, rolling returns, concentration, overlap). PDF is best-effort with a hard
-timeout (`_fund_pdf`); on failure the report still goes out body-only.
+Sortino, drawdown, rolling returns, **SIP XIRR, alpha/beta, up/down capture, tracking error/IR,
+churn**, concentration, overlap). PDF is best-effort with a hard timeout (`_fund_pdf`).
 
-No LLM call yet (deterministic); a Gemini fund thesis + expense/AUM/manager lines are the
-remaining enrichments (`docs/PLAN.md` → Mutual-fund module).
+Still to add (`docs/PLAN.md` → Mutual-fund module): **expense ratio / AUM / manager** (needs new
+scraping) and the **forensic look-through** (Altman/Piotroski across holdings — needs a bulk
+financials ingest for the holdings' symbols).
 
 ## IPO pre-listing analysis (`scrapers/ipo.py` + `synthesize.ipo_analysis`)
 
