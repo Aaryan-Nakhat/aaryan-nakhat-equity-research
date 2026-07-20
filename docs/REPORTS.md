@@ -338,8 +338,10 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
   `benchmark_for` — Nifty 50 / Midcap 150 / Smallcap 250 / 500): **alpha, beta, up/down
   capture, tracking error, information ratio**, on the gap-free overlap of daily NAV and
   `index_close`. Annualised endpoint-to-endpoint and trimmed to the dense recent stretch
-  (`_dense_tail`) so a stray sparse index row can't manufacture a fake outlier day. Our index
-  history (~1y dense) is the binding limit, stated in the report.
+  (`_dense_tail`) so a stray sparse index row can't manufacture a fake outlier day. **Index
+  history is backfilled ~5y** via `ingest.backfill_index_history` (walks business days over the
+  NSE `ind_close_all` archive, 404 = holiday, idempotent `only_missing`), so alpha/beta is a
+  multi-cycle read; the daily scan keeps it current.
 - **Category percentile** — rank vs same-category Direct-Growth peers (best-effort).
 - **Portfolio** (where `mf_holdings` coverage exists — PPFAS + HDFC live): # holdings, top-10
   concentration, biggest sector, top holdings, **watchlist overlap**, and **month-over-month

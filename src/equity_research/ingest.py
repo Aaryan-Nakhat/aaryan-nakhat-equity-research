@@ -69,6 +69,41 @@ def ingest_index_closes(d: date, con: duckdb.DuckDBPyConnection) -> int:
     return replace_for_date(con, "index_close", _prepare(df, _INDEX_MAP, d, num), d)
 
 
+def backfill_index_history(con: duckdb.DuckDBPyConnection, *, years: float = 5.0,
+                           only_missing: bool = True, progress_every: int = 100) -> dict:
+    """Backfill daily ``index_close`` from the NSE archive so benchmark-relative fund
+    metrics (alpha/beta/capture) have multi-year depth instead of ~1y.
+
+    Walks business days from ``years`` ago to today, fetching each
+    ``ind_close_all_DDMMYYYY.csv``. Non-trading days simply 404 and are skipped
+    (that's how holidays are detected — no calendar needed). Idempotent: with
+    ``only_missing`` it skips dates already stored, so re-runs are cheap. Returns a
+    small stats dict."""
+    start = (pd.Timestamp.today().normalize() - pd.DateOffset(years=years)).date()
+    end = date.today()
+    have: set[date] = set()
+    if only_missing:
+        have = {r[0] for r in con.execute(
+            "SELECT DISTINCT trade_date FROM index_close WHERE trade_date >= ?", [start]).fetchall()}
+    days = [d.date() for d in pd.bdate_range(start=start, end=end)]  # Mon–Fri
+    todo = [d for d in days if d not in have]
+    ingested = holidays = failed = rows = 0
+    for i, d in enumerate(todo, 1):
+        try:
+            rows += ingest_index_closes(d, con)
+            ingested += 1
+        except ScrapeError:
+            holidays += 1                      # 404 = market holiday / weekend-adjacent
+        except Exception:  # noqa: BLE001 — one bad file shouldn't abort a long backfill
+            failed += 1
+        if progress_every and i % progress_every == 0:
+            print(f"  index backfill: {i}/{len(todo)} days "
+                  f"({ingested} ingested, {holidays} holidays, {failed} failed)")
+    return {"range": (start, end), "candidates": len(todo), "ingested": ingested,
+            "holidays": holidays, "failed": failed, "rows": rows,
+            "already_had": len(have)}
+
+
 def ingest_participant_oi(d: date, con: duckdb.DuckDBPyConnection) -> int:
     df = nse_archives.fetch_participant_oi(d)
     num = [c for c in _POI_MAP.values() if c != "client_type"]
