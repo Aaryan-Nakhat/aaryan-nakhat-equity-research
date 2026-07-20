@@ -48,6 +48,8 @@
 | F&O: OI, PCR, option chain, FII deriv stats | 🟡 | **Hardest** — heavily rate-limited / bot-protected. |
 | ASM / GSM / surveillance, circuit limits | 🟡 | |
 | Index constituents (Nifty 50/500, sector) | 🟡 | CSV. |
+| **IPOs** — live / upcoming issues + subscription | 🟡 | `/api/ipo-current-issue`, `/api/all-upcoming-issues?category=ipo`, `/api/ipo-detail` (category-wise). Browser tier. |
+| **IPO offer documents** — RHP / price-band KPIs / anchor | 🟢 | Archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`, predictable per symbol. Plain HTTP. The **primary source** for pre-listing financials, fresh/OFS, risks. |
 
 **Delivery %** and **FII derivatives** are NSE-exclusive — worth the gating pain.
 
