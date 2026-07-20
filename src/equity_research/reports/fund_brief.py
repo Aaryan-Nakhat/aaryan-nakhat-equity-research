@@ -165,8 +165,8 @@ def build_fund_brief(con: duckdb.DuckDBPyConnection, scheme_code: int, *,
                   f"- **Tracking error {_pct(bm['tracking_error_pct'], plus=False)}** · "
                   f"**Information ratio {bm['information_ratio']}** (excess return per unit of "
                   "active risk).",
-                  f"_Based on {bm['n_days']} overlapping trading days — our index history is the "
-                  "binding limit, so this is a recent-period read._"]
+                  f"_Based on {bm['n_days']} overlapping trading days (~{bm['years']:.0f}y of "
+                  "daily NAV vs the index)._"]
     elif bench_name:
         lines += ["", f"## 🎯 Versus its benchmark ({bench_name})",
                   "_Not enough overlapping index history yet for alpha/beta (needs ~60 common "
