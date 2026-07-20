@@ -126,6 +126,52 @@ def build_fund_brief(con: duckdb.DuckDBPyConnection, scheme_code: int, *,
         lines += ["", "## 🔁 Rolling 1-year returns (consistency)",
                   f"- **Worst / median / best:** {_pct(roll['min'])} · {_pct(roll['median'])} · {_pct(roll['max'])}"]
 
+    # ---- SIP / XIRR: what a monthly investor actually earned ----
+    series = funds.nav_series(con, scheme_code)
+    sip = funds.sip_returns(series)
+    if sip:
+        lines += ["", "## 💰 If you had SIP'd ₹10,000/month",
+                  "| Horizon | Installments | Invested | Value today | Gain | **XIRR** |",
+                  "|---|---|---|---|---|---|"]
+        for label in ("1y", "3y", "5y"):
+            s = sip.get(label)
+            if s:
+                lines.append(f"| {label} | {s['installments']} | ₹{s['invested']:,} | "
+                             f"₹{s['value']:,} | {_pct(s['gain_pct'])} | "
+                             f"**{_pct(s['xirr_pct'])}** |")
+        lines.append("_XIRR is the money-weighted return — what an SIP actually earns, which "
+                     "differs from the lump-sum CAGR above because each instalment is invested "
+                     "for a different length of time._")
+
+    # ---- benchmark-relative behaviour ----
+    bench_name = funds.benchmark_for(d.get("category"), d.get("asset_class"))
+    bm = None
+    if bench_name:
+        bm = funds.benchmark_metrics(series, funds.index_series(con, bench_name))
+    if bm:
+        beat = bm["fund_ann_pct"] - bm["bench_ann_pct"]
+        lines += ["", f"## 🎯 Versus its benchmark ({bench_name})",
+                  f"- **Fund {_pct(bm['fund_ann_pct'])} vs benchmark {_pct(bm['bench_ann_pct'])} "
+                  f"annualised** → {'outperformed' if beat >= 0 else 'lagged'} by "
+                  f"**{abs(beat):.1f} pp** over the last {bm['years']}y of common history.",
+                  f"- **Alpha {_pct(bm['alpha_pct'])}** (risk-adjusted excess return) · "
+                  f"**Beta {bm['beta']}** ({'more' if bm['beta'] > 1 else 'less'} volatile than "
+                  f"the index)",
+                  f"- **Up-capture {bm['up_capture_pct']}%** / **down-capture "
+                  f"{bm['down_capture_pct']}%** — it captures {bm['up_capture_pct']}% of the "
+                  f"index's up-moves and {bm['down_capture_pct']}% of its falls "
+                  f"({'good' if (bm['down_capture_pct'] or 100) < 100 else 'poor'} downside "
+                  "protection).",
+                  f"- **Tracking error {_pct(bm['tracking_error_pct'], plus=False)}** · "
+                  f"**Information ratio {bm['information_ratio']}** (excess return per unit of "
+                  "active risk).",
+                  f"_Based on {bm['n_days']} overlapping trading days — our index history is the "
+                  "binding limit, so this is a recent-period read._"]
+    elif bench_name:
+        lines += ["", f"## 🎯 Versus its benchmark ({bench_name})",
+                  "_Not enough overlapping index history yet for alpha/beta (needs ~60 common "
+                  "trading days)._"]
+
     snap = funds.holdings_snapshot(con, scheme_code)
     if snap:
         lines += ["", f"## 🧬 Portfolio (as of {snap['as_of']:%b-%Y})",
@@ -138,6 +184,24 @@ def build_fund_brief(con: duckdb.DuckDBPyConnection, scheme_code: int, *,
             names = ", ".join(f"{s} ({p}%)" for s, p in ov["hits"][:12])
             lines += [f"- **Overlap with your watchlist:** holds **{len(ov['hits'])} of "
                       f"{ov['n_watchlist']}** names = **{ov['weight_pct']}%** of NAV — {names}"]
+
+        # ---- what the manager actually did last month ----
+        ch = funds.holdings_churn(con, scheme_code)
+        if ch and (ch["new"] or ch["exited"] or ch["added"] or ch["trimmed"]):
+            def _row(items, sign=False):
+                return ", ".join(f"{n} ({v:+.2f}pp)" if sign else f"{n} ({v}%)"
+                                 for n, v in items)
+            lines += ["", f"## 🔄 What the manager did ({ch['previous']:%b} → {ch['current']:%b})"]
+            if ch["new"]:
+                lines.append(f"- 🟢 **Bought {ch['n_new']} new:** {_row(ch['new'])}")
+            if ch["exited"]:
+                lines.append(f"- 🔴 **Exited {ch['n_exited']}:** {_row(ch['exited'])}")
+            if ch["added"]:
+                lines.append(f"- ➕ **Added to:** {_row(ch['added'], sign=True)}")
+            if ch["trimmed"]:
+                lines.append(f"- ➖ **Trimmed:** {_row(ch['trimmed'], sign=True)}")
+            lines.append("_Straight from consecutive SEBI-mandated monthly portfolio "
+                         "disclosures — the manager's actual conviction, not commentary._")
 
     lines += ["", "---", "_NAV/returns from AMFI · holdings from the AMC's SEBI monthly "
               "disclosure (primary). Deeper forensic look-through (Altman/Piotroski across "

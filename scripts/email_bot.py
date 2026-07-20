@@ -40,6 +40,7 @@ from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
 from equity_research.reports.pipeline import (generate_report, generate_growth_triggers,  # noqa: E402
                                               generate_ipo_report)
+from equity_research.reports.synthesize import fund_thesis  # noqa: E402
 from equity_research.scrapers import ipo  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 from equity_research.reports import fund_brief  # noqa: E402
@@ -463,7 +464,10 @@ def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
         if not md:
             _reply_text(req, f"Couldn't build a report for '{name}' — no NAV history found.")
             return
-        pdf = _fund_pdf(con, scheme_code, md, name)
+        thesis = fund_thesis(md, name)              # qualitative read + verdict (best-effort)
+        if thesis:
+            md = f"{md}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
+        pdf = _fund_pdf(con, scheme_code, md, name)  # PDF carries the thesis too
     finally:
         con.close()
     body = md

@@ -110,6 +110,208 @@ def rolling_returns(series: pd.Series, window_days: int = 365) -> dict[str, floa
             "max": round(float(arr.max()), 1)}
 
 
+# ----------------- SIP / XIRR -----------------
+def _xnpv(rate: float, flows: list[tuple[date, float]]) -> float:
+    t0 = flows[0][0]
+    return sum(cf / (1.0 + rate) ** ((d - t0).days / 365.0) for d, cf in flows)
+
+
+def _xirr(flows: list[tuple[date, float]], lo: float = -0.95, hi: float = 10.0) -> float | None:
+    """Money-weighted return for irregular cashflows, by bisection (no scipy).
+    None when the flows don't bracket a root (e.g. a total loss)."""
+    if len(flows) < 2:
+        return None
+    f_lo, f_hi = _xnpv(lo, flows), _xnpv(hi, flows)
+    if f_lo * f_hi > 0:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        f_mid = _xnpv(mid, flows)
+        if abs(f_mid) < 1e-7:
+            return mid
+        if f_lo * f_mid < 0:
+            hi, f_hi = mid, f_mid
+        else:
+            lo, f_lo = mid, f_mid
+    return (lo + hi) / 2
+
+
+def sip_returns(series: pd.Series, monthly: float = 10_000.0,
+                horizons: tuple[int, ...] = (1, 3, 5)) -> dict[str, dict]:
+    """Simulate a monthly SIP of ``monthly`` into this scheme for each horizon —
+    what you'd have invested, what it'd be worth, and the **XIRR** (money-weighted
+    return, the number an SIP investor actually earns). Skips horizons the NAV
+    history doesn't cover."""
+    out: dict[str, dict] = {}
+    if series.empty:
+        return out
+    last_ts = series.index[-1]
+    last_nav = float(series.iloc[-1])
+    for yrs in horizons:
+        start = last_ts - pd.DateOffset(years=yrs)
+        if series.index[0] > start:            # not enough history for this horizon
+            continue
+        units, flows = 0.0, []
+        for d in pd.date_range(start=start, end=last_ts, freq="MS"):
+            nav = _asof(series, d.date())
+            if not nav or nav <= 0:
+                continue
+            units += monthly / nav
+            flows.append((d.date(), -monthly))
+        if not flows:
+            continue
+        value = units * last_nav
+        invested = monthly * len(flows)
+        rate = _xirr([*flows, (last_ts.date(), value)])
+        out[f"{yrs}y"] = {
+            "installments": len(flows),
+            "invested": round(invested),
+            "value": round(value),
+            "gain_pct": round(100 * (value - invested) / invested, 1) if invested else None,
+            "xirr_pct": round(rate * 100, 1) if rate is not None else None,
+        }
+    return out
+
+
+# ----------------- benchmark-relative risk -----------------
+# category keyword -> the fair index. Order matters ('large & mid' before 'large'/'mid').
+_BENCHMARKS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("small cap", "smallcap"), "Nifty Smallcap 250"),
+    (("large & mid", "large and mid"), "Nifty 100"),
+    (("mid cap", "midcap"), "Nifty Midcap 150"),
+    (("large cap", "largecap"), "Nifty 50"),
+)
+
+
+def benchmark_for(category: str | None, asset_class: str | None = None) -> str | None:
+    """The fair benchmark index for an **equity** scheme's category (None for debt /
+    liquid / other, where an equity index would be meaningless)."""
+    if (asset_class or "").strip().lower() != "equity":
+        return None
+    cat = (category or "").lower()
+    for kws, idx in _BENCHMARKS:
+        if any(k in cat for k in kws):
+            return idx
+    return "Nifty 500"                          # flexi / multi / focused / value / thematic …
+
+
+def index_series(con: duckdb.DuckDBPyConnection, index_name: str) -> pd.Series:
+    """Ascending close series for a benchmark index; empty if not stored."""
+    rows = con.execute(
+        "SELECT trade_date, close FROM index_close WHERE index_name = ? AND close IS NOT NULL "
+        "ORDER BY trade_date", [index_name]).fetchall()
+    if not rows:
+        return pd.Series(dtype="float64")
+    return pd.Series([r[1] for r in rows], index=pd.to_datetime([r[0] for r in rows]),
+                     dtype="float64")
+
+
+def _dense_tail(df: pd.DataFrame, max_gap_days: int = 15) -> pd.DataFrame:
+    """Trim to the contiguous recent stretch with no gap longer than ``max_gap_days``.
+
+    Our ``index_close`` history has a few sparse early rows, and differencing across a
+    multi-month hole would manufacture one enormous fake 'daily' return — which then
+    poisons the mean, the variance and every metric built on them."""
+    if len(df) < 2:
+        return df
+    gaps = df.index.to_series().diff().dt.days
+    big = gaps[gaps > max_gap_days]
+    return df.loc[big.index[-1]:] if len(big) else df
+
+
+def benchmark_metrics(fund: pd.Series, bench: pd.Series,
+                      rf: float = _RF_DEFAULT) -> dict | None:
+    """Benchmark-relative behaviour on the **overlapping, gap-free** history: beta,
+    Jensen's alpha, up/down capture, tracking error and information ratio.
+    None when fewer than ~60 usable common days (our index history is the binding limit)."""
+    if fund.empty or bench.empty:
+        return None
+    df = _dense_tail(pd.concat([fund.rename("f"), bench.rename("b")], axis=1).dropna())
+    if len(df) < 61:
+        return None
+    fr = df["f"].pct_change().dropna()
+    br = df["b"].pct_change().dropna()
+    if len(fr) < 60 or float(br.var()) == 0:
+        return None
+    beta = float(np.cov(fr, br)[0, 1] / br.var())
+    # annualise from the endpoints (CAGR), NOT by compounding a mean daily return —
+    # endpoint annualisation is robust to the odd outlier day.
+    yrs = (df.index[-1] - df.index[0]).days / 365.25
+    if yrs <= 0.25:
+        return None
+    f_ann = float((df["f"].iloc[-1] / df["f"].iloc[0]) ** (1 / yrs) - 1)
+    b_ann = float((df["b"].iloc[-1] / df["b"].iloc[0]) ** (1 / yrs) - 1)
+    alpha = (f_ann - rf) - beta * (b_ann - rf)
+    up, down = br > 0, br < 0
+    up_cap = (100 * fr[up].mean() / br[up].mean()) if up.any() and br[up].mean() else None
+    dn_cap = (100 * fr[down].mean() / br[down].mean()) if down.any() and br[down].mean() else None
+    te = float((fr - br).std() * np.sqrt(_TRADING_DAYS))
+    return {
+        "n_days": int(len(fr)),
+        "years": round(yrs, 1),
+        "beta": round(beta, 2),
+        "alpha_pct": round(alpha * 100, 1),
+        "up_capture_pct": round(float(up_cap)) if up_cap is not None else None,
+        "down_capture_pct": round(float(dn_cap)) if dn_cap is not None else None,
+        "tracking_error_pct": round(te * 100, 1) if te else None,
+        "information_ratio": round((f_ann - b_ann) / te, 2) if te else None,
+        "fund_ann_pct": round(f_ann * 100, 1),
+        "bench_ann_pct": round(b_ann * 100, 1),
+    }
+
+
+# ----------------- month-over-month portfolio churn -----------------
+# Money-market/debt lines a fund parks cash in. These MATURE and roll over every month,
+# so counting them as "bought"/"exited" makes routine treasury look like frantic trading
+# and buries the real equity conviction.
+_MATURITY_RE = re.compile(r"\(\d{2}/\d{2}/\d{4}\)")
+_NON_EQUITY = ("treps", "t-bill", "tbill", "treasury bill", "commercial paper",
+               "certificate of deposit", "liquid fund", "net receivable", "net current asset",
+               "cash margin", "margin deposit", "clearing corporation", "reverse repo",
+               "government of india", "g-sec", "gsec", "sdl", "corporate debt", "money market",
+               "debenture", "ncd", "cash & other", "cash and other")
+
+
+def _is_equity_holding(instrument: str) -> bool:
+    """True for a real equity position — filters the CDs / CPs / T-bills / TREPS (which
+    carry a maturity date in the disclosure) and cash-equivalent lines."""
+    n = (instrument or "").lower()
+    if _MATURITY_RE.search(n):
+        return False
+    return not any(k in n for k in _NON_EQUITY)
+
+
+def holdings_churn(con: duckdb.DuckDBPyConnection, scheme_code: int,
+                   min_delta: float = 0.10) -> dict | None:
+    """What the manager actually **did** between the two most recent monthly
+    disclosures: fresh buys, full exits, and meaningful adds/trims (by % of NAV),
+    **equity positions only**. None until we hold two months of portfolios."""
+    dates = [r[0] for r in con.execute(
+        "SELECT DISTINCT as_of FROM mf_holdings WHERE scheme_code = ? "
+        "ORDER BY as_of DESC LIMIT 2", [scheme_code]).fetchall()]
+    if len(dates) < 2:
+        return None
+    cur, prev = dates[0], dates[1]
+
+    def snap(d) -> dict[str, float]:
+        return {r[0]: float(r[1]) for r in con.execute(
+            "SELECT instrument, pct_nav FROM mf_holdings WHERE scheme_code = ? AND as_of = ? "
+            "AND pct_nav IS NOT NULL", [scheme_code, d]).fetchall()
+            if _is_equity_holding(r[0])}
+
+    c, p = snap(cur), snap(prev)
+    if not c or not p:
+        return None
+    new = sorted(((k, round(v, 2)) for k, v in c.items() if k not in p), key=lambda x: -x[1])
+    exited = sorted(((k, round(v, 2)) for k, v in p.items() if k not in c), key=lambda x: -x[1])
+    deltas = [(k, round(c[k] - p[k], 2)) for k in c if k in p]
+    added = sorted((d for d in deltas if d[1] >= min_delta), key=lambda x: -x[1])
+    trimmed = sorted((d for d in deltas if d[1] <= -min_delta), key=lambda x: x[1])
+    return {"current": cur, "previous": prev,
+            "new": new[:8], "exited": exited[:8], "added": added[:8], "trimmed": trimmed[:8],
+            "n_new": len(new), "n_exited": len(exited)}
+
+
 def category_percentile(con: duckdb.DuckDBPyConnection, scheme_code: int,
                         horizon: str = "3y") -> dict | None:
     """Where this scheme's ``horizon`` return ranks among its same-category

@@ -309,7 +309,30 @@ FUND_METRICS: list[tuple[str, str]] = [
      "more single-stock risk."),
     ("Watchlist overlap",
      "How many of *your* tracked stocks the fund holds and their combined weight — so you can see "
-     "whether a fund is actually buying the names you follow."),
+     "whether a fund is actually buying the names you follow. High overlap means the fund is "
+     "**duplicating** risk you already own directly, not diversifying it."),
+    ("SIP XIRR (vs lump-sum CAGR)",
+     "XIRR is the **money-weighted** return on a monthly SIP — what an instalment investor actually "
+     "earned, since each contribution is invested for a different length of time. It legitimately "
+     "differs from the lump-sum CAGR above; in a rising market SIP XIRR is usually the lower of the two."),
+    ("Beta",
+     "How much the fund moves for a 1% move in its benchmark. **>1** = more volatile than the index, "
+     "**<1** = less. Crucially, beating the index with a high beta is *leverage on the market*, not skill."),
+    ("Alpha (Jensen's)",
+     "Return earned **above what its beta alone would predict** — the part attributable to the manager. "
+     "Positive is good; this is the honest skill measure once market risk is stripped out."),
+    ("Up-capture / down-capture",
+     "Share of the benchmark's up-moves and down-moves the fund captures. The ideal is **high up, low "
+     "down** (e.g. 105/85). Down-capture under 100% means genuine downside protection — often what "
+     "separates a good long-term fund from a bull-market hero."),
+    ("Tracking error & information ratio",
+     "Tracking error = how far the fund's returns wander from the benchmark (its 'active risk'). "
+     "Information ratio = excess return **per unit** of that active risk — higher means the manager is "
+     "being paid for the risk they take. Near-zero tracking error on an active fund suggests a closet index fund."),
+    ("Portfolio churn (bought / exited / added / trimmed)",
+     "Differences between two consecutive SEBI monthly portfolio disclosures — what the manager "
+     "*actually did*, rather than what the commentary says. Fresh buys and full exits show live "
+     "conviction; heavy churn every month means high turnover (and higher costs)."),
 ]
 
 
