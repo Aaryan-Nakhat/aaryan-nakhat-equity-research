@@ -38,7 +38,9 @@ from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import generate_report, generate_growth_triggers  # noqa: E402
+from equity_research.reports.pipeline import (generate_report, generate_growth_triggers,  # noqa: E402
+                                              generate_ipo_report)
+from equity_research.scrapers import ipo  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 from equity_research.reports import fund_brief  # noqa: E402
 
@@ -173,29 +175,33 @@ class _MenuItem:
         self.name = name or ""
 
 
-def _set_followup(sender: str, symbol: str, name: str | None) -> None:
+def _set_followup(sender: str, symbol: str, name: str | None, *, ipo_mode: bool = False) -> None:
     """Arm the numbered follow-up menu for this sender so a bare-number reply maps back
-    to a deeper cut for ``symbol`` (24h TTL, via the shared pending state)."""
-    _set_pending(sender, f"__followup__:{symbol}", [_MenuItem(f"GT:{symbol}", name)])
+    to a deeper cut for ``symbol`` (24h TTL, via the shared pending state). ``ipo_mode``
+    tags the growth-triggers item as IPO (``IGT:`` — grounded in the offer docs)."""
+    tag = "IGT" if ipo_mode else "GT"
+    _set_pending(sender, f"__followup__:{symbol}", [_MenuItem(f"{tag}:{symbol}", name)])
 
 
-def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None) -> None:
+def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
+                        *, ipo_mode: bool = False) -> None:
     """A short, separate in-thread email sent right AFTER the report — asks whether you
     want a deeper cut, and arms the numbered reply. Extensible: add a menu row + a matching
     prefix branch in handle_request for the next cut."""
-    md = (f"✅ Full report for **{symbol}**" + (f" — {name}" if name else "")
-          + " is in the previous email (body + PDF).\n\n"
-          "**Want a deeper cut on this stock?** Just reply to this email with the number:\n\n"
+    grounded = ("the RHP & offer documents" if ipo_mode
+                else "the company's concalls & investor presentations")
+    md = (f"✅ Full {'IPO note' if ipo_mode else 'report'} for **{symbol}**"
+          + (f" — {name}" if name else "") + " is in the previous email (body + PDF).\n\n"
+          "**Want a deeper cut?** Just reply to this email with the number:\n\n"
           "  **1) Growth-triggers 1-pager** — forward-looking catalysts, each quantified, "
-          "timeline-tagged and rated HIGH / MEDIUM / OPTIONALITY conviction, grounded in the "
-          "company's concalls & investor presentations.\n\n"
+          f"timeline-tagged and rated HIGH / MEDIUM / OPTIONALITY conviction, grounded in {grounded}.\n\n"
           "_(More deeper cuts coming soon.)_")
     emailer.send_report(
         _re_subject(req.subject, " — want a deeper cut?"),
         md, to=req.sender, html=emailer.body_html(md, symbol),
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
-    _set_followup(req.sender, symbol, name)
+    _set_followup(req.sender, symbol, name, ipo_mode=ipo_mode)
     log.info("sent deeper-cut menu for %s to %s", symbol, req.sender)
 
 
@@ -227,17 +233,20 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     _send_followup_menu(symbol, req, resolved_name)      # separate "want a deeper cut?" prompt
 
 
-def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = None) -> None:
-    """Growth-triggers 1-pager (opt-in deeper cut) — email body + PDF, in-thread."""
-    log.info("generating growth triggers for %s (req from %s)", symbol, req.sender)
+def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = None,
+                          *, ipo_mode: bool = False) -> None:
+    """Growth-triggers 1-pager (opt-in deeper cut) — email body + PDF, in-thread. ``ipo_mode``
+    grounds it in the IPO offer documents instead of listed filings."""
+    log.info("generating growth triggers for %s (req from %s, ipo=%s)", symbol, req.sender, ipo_mode)
     _reply_text(req, f"🚀 Building the growth-triggers 1-pager for **{symbol}**"
                      + (f" ({name})" if name else "") + " — ~1–2 min; it'll land in this thread.")
-    md = generate_growth_triggers(symbol)
+    md = generate_growth_triggers(symbol, ipo_mode=ipo_mode)
     if not md:
-        _reply_text(req, f"Couldn't build growth triggers for {symbol} — no filings "
-                         "(concalls / presentations) were available to ground it.")
+        src = "offer documents" if ipo_mode else "filings (concalls / presentations)"
+        _reply_text(req, f"Couldn't build growth triggers for {symbol} — no {src} "
+                         "were available to ground it.")
         return
-    pdf = _growth_pdf(symbol, md)
+    pdf = _text_pdf(md, f"{symbol} — Growth Triggers")
     today = datetime.now(IST).date().isoformat()
     head = f"Growth triggers — **{symbol}**" + (f" — {name}" if name else "")
     body = f"{head}\n\n{md}"
@@ -258,17 +267,114 @@ def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = Non
     log.info("sent growth triggers for %s to %s", symbol, req.sender)
 
 
-def _growth_pdf(symbol: str, report_md: str) -> bytes | None:
-    """Text-only growth-triggers PDF (no charts) — best-effort with a HARD timeout so a
-    hung Chromium render never blocks; the 1-pager is already in the email body."""
+def _text_pdf(report_md: str, title: str) -> bytes | None:
+    """Text-only PDF (no charts) for the deeper-cut / IPO notes — best-effort with a HARD
+    timeout so a hung Chromium render never blocks; the note is already in the email body."""
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, f"{symbol} — Growth Triggers", []).result(timeout=150)
+        return ex.submit(report_to_pdf, report_md, title, []).result(timeout=150)
     except Exception:  # noqa: BLE001 — timeout or render failure
-        log.exception("growth-triggers PDF failed/timed out for %s — sending body-only", symbol)
+        log.exception("PDF failed/timed out for %r — sending body-only", title)
         return None
     finally:
         ex.shutdown(wait=False)
+
+
+# ----------------- IPO (pre-listing) -----------------
+def _ipo_query(subject: str) -> tuple[str, str] | None:
+    """Parse an 'ipo: ...' subject → ('list','ongoing'|'upcoming') or ('name', <query>);
+    None if it isn't an IPO request."""
+    m = re.match(r"^\s*(?:re:\s*)?ipo\s*[:\-]\s*(.+)$", subject, flags=re.I)
+    if not m:
+        return None
+    val = m.group(1).strip()
+    low = val.lower()
+    if low in ("ongoing", "live", "current", "open", "active"):
+        return ("list", "ongoing")
+    if low in ("upcoming", "forthcoming", "coming", "new"):
+        return ("list", "upcoming")
+    return ("name", val)
+
+
+def _ipo_line(i: int, x: dict) -> str:
+    sub = f" · {x['subscription_x']:.1f}x sub" if x.get("subscription_x") else ""
+    dates = f"{x['start']}–{x['end']}" if x.get("start") else ""
+    return f"  {i}) {x['symbol']:<10} — {x['company']} · {x['price_band']} · {dates}{sub}"
+
+
+def _send_ipo_list(kind: str, req: EmailRequest) -> None:
+    """List live / upcoming IPOs as a numbered menu; a numeric reply → that IPO's note.
+    'upcoming' is filtered to issues whose RHP is already published (so it's analysable)."""
+    if kind == "ongoing":
+        ipos = ipo.list_current()
+        title = "🟢 Live IPOs (open now)"
+    else:
+        ipos = [x for x in ipo.list_upcoming() if ipo.has_prospectus(x["symbol"])]
+        title = "🔜 Upcoming IPOs (RHP available)"
+    if not ipos:
+        _reply_text(req, f"No {kind} IPOs "
+                    + ("open right now." if kind == "ongoing"
+                       else "with an RHP published yet. Check back closer to the open date."))
+        return
+    cands = [_MenuItem(f"IPO:{x['symbol']}", x["company"]) for x in ipos]
+    _set_pending(req.sender, f"ipo:{kind}", cands)
+    lines = "\n".join(_ipo_line(i, x) for i, x in enumerate(ipos, 1))
+    md = (f"**{title}** — reply to this email with just the number for a full pre-listing "
+          f"analysis (financials, fresh/OFS, valuation vs peers, risks, apply-or-not):\n\n"
+          f"```\n{lines}\n```\n\n(Reply within {PENDING_TTL_H}h.)")
+    emailer.send_report(_re_subject(req.subject, f" — {kind} IPOs"), md, to=req.sender,
+                        html=emailer.body_html(md, "IPOs"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("listed %d %s IPOs to %s", len(ipos), kind, req.sender)
+
+
+def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) -> None:
+    """Pre-listing IPO note — email body + PDF, in-thread — then the deeper-cut menu."""
+    log.info("generating IPO note for %s (req from %s)", symbol, req.sender)
+    _reply_text(req, f"🧾 Building the pre-listing IPO analysis for **{symbol}**"
+                     + (f" ({name})" if name else "")
+                     + " — reading the RHP; ~2–3 min, it'll land in this thread.")
+    md = generate_ipo_report(symbol)
+    if not md:
+        _reply_text(req, f"Couldn't build the IPO note for {symbol} — the offer documents "
+                         "(RHP) aren't published on NSE yet.")
+        return
+    pdf = _text_pdf(md, f"{symbol} — IPO analysis")
+    today = datetime.now(IST).date().isoformat()
+    head = f"IPO analysis — **{symbol}**" + (f" — {name}" if name else "")
+    body = f"{head}\n\n{md}"
+    attachments = []
+    if pdf:
+        attachments.append((f"{symbol}_IPO_{today}.pdf", pdf))
+    else:
+        body += "\n\n_(The PDF couldn't be generated this time — the full note is above.)_"
+    emailer.send_report(
+        _re_subject(req.subject, " — IPO analysis"), body, to=req.sender,
+        html=emailer.body_html(body, f"{symbol} — IPO"), attachments=attachments,
+        in_reply_to=req.message_id, references=req.references or req.message_id,
+    )
+    log.info("sent IPO note for %s to %s", symbol, req.sender)
+    _send_followup_menu(symbol, req, name, ipo_mode=True)   # IPO growth-triggers follow-up
+
+
+def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
+    """Route an 'ipo:' request → a live/upcoming list, or a named-IPO note."""
+    if kind == "list":
+        _send_ipo_list(val, req)
+        return
+    # a named IPO — match against live then upcoming by symbol / company substring
+    q = val.lower()
+    pool = ipo.list_current() + ipo.list_upcoming()
+    hits = [x for x in pool if q in x["symbol"].lower() or q in x["company"].lower()]
+    if not hits:
+        _reply_text(req, f"Couldn't find a live or upcoming IPO matching '{val}'. "
+                         "Try `ipo: ongoing` or `ipo: upcoming` to see the current list.")
+    elif len(hits) == 1:
+        _send_ipo_report(hits[0]["symbol"], req, hits[0]["company"])
+    else:
+        cands = [_MenuItem(f"IPO:{x['symbol']}", x["company"]) for x in hits]
+        _set_pending(req.sender, f"ipo:{val}", cands)
+        _send_choices(val, cands, req)
 
 
 def _send_choices(query: str, cands: list, req: EmailRequest) -> None:
@@ -375,12 +481,17 @@ def handle_request(req: EmailRequest) -> None:
     sel = _selection(req.body) if req.body and len(req.body.strip()) <= 4 else None
     if pending and sel is not None and 1 <= sel <= len(pending):
         symbol, name = pending[sel - 1]
-        if str(symbol).startswith("GT:"):       # deeper-cut menu: growth triggers
+        if str(symbol).startswith("GT:"):       # deeper-cut menu: growth triggers (listed)
             _send_growth_triggers(symbol[3:], req, name)   # keep the menu armed for other cuts
+            return
+        if str(symbol).startswith("IGT:"):      # deeper-cut menu: growth triggers (IPO)
+            _send_growth_triggers(symbol[4:], req, name, ipo_mode=True)
             return
         _clear_pending(req.sender)
         if str(symbol).startswith("MF:"):       # a fund choice
             _send_fund_report(int(symbol[3:]), req, name)
+        elif str(symbol).startswith("IPO:"):    # an IPO choice (from the ipo list)
+            _send_ipo_report(symbol[4:], req, name)
         else:
             _send_report(symbol, req, resolved_name=name, consolidated=basis)
         return
@@ -389,6 +500,12 @@ def handle_request(req: EmailRequest) -> None:
     fq = _fund_query(req.subject)
     if fq:
         _handle_fund(fq, req)
+        return
+
+    # 1c) explicit IPO request ('ipo: ongoing' / 'ipo: upcoming' / 'ipo: <name>')
+    iq = _ipo_query(req.subject)
+    if iq:
+        _handle_ipo(iq[0], iq[1], req)
         return
 
     # 2) fresh query from the subject
