@@ -370,10 +370,10 @@ def _upper_band(band: str | None) -> float | None:
 def _ipo_meta(symbol: str) -> tuple[dict | None, bool]:
     """(meta, live) for an IPO symbol from the live then upcoming lists; (None, False) if
     unknown (e.g. just closed) — the report still works off the archived documents."""
-    for x in ipo.list_current():
+    for x in ipo.list_current() or []:
         if x["symbol"] == symbol:
             return x, True
-    for x in ipo.list_upcoming():
+    for x in ipo.list_upcoming() or []:
         if x["symbol"] == symbol:
             return x, False
     return None, False
