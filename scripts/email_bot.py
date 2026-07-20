@@ -362,10 +362,12 @@ def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) ->
     pdf = _text_pdf(md, f"{symbol} — IPO analysis")
     today = datetime.now(IST).date().isoformat()
     head = f"IPO analysis — **{symbol}**" + (f" — {name}" if name else "")
-    body = f"{head}\n\n{md}"
-    attachments = []
+    body = (f"{head}\n\n{md}\n\n---\n\n_An **IPO metrics & terminology guide** is attached — "
+            "plain-English on fresh-issue vs OFS, QIB/NII/RII subscription, anchor investors, "
+            "RoNW, contingent liabilities and the APPLY/NEUTRAL/AVOID scale._")
+    attachments = [("IPO_metrics_and_terminology_guide.pdf", glossary.ipo_guide_pdf())]
     if pdf:
-        attachments.append((f"{symbol}_IPO_{today}.pdf", pdf))
+        attachments.insert(0, (f"{symbol}_IPO_{today}.pdf", pdf))
     else:
         body += "\n\n_(The PDF couldn't be generated this time — the full note is above.)_"
     emailer.send_report(

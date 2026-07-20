@@ -366,8 +366,18 @@ verified issue facts) produces: snapshot · **offer structure — fresh-issue vs
 signals** (fresh → company funded = positive; heavy OFS → insiders exiting = caution) · restated
 financials · **valuation at the band vs listed peers** · use of proceeds · key risks · demand
 (subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. Delivered as **email body +
-PDF**, then the same **deeper-cut menu** (reply `1` → growth-triggers, here grounded in the RHP
-via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand, no DB table.
+PDF**, alongside an **IPO metrics & terminology guide PDF** (`glossary.ipo_guide_pdf`, cached —
+fresh-issue vs OFS, QIB/NII/RII, anchor investors, price band/lot, P/E-at-band · P/B · RoNW · NAV,
+EBITDA/PAT/CFO, D/E · DSCR, contingent liabilities, RPTs, concentration, and the verdict scale;
+it also states plainly that **GMP is excluded** as non-primary) — mirroring the stock and fund
+reports' guides. Then the same **deeper-cut menu** (reply `1` → growth-triggers, here grounded in
+the RHP via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand, no DB table.
+
+> **Gotcha (fixed):** the RHP archive's folder is itself named `RHP_<SYM>/`, so matching the
+> preferred keyword against the **full zip path** selected the first PDF in that folder — the
+> boilerplate *General Information Document* — instead of the real prospectus. `_pick_pdf` now
+> matches the **file name** (largest match wins), which is the difference between "not disclosed"
+> and a full 3-year restated financial table.
 
 ## Status / follow-ups
 
