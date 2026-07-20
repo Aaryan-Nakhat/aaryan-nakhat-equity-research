@@ -303,6 +303,13 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
   holding) so they're exact. Delivered as **email body + a text PDF**. The menu is
   armed via the same numbered-reply state (`_set_followup` → `GT:<SYM>` items), and
   is **extensible** — add a row + a prefix branch for the next cut (bear case, etc.).
+- **Phone-readable HTML**: the email body and the PDF share one renderer
+  (`pdf.render_html`), which was print-tuned and therefore unreadable on a phone
+  (no viewport → desktop-width render → zoom-out + sideways scroll). It now emits a
+  **viewport tag** plus an `@media only screen and (max-width: 600px)` block that wraps
+  table cells and fenced blocks and lets a genuinely wide table scroll inside its own
+  `.tablewrap` box. `only screen` keeps all of it out of the **PDF**, which still prints
+  A4-landscape with `nowrap` financial tables.
 - **Config**: `CHANNELS`, `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
   `REPORT_FROM` / `REPORT_TO`, and `EMAIL_ALLOWED_SENDERS`. Send requests *from*
   a different address you own (e.g. work) *to* the bot's Gmail, so requests never

@@ -35,6 +35,24 @@ blockquote { border-left: 4px solid #0a6b3b; margin: 8px 0; padding: 4px 12px;
 figure.chart { margin: 10px 0 16px; page-break-inside: avoid; text-align: center; }
 figure.chart img { max-width: 100%; height: auto; border: 1px solid #cfcfcf; }
 figure.chart figcaption { font-size: 11px; color: #3a3a3a; margin-top: 3px; font-weight: 600; }
+img { max-width: 100%; height: auto; }
+p, li, h1, h2, h3, blockquote { overflow-wrap: break-word; }
+
+/* --- Phone (email) only. `only screen` keeps this out of the PDF, which is printed
+   at A4-landscape width and still wants nowrap tables. Without this the email body
+   renders at desktop width on a phone, forcing zoom-out + sideways scrolling. --- */
+@media only screen and (max-width: 600px) {
+  body { font-size: 15px; line-height: 1.55; margin: 0; padding: 12px; }
+  h1 { font-size: 20px; } h2 { font-size: 17px; } h3 { font-size: 15px; }
+  p, li { font-size: 15px; }
+  /* let cells wrap instead of forcing the page wide */
+  th, td { white-space: normal; overflow-wrap: break-word; padding: 5px 6px; font-size: 12px; }
+  /* a genuinely wide table scrolls inside its own box, not the whole page */
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* fenced blocks (IPO / disambiguation menus) must wrap, not scroll */
+  pre { white-space: pre-wrap; overflow-wrap: break-word; font-size: 12px; }
+  code { overflow-wrap: break-word; }
+}
 """
 
 
@@ -50,16 +68,27 @@ def _charts_html(images: list[tuple[str, bytes]]) -> str:
     return '<h2>Charts</h2>' + "".join(figs)
 
 
+def _wrap_tables(html: str) -> str:
+    """Put each table in a ``.tablewrap`` div so a wide financial table scrolls inside
+    its own box on a phone (see the media query) instead of widening the whole page.
+    Inert in the PDF, where ``.tablewrap`` carries no styling."""
+    return html.replace("<table>", '<div class="tablewrap"><table>') \
+               .replace("</table>", "</table></div>")
+
+
 def render_html(markdown_text: str, title: str = "",
                 images: list[tuple[str, bytes]] | None = None) -> str:
     """Render a markdown report string to a full styled HTML document.
 
-    Shared by the PDF renderer and the email body so both look identical.
+    Shared by the PDF renderer and the email body so both look identical. The
+    viewport tag + phone media query make the same HTML readable on a phone
+    (wrapped text, no zoom-out) without changing the printed PDF.
     ``images`` (caption, png-bytes) are appended as a Charts section.
     """
-    body = _md.markdown(markdown_text,
-                        extensions=["tables", "fenced_code", "sane_lists"])
+    body = _wrap_tables(_md.markdown(markdown_text,
+                                     extensions=["tables", "fenced_code", "sane_lists"]))
     return (f'<!doctype html><html><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{title}</title><style>{_CSS}</style></head>'
             f'<body>{body}{_charts_html(images or [])}</body></html>')
 
