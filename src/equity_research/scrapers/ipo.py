@@ -108,23 +108,34 @@ _ADS = ("financial express", "indian express", "mahasagar", "jansatta",
         "business standard", "navshakti", "loksatta")
 
 
+def _base(name: str) -> str:
+    """Lowercased file name without the in-zip directory prefix. Matching MUST use this,
+    not the full path: the archive's folder is itself named e.g. ``RHP_CMLL/``, so a
+    full-path match on 'rhp' hits the *first* file in the folder (the boilerplate General
+    Information Document) instead of the actual prospectus."""
+    return name.rsplit("/", 1)[-1].lower()
+
+
 def _pick_pdf(raw: bytes, prefer: tuple[str, ...]) -> tuple[str, bytes] | None:
-    """From a doc zip, return (filename, pdf-bytes): the file matching a preferred
-    keyword, else the largest PDF that isn't a mandatory newspaper advertisement."""
+    """From a doc zip, return (filename, pdf-bytes): the file whose NAME matches a
+    preferred keyword, else the largest PDF that isn't a mandatory newspaper ad
+    (for an RHP archive the prospectus is by far the largest file)."""
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
         return None
-    pdfs = [i for i in zf.infolist() if i.filename.lower().endswith(".pdf") and i.file_size > 0]
+    pdfs = [i for i in zf.infolist() if _base(i.filename).endswith(".pdf") and i.file_size > 0]
     if not pdfs:
         return None
     for kw in prefer:
-        for i in pdfs:
-            if kw in i.filename.lower():
-                return i.filename.rsplit("/", 1)[-1], zf.read(i.filename)
-    non_ads = [i for i in pdfs if not any(a in i.filename.lower() for a in _ADS)]
+        # largest match wins, so a multi-part prospectus resolves to the main document
+        hits = [i for i in pdfs if kw in _base(i.filename)]
+        if hits:
+            best = max(hits, key=lambda i: i.file_size)
+            return _base(best.filename), zf.read(best.filename)
+    non_ads = [i for i in pdfs if not any(a in _base(i.filename) for a in _ADS)]
     best = max(non_ads or pdfs, key=lambda i: i.file_size)
-    return best.filename.rsplit("/", 1)[-1], zf.read(best.filename)
+    return _base(best.filename), zf.read(best.filename)
 
 
 def _fetch_doc(symbol: str, doc: str) -> tuple[str, bytes] | None:
