@@ -222,6 +222,23 @@ broader AMC holdings coverage + report enrichment).
   all holdings for a portfolio-quality score — needs an ISIN→NSE-symbol map + financials ingested
   for the holdings (currently only the watchlist universe has them).
 
+### IPO module (new track — ✅ shipped)
+Pre-listing analysis for live / upcoming public issues, delivered through the email bot.
+- **Data (all primary NSE) ✅ done** (`scrapers/ipo.py`): `/api/ipo-current-issue` (live + total
+  subscription) · `/api/all-upcoming-issues?category=ipo` · `/api/ipo-detail` (category-wise QIB/
+  NII/RII); offer documents from the predictable archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`
+  — **RHP** (full prospectus) · **RATIOS** (price-band ad → KPIs / valuation-at-band / listed peers)
+  · **ANCHOR** (allotment). `upcoming` is filtered to issues whose RHP is published.
+- **Analysis ✅ done** (`synthesize.ipo_analysis`, `pipeline.generate_ipo_report`): Gemini reads
+  the RHP + price-band ad + anchor doc, grounded on verified issue facts → snapshot · **fresh-issue
+  vs OFS + what it signals** · restated financials · valuation-at-band vs peers · use of proceeds ·
+  RHP risks · demand (subscription + anchor) · **APPLY / AVOID / NEUTRAL** verdict. No XBRL exists
+  pre-listing, so it's RHP-driven, not the deterministic quant engine. **No grey-market/GMP.**
+- **Delivery ✅ done**: `ipo: ongoing|upcoming|<name>` → list/note (body + PDF) + the same deeper-cut
+  menu (growth triggers, RHP-grounded via `ipo_mode`). On-demand, no DB table.
+- *Later:* verdict track-record for IPOs (listing-gain vs the call); DRHP-stage (SEBI) coverage for
+  issues before the NSE RHP is posted; BSE fallback for the issue list.
+
 ### Later (deferred)
 - **Verdict track record — make the tool grade itself** *(top-priority next build; the honest
   gap — we issue Buy/Accumulate/Hold/Reduce/Avoid verdicts and never check if they were right).*

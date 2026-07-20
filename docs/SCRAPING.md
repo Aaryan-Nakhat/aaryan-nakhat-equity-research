@@ -31,7 +31,13 @@ Install browsers once: `uv run scrapling install`.
 - `sec_bhavdata_full_DDMMYYYY.csv`: `200`, ~360 KB real CSV — **includes
   `DELIV_QTY, DELIV_PER`** (the NSE-exclusive delivery % we want).
 - `ind_close_all_DDMMYYYY.csv` (index closes): `200`.
-- **Verdict:** plain `Fetcher`. **This is how we get NSE bhavcopy + delivery %.**
+- **IPO offer documents** — `content/ipo/<DOC>_<SYMBOL>.zip`, predictable per symbol
+  (probed 2026-07-20): `RHP_<SYM>.zip` (full Red Herring Prospectus PDF, ~10-16 MB),
+  `RATIOS_<SYM>.zip` (**price-band advertisement** → the IPO KPIs / valuation-at-band /
+  listed-peer table), `ANCHOR_<SYM>.zip` (anchor allotment). Each zip also carries the
+  mandatory newspaper-ad PDFs (skipped). `scrapers/ipo.py:documents()` picks the right
+  PDF and size-budgets them for Gemini. Existence check via a tiny `Range: bytes=0-3` GET.
+- **Verdict:** plain `Fetcher`. **This is how we get NSE bhavcopy + delivery % + IPO docs.**
   No browser needed.
 
 ### ⚠️ NSE APIs (`www.nseindia.com/api/...`) — browser tier, partial
@@ -103,6 +109,9 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/option-chain-indices?symbol=NIFTY` | ❌ 404 (path moved) | — |
 | `/api/corporates-financial-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 — **legacy** results catalog; **frozen at the Dec-2024 quarter** (SEBI Integrated Filing cutover) | `nse_financials.list_result_filings()` |
 | `/api/integrated-filing-results?index=equities&symbol=…&period=Quarterly` | ✅ 200 (probed 2026-06-23) — **post-Dec-2024** results (Integrated Filing); `in-capmkt` XBRL, same contexts | `nse_financials.list_integrated_filings()` |
+| `/api/ipo-current-issue` | ✅ 200 (probed 2026-07-20) — **live/open IPOs** + total subscription (`noOfTime`) | `ipo.list_current()` |
+| `/api/all-upcoming-issues?category=ipo` | ✅ 200 — **forthcoming IPOs** (name/band/dates/size) | `ipo.list_upcoming()` |
+| `/api/ipo-detail?symbol=…&series=EQ` | ✅ 200 — **category-wise subscription** (QIB / NII / RII, `bidDetails`) | `ipo.subscription_detail()` |
 
 ## Commodities & benchmark rates (for the digest header, probed 2026-06-26)
 

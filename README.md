@@ -28,6 +28,12 @@ Personal use. Not a hosted product.
   → a fund deep-report: returns · risk · rolling consistency · category percentile · portfolio
   concentration · **watchlist overlap** (which of your stocks the fund holds). Broader AMC
   holdings coverage + forensic look-through are the next steps (see [`docs/PLAN.md`](docs/PLAN.md)).
+- **IPOs** *(new track)* — **email `ipo: ongoing` / `ipo: upcoming`** → a numbered list of
+  live / forthcoming issues (band · dates · live subscription) → reply a number (or
+  `ipo: <name>`) → a **pre-listing note**: business, **fresh-issue vs OFS and what it signals**,
+  restated financials, **valuation at the band vs listed peers**, use of proceeds, RHP risks,
+  demand (subscription + anchor book), and an **APPLY / AVOID / NEUTRAL** verdict. All primary
+  NSE sources (the RHP / price-band KPIs / anchor docs) — **no grey-market/GMP**. `scrapers/ipo.py`.
 - **Report** — Gemini reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
