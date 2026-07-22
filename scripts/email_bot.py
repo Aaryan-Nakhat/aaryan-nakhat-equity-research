@@ -117,7 +117,12 @@ def _find_pending(req: EmailRequest) -> tuple[str, list] | None:
     for key, cands in fresh:
         if key == want:
             return key, cands
-    return fresh[0] if len(fresh) == 1 else None   # unambiguous fallback only
+    # Fallback ONLY for a bare new email (no threading headers at all) with a lone live
+    # menu. A reply that IS threaded but matches nothing must never borrow another
+    # thread's menu — that's how a fund reply once triggered a stock's growth triggers.
+    if not req.references and not req.in_reply_to and len(fresh) == 1:
+        return fresh[0]
+    return None
 
 
 def _clear_pending(key: str) -> None:
@@ -543,13 +548,13 @@ def handle_request(req: EmailRequest) -> None:
         if str(symbol).startswith("IGT:"):      # deeper-cut menu: growth triggers (IPO)
             _send_growth_triggers(symbol[4:], req, name, ipo_mode=True)
             return
-        _clear_pending(key)
         if str(symbol).startswith("MF:"):       # a fund choice
             _send_fund_report(int(symbol[3:]), req, name)
         elif str(symbol).startswith("IPO:"):    # an IPO choice (from the ipo list)
             _send_ipo_report(symbol[4:], req, name)
         else:
             _send_report(symbol, req, resolved_name=name, consolidated=basis)
+        _clear_pending(key)     # only after a successful send — a crash must not eat the reply
         return
 
     # 1b) explicit fund request ('fund: <name>' / 'mf: <name>')
