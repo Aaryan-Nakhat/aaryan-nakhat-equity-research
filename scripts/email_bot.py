@@ -18,6 +18,7 @@ fully intact and revives by setting CHANNELS=telegram. Run via run_email_bot.ps1
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import json
 import logging
 import os
@@ -66,36 +67,63 @@ log = logging.getLogger("equity-email")
 
 
 # ----------------- disambiguation state (alert_state, '__email__' namespace) -----------------
-def _set_pending(sender: str, query: str, cands: list) -> None:
+# Pending menus are keyed by (sender, email-thread) — NOT sender alone — so a person can have
+# several menus open at once (e.g. an `ipo: ongoing` list AND a stock's "want a deeper cut?"
+# prompt) and a numbered reply resolves against the thread it was sent in, never a stale one.
+def _thread_id(req: EmailRequest) -> str:
+    """Stable short id for the email thread: hash of the thread-root Message-ID (first entry
+    in References), falling back to the immediate parent, then this message's own id. A reply
+    carries the same root, so its menu resolves in-thread."""
+    refs = (req.references or "").split()
+    root = refs[0] if refs else (req.in_reply_to or req.message_id or "")
+    return hashlib.sha1(root.strip().encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def _pending_key(req: EmailRequest) -> str:
+    return f"pending:{req.sender}:{_thread_id(req)}"
+
+
+def _set_pending(req: EmailRequest, query: str, cands: list) -> None:
     con = connect()
     try:
         payload = json.dumps({"query": query, "ts": datetime.now(timezone.utc).isoformat(),
                               "cands": [[c.symbol, c.name] for c in cands]})
         con.execute("INSERT OR REPLACE INTO alert_state(symbol, key, value, updated_at) "
-                    "VALUES ('__email__', ?, ?, now())", [f"pending:{sender}", payload])
+                    "VALUES ('__email__', ?, ?, now())", [_pending_key(req), payload])
     finally:
         con.close()
 
 
-def _get_pending(sender: str) -> list | None:
+def _find_pending(req: EmailRequest) -> tuple[str, list] | None:
+    """The pending menu a reply answers → (storage_key, cands), or None. Matches the reply's
+    thread first; if none matches but the sender has exactly one live menu, uses that (rescues
+    replies whose client dropped the threading headers). Expired menus (>TTL) are ignored."""
     con = connect()
     try:
-        r = con.execute("SELECT value FROM alert_state WHERE symbol='__email__' AND key=?",
-                        [f"pending:{sender}"]).fetchone()
+        rows = con.execute(
+            "SELECT key, value FROM alert_state WHERE symbol='__email__' AND key LIKE ?",
+            [f"pending:{req.sender}:%"]).fetchall()
     finally:
         con.close()
-    if not r:
+    fresh: list[tuple[str, list]] = []
+    for key, val in rows:
+        data = json.loads(val)
+        age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(data["ts"])).total_seconds() / 3600
+        if age_h <= PENDING_TTL_H:
+            fresh.append((key, data["cands"]))
+    if not fresh:
         return None
-    data = json.loads(r[0])
-    age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(data["ts"])).total_seconds() / 3600
-    return data["cands"] if age_h <= PENDING_TTL_H else None
+    want = _pending_key(req)
+    for key, cands in fresh:
+        if key == want:
+            return key, cands
+    return fresh[0] if len(fresh) == 1 else None   # unambiguous fallback only
 
 
-def _clear_pending(sender: str) -> None:
+def _clear_pending(key: str) -> None:
     con = connect()
     try:
-        con.execute("DELETE FROM alert_state WHERE symbol='__email__' AND key=?",
-                    [f"pending:{sender}"])
+        con.execute("DELETE FROM alert_state WHERE symbol='__email__' AND key=?", [key])
     finally:
         con.close()
 
@@ -176,12 +204,12 @@ class _MenuItem:
         self.name = name or ""
 
 
-def _set_followup(sender: str, symbol: str, name: str | None, *, ipo_mode: bool = False) -> None:
-    """Arm the numbered follow-up menu for this sender so a bare-number reply maps back
-    to a deeper cut for ``symbol`` (24h TTL, via the shared pending state). ``ipo_mode``
+def _set_followup(req: EmailRequest, symbol: str, name: str | None, *, ipo_mode: bool = False) -> None:
+    """Arm the numbered follow-up menu in THIS thread so a bare-number reply maps back
+    to a deeper cut for ``symbol`` (24h TTL, via the thread-scoped pending state). ``ipo_mode``
     tags the growth-triggers item as IPO (``IGT:`` — grounded in the offer docs)."""
     tag = "IGT" if ipo_mode else "GT"
-    _set_pending(sender, f"__followup__:{symbol}", [_MenuItem(f"{tag}:{symbol}", name)])
+    _set_pending(req, f"__followup__:{symbol}", [_MenuItem(f"{tag}:{symbol}", name)])
 
 
 def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
@@ -202,7 +230,7 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
         md, to=req.sender, html=emailer.body_html(md, symbol),
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
-    _set_followup(req.sender, symbol, name, ipo_mode=ipo_mode)
+    _set_followup(req, symbol, name, ipo_mode=ipo_mode)
     log.info("sent deeper-cut menu for %s to %s", symbol, req.sender)
 
 
@@ -338,7 +366,7 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
                        else "with an RHP published yet. Check back closer to the open date."))
         return
     cands = [_MenuItem(f"IPO:{x['symbol']}", x["company"]) for x in ipos]
-    _set_pending(req.sender, f"ipo:{kind}", cands)
+    _set_pending(req, f"ipo:{kind}", cands)
     lines = "\n".join(_ipo_line(i, x) for i, x in enumerate(ipos, 1))
     md = (f"**{title}** — reply to this email with just the number for a full pre-listing "
           f"analysis (financials, fresh/OFS, valuation vs peers, risks, apply-or-not):\n\n"
@@ -396,7 +424,7 @@ def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
         _send_ipo_report(hits[0]["symbol"], req, hits[0]["company"])
     else:
         cands = [_MenuItem(f"IPO:{x['symbol']}", x["company"]) for x in hits]
-        _set_pending(req.sender, f"ipo:{val}", cands)
+        _set_pending(req, f"ipo:{val}", cands)
         _send_choices(val, cands, req)
 
 
@@ -495,25 +523,27 @@ def _handle_fund(query: str, req: EmailRequest) -> None:
     elif len(cands) == 1:
         _send_fund_report(cands[0][0], req, cands[0][1])
     else:
-        _set_pending(req.sender, query, [_FundCand(c, n) for c, n in cands])
+        _set_pending(req, query, [_FundCand(c, n) for c, n in cands])
         _send_choices(query, [_FundCand(c, n) for c, n in cands], req)
 
 
 # ----------------- request handling -----------------
 def handle_request(req: EmailRequest) -> None:
     basis = _basis(req.subject)                 # consolidated / standalone / auto (from the subject)
-    # 1) is this a numbered reply to a pending "which one?" question?
-    pending = _get_pending(req.sender)
+    # 1) is this a numbered reply to a pending "which one?" / deeper-cut menu? Resolve it
+    #    against the menu armed IN THIS THREAD (thread-scoped), never a stale one from another.
+    found = _find_pending(req)
     sel = _selection(req.body) if req.body and len(req.body.strip()) <= 4 else None
-    if pending and sel is not None and 1 <= sel <= len(pending):
-        symbol, name = pending[sel - 1]
+    if found and sel is not None and 1 <= sel <= len(found[1]):
+        key, cands = found
+        symbol, name = cands[sel - 1]
         if str(symbol).startswith("GT:"):       # deeper-cut menu: growth triggers (listed)
             _send_growth_triggers(symbol[3:], req, name)   # keep the menu armed for other cuts
             return
         if str(symbol).startswith("IGT:"):      # deeper-cut menu: growth triggers (IPO)
             _send_growth_triggers(symbol[4:], req, name, ipo_mode=True)
             return
-        _clear_pending(req.sender)
+        _clear_pending(key)
         if str(symbol).startswith("MF:"):       # a fund choice
             _send_fund_report(int(symbol[3:]), req, name)
         elif str(symbol).startswith("IPO:"):    # an IPO choice (from the ipo list)
@@ -550,7 +580,7 @@ def handle_request(req: EmailRequest) -> None:
     elif len(cands) == 1:
         _send_report(cands[0].symbol, req, resolved_name=cands[0].name, consolidated=basis)
     else:
-        _set_pending(req.sender, query, cands)
+        _set_pending(req, query, cands)
         _send_choices(query, cands, req)
 
 
@@ -652,13 +682,17 @@ def main() -> None:
         try:
             inbox.connect()
             log.info("IMAP connected (%s) — waiting for mail via IDLE", inbox.user)
-            _drain(inbox)            # catch anything that arrived while we were down
             while True:
-                activity = inbox.wait(timeout=IDLE_TIMEOUT)
-                if activity:
-                    _drain(inbox)
+                # Drain FIRST, every cycle — IDLE only reduces latency, it is NOT the source
+                # of truth. While a report is generating (minutes) the bot isn't in IDLE, and
+                # Gmail's IDLE only reports mail that arrives *during* its wait window; so any
+                # request sent while busy (or one IDLE simply misses) would otherwise wait for
+                # a *later* email to nudge it. An unconditional drain each loop guarantees every
+                # UNSEEN request is picked up within one cycle — no more "send it 3-4 times".
+                _drain(inbox)
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
+                inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")
         finally:

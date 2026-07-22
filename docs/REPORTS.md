@@ -284,10 +284,20 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
   **IDLE** waits for mail (no minute-by-minute polling); on arrival it fetches
   UNSEEN messages, keeps only those `From:` an address in `EMAIL_ALLOWED_SENDERS`
   (auth), and skips its own (`X-EquityBot`) replies. IDLE is re-armed each loop
-  (Gmail drops it ~29 min), which also serves as the daily-scan heartbeat.
+  (Gmail drops it ~29 min), which also serves as the daily-scan heartbeat. The loop
+  **drains UNSEEN every cycle, not only when IDLE fires** — IDLE just lowers latency,
+  it's not the source of truth. (While a report generates for minutes the bot isn't
+  idling, and Gmail's IDLE only reports mail arriving *during* its wait window; the
+  unconditional drain guarantees a request sent while busy is still picked up on the
+  next cycle, so you never have to resend.)
 - **Disambiguation** is *ask-first*: ambiguous names get a numbered reply; your
-  numeric reply is matched to the pending candidates (stored in `alert_state`
-  under `__email__`, 24h TTL) and the chosen report is sent.
+  numeric reply is matched to the pending candidates (stored in `alert_state` under
+  `__email__`, 24h TTL). Pending menus are **thread-scoped** — keyed by
+  `(sender, email-thread)`, not sender alone — so several menus can be open at once
+  (e.g. an `ipo: ongoing` list *and* a stock's "want a deeper cut?" prompt) and a
+  numbered reply resolves against the thread it was sent in, never a stale one from
+  another thread. (Thread identity = a hash of the References root; a lone live menu
+  is the unambiguous fallback if a reply's threading headers are missing.)
 - **Deeper-cut menu** (opt-in follow-ups): right **after** each deep report the bot
   sends a **separate short in-thread email** — "want a deeper cut? reply with the
   number" (`_send_followup_menu`); replying with a bare number runs that deeper
