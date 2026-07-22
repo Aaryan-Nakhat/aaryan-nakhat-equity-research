@@ -27,7 +27,8 @@ class EmailRequest:
     subject: str
     body: str            # first meaningful text line (the query, or a "2" reply)
     message_id: str
-    references: str      # In-Reply-To / References, for matching disambiguation
+    references: str      # full References chain (thread history) — for thread-scoped menus
+    in_reply_to: str = ""  # immediate parent Message-ID (for in-thread replies)
 
 
 def _decode(raw) -> str:
@@ -135,7 +136,10 @@ class Inbox:
                 subject=_decode(msg.get("Subject")),
                 body=_first_line(msg),
                 message_id=(msg.get("Message-ID") or "").strip(),
-                references=(msg.get("In-Reply-To") or msg.get("References") or "").strip(),
+                # full References chain so we can identify the thread root; In-Reply-To
+                # is only the immediate parent (kept separately for in-thread replies).
+                references=(msg.get("References") or msg.get("In-Reply-To") or "").strip(),
+                in_reply_to=(msg.get("In-Reply-To") or "").strip(),
             ))
         return out
 
