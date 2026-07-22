@@ -59,8 +59,10 @@ def send_report(subject: str, body: str, *, to: str | None = None,
     msg["To"] = recipient
     msg[BOT_HEADER] = "1"
     if in_reply_to:
-        msg["In-Reply-To"] = in_reply_to
-        msg["References"] = references or in_reply_to
+        # Unfold: a References chain read from a raw message can carry folded
+        # CRLF+indent whitespace, which EmailMessage rejects in a header value.
+        msg["In-Reply-To"] = " ".join(in_reply_to.split())
+        msg["References"] = " ".join((references or in_reply_to).split())
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")

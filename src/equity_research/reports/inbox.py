@@ -31,6 +31,11 @@ class EmailRequest:
     in_reply_to: str = ""  # immediate parent Message-ID (for in-thread replies)
 
 
+def _unfold(raw) -> str:
+    """Unfold a (possibly multi-line) header value into one CR/LF-free line."""
+    return " ".join(str(raw).split()) if raw else ""
+
+
 def _decode(raw) -> str:
     if raw is None:
         return ""
@@ -135,11 +140,13 @@ class Inbox:
                 sender=sender,
                 subject=_decode(msg.get("Subject")),
                 body=_first_line(msg),
-                message_id=(msg.get("Message-ID") or "").strip(),
+                message_id=_unfold(msg.get("Message-ID")),
                 # full References chain so we can identify the thread root; In-Reply-To
                 # is only the immediate parent (kept separately for in-thread replies).
-                references=(msg.get("References") or msg.get("In-Reply-To") or "").strip(),
-                in_reply_to=(msg.get("In-Reply-To") or "").strip(),
+                # A long References header arrives FOLDED (CRLF + indent) — unfold it,
+                # or echoing it into an outgoing reply's headers raises ValueError.
+                references=_unfold(msg.get("References") or msg.get("In-Reply-To")),
+                in_reply_to=_unfold(msg.get("In-Reply-To")),
             ))
         return out
 
