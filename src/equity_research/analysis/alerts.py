@@ -38,7 +38,7 @@ class Alert:
     body: str = ""
     attach_report: bool = False     # True => orchestrator generates & attaches deep report
     attachment: str = ""            # filing PDF URL (for auto doc-analysis)
-    analysis: str = ""              # Gemini's inline read of the attached filing
+    analysis: str = ""              # the LLM's inline read of the attached filing
 
     def render(self) -> str:
         head = f"{EMOJI.get(self.severity, '🔔')} **{self.symbol}** — {self.title}"

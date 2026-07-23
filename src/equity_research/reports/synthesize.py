@@ -1,6 +1,6 @@
 """LLM synthesis — turn the quant brief (+ optional filing PDF) into a thesis.
 
-Uses Google's Gemini via the `google-genai` SDK. The deterministic brief carries
+Uses Google's LLM via the `google-genai` SDK. The deterministic brief carries
 the numbers; the model's job is the qualitative read: weigh the signals, fold in
 management commentary from a concall transcript / annual report (if supplied),
 and produce a structured verdict with reasons.
@@ -9,7 +9,7 @@ Auth — set in the environment (see ``.env.example``), two options:
   - **Vertex AI** (workplace GCP): GOOGLE_GENAI_USE_VERTEXAI=true,
     GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION (+ ADC, or a Vertex API key via
     GOOGLE_API_KEY for express mode).
-  - **Gemini Developer API**: GOOGLE_API_KEY (or GEMINI_API_KEY) only.
+  - **Developer API**: GOOGLE_API_KEY (or GEMINI_API_KEY) only.
 Model via GEMINI_MODEL (default gemini-2.5-pro). See ``docs/REPORTS.md``.
 """
 
@@ -566,7 +566,7 @@ commentary, no blank lines, no markdown. One line per input number, in order."""
 
 def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
     """Concise plain-English labels for a batch of NSE filing / board-meeting texts in ONE
-    Gemini call (cheap — one call per scan). Returns a list aligned to ``texts`` ("" where
+    LLM call (cheap — one call per scan). Returns a list aligned to ``texts`` ("" where
     the model gave nothing for that item); returns all-"" on any failure so the caller falls
     back to its heuristic. Never raises."""
     items = [" ".join((t or "").split())[:400] for t in texts]

@@ -1,6 +1,6 @@
 """Resolve a free-text company name/query to NSE trading symbol candidates.
 
-Uses Gemini + Google Search grounding so it works for any listed name, including
+Uses LLM + Google Search grounding so it works for any listed name, including
 small-cap and recently-listed companies (not limited to a local universe).
 Returns up to 5 ranked candidates, or exactly one when the model is certain.
 The caller disambiguates when there's more than one.
@@ -37,7 +37,7 @@ class Candidate:
 
 
 def resolve(query: str) -> list[Candidate]:
-    """NSE symbol candidates for ``query`` via Gemini + Google Search (≤5)."""
+    """NSE symbol candidates for ``query`` via the LLM + Google Search (≤5)."""
     cfg = types.GenerateContentConfig(
         system_instruction=_RESOLVER_SYS,
         tools=[types.Tool(google_search=types.GoogleSearch())],

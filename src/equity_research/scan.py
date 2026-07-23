@@ -32,7 +32,7 @@ from equity_research import watchlist
 _IST = ZoneInfo("Asia/Kolkata")
 log = logging.getLogger("equity_research.scan")
 
-# Event types whose attached filing PDF is worth an inline Gemini read — the
+# Event types whose attached filing PDF is worth an inline LLM read — the
 # details (order value/client, deal terms, rating, etc.) live in the PDF, not the
 # one-line NSE subject, so these get a point-wise read.
 _ANALYZE_TITLES = {"Results filed", "Concall / investor meet", "Scheme / M&A",
@@ -430,7 +430,7 @@ def watchlist_upcoming(syms: list[str], feeds: dict, days: int = 30, labeler=Non
 
 
 def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 25) -> None:
-    """Download + Gemini-analyse the attached filing for EVERY notable doc-bearing
+    """Download + LLM-analyse the attached filing for EVERY notable doc-bearing
     event (results / concall / scheme / order win / acquisition / rating / etc.),
     point-wise and inline — multiple per stock. Deduped by PDF URL so the same
     document isn't read twice; ``cap`` is a generous safety bound for runaway days."""
@@ -840,7 +840,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         # per-stock bulk/block deals (institutional buy/sell) — merge in
         for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}).items():
             results.setdefault(sym, []).extend(deal_alerts)
-        _enrich_event_docs(results)                         # inline Gemini read of filings
+        _enrich_event_docs(results)                         # inline LLM read of filings
 
         # build each digest section best-effort — one failing section must never
         # abort the whole scan (it's the difference between a partial digest and none).

@@ -25,7 +25,7 @@ Personal use. Not a hosted product.
   **Email `fund: <name>`** → a fund deep-report for any of ~14,500 schemes: returns · risk
   (Sharpe/Sortino/drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo simulation) ·
   **benchmark-relative alpha/beta/up-down-capture/tracking-error** vs the category's index
-  (~5y history backfilled from NSE archives) · category percentile · and a **Gemini verdict**
+  (~5y history backfilled from NSE archives) · category percentile · and a **LLM verdict**
   (Buy/Accumulate/Hold/Switch/Avoid). Where the AMC's SEBI monthly **holdings** are covered
   (`mf_holdings`, a generic SEBI-format parser over a per-AMC fetch registry — **PPFAS + HDFC**):
   portfolio concentration · **watchlist overlap** · and **month-over-month churn** (what the
@@ -37,7 +37,7 @@ Personal use. Not a hosted product.
   restated financials, **valuation at the band vs listed peers**, use of proceeds, RHP risks,
   demand (subscription + anchor book), and an **APPLY / AVOID / NEUTRAL** verdict. All primary
   NSE sources (the RHP / price-band KPIs / anchor docs) — **no grey-market/GMP**. `scrapers/ipo.py`.
-- **Report** — Gemini reads the quant brief (+ filing PDFs) and writes a forensic thesis,
+- **Report** — LLM reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
   filing-grounded business overview** (what it does, segment revenue-mix %, market cap /
@@ -57,7 +57,7 @@ Personal use. Not a hosted product.
 ## Status
 
 Working end-to-end (NSE/BSE/MCX/FBIL → DuckDB → fundamentals/forensics/technicals/
-valuation + signals → Gemini report → email **or** Telegram bot, always-on). On-demand
+valuation + signals → LLM report → email **or** Telegram bot, always-on). On-demand
 reports + a midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
 Telegram one for when Telegram is ISP-blocked. Docs:
 
@@ -65,7 +65,7 @@ Telegram one for when Telegram is ISP-blocked. Docs:
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) / [`docs/SCRAPING.md`](docs/SCRAPING.md) — sources + scrapability findings.
 - [`docs/FUNDAMENTALS.md`](docs/FUNDAMENTALS.md) — financials data path, ratios, forensic scores, valuation.
-- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — indicators. [`docs/REPORTS.md`](docs/REPORTS.md) — Gemini synthesis, Telegram bot, PDF, email.
+- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — indicators. [`docs/REPORTS.md`](docs/REPORTS.md) — LLM synthesis, Telegram bot, PDF, email.
 
 ## Layout
 
@@ -86,7 +86,7 @@ tests/         tests
 - Python 3.12, `uv`
 - `scrapling` (scraping, incl. Camoufox browser tier for NSE's anti-bot `/api/`)
 - DuckDB (analytics) · pandas
-- Gemini (`google-genai`, via Vertex AI service account) — symbol resolution + report synthesis
+- the LLM (`google-genai`, via Vertex AI service account) — symbol resolution + report synthesis
 - `python-telegram-bot` (delivery) · `telegramify-markdown` (formatting) ·
   Playwright Chromium + `markdown` (HTML → PDF) · SMTP email
 
@@ -100,7 +100,7 @@ cp .env.example .env                       # then fill in your own credentials
 
 Configure `.env` (all secrets are read from the environment; `.env` is gitignored — see
 [`.env.example`](.env.example) for every variable):
-- **Gemini** — either Vertex AI (a GCP service-account JSON, also gitignored) or a
+- **LLM** — either Vertex AI (a GCP service-account JSON, also gitignored) or a
   Developer API key.
 - **Delivery** — `CHANNELS=email` (Gmail SMTP/IMAP app password) and/or `telegram`
   (a BotFather token + your allowed user IDs).

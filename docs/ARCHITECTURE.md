@@ -1,7 +1,7 @@
 # Architecture
 
 End to end: primary NSE/BSE/MCX/FBIL data → DuckDB → deterministic fundamental / forensic /
-technical / (sector-appropriate) valuation analysis + signals → Gemini writes the thesis →
+technical / (sector-appropriate) valuation analysis + signals → LLM writes the thesis →
 delivered by email (or Telegram) either **on demand** (you name a stock) or **pushed** as a
 **midday (12:30)** and **full (18:00)** watchlist digest, with PDF reports and holiday-aware
 scheduling. Per-area detail lives in [`SCRAPING.md`](SCRAPING.md),
@@ -47,7 +47,7 @@ scheduling. Per-area detail lives in [`SCRAPING.md`](SCRAPING.md),
                    ┌─────────────────────────────────────────────────────────────┐
                    │  reports/                                                   │
                    │  brief.py / deep_brief.py  → one markdown brief (all signals)│
-                   │  resolve.py  "name" → NSE symbol (Gemini + Google Search)   │
+                   │  resolve.py  "name" → NSE symbol (LLM + Google Search)   │
                    │  synthesize.py → GEMINI 2.5 Pro via Vertex (workplace SA)    │
                    │  pdf.py (HTML→Chromium PDF) · email.py (SMTP)                │
                    └───────────────────────────────┬─────────────────────────────┘
@@ -66,12 +66,12 @@ scheduling. Per-area detail lives in [`SCRAPING.md`](SCRAPING.md),
 ```
 You ▶ Telegram: "Adani Power"  (or "Reliance consolidated")
         │
-        ▼  resolve.py  → Gemini+Search → NSE symbol(s)
+        ▼  resolve.py  → LLM+Search → NSE symbol(s)
    one match? ──run──┐        several? ──▶ buttons ──▶ you tap one ──┐
                      ▼                                               ▼
         pipeline.generate_report():  ensure financials ingested (on-demand)
               → deep_brief (full IS/BS/CF + ratios + forensic + valuation)
-              → synthesize.py  → Gemini forensic write-up
+              → synthesize.py  → LLM forensic write-up
         │
         ▼  bot replies:  analysis inline (MarkdownV2)  +  full report as PDF
 ```
@@ -89,7 +89,7 @@ self-healing gate: first heartbeat >=18:00 IST, once per trading day (already_sc
                  calendar/actions + fii/dii) · insider_trades (SEBI PIT)
               3. per symbol → alerts.scan_symbol(): today vs alert_state (deduped)
               4. + bulk/block deals · upcoming events · per-stock movers
-              5. _enrich_event_docs(): download + Gemini-read notable filings (inline)
+              5. _enrich_event_docs(): download + LLM-read notable filings (inline)
               6. market header: sectoral indices · VIX · FII/DII · FII-futures positioning
                  (participant_oi) · USD/INR (FBIL) · gold/silver/crude (MCX)
         │   (alert_state dedup → only new events fire; insider deduped via the table)
@@ -122,5 +122,5 @@ heartbeat gate: once/trading-day in the 12:30–14:00 IST window (already_intrad
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report** (returns/risk/holdings/overlap) | `reports/{brief,deep_brief,fund_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary}.py` |
-| **LLM** | synthesis + filing/guidance extraction + name resolution | Gemini 2.5 Pro via **Vertex** (service account) |
+| **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **Vertex** (service account) |
 | **Deliver** | bot(s) + midday (12:30) & full (18:00) scans; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

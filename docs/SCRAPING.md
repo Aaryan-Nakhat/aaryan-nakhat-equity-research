@@ -36,7 +36,7 @@ Install browsers once: `uv run scrapling install`.
   `RATIOS_<SYM>.zip` (**price-band advertisement** → the IPO KPIs / valuation-at-band /
   listed-peer table), `ANCHOR_<SYM>.zip` (anchor allotment). Each zip also carries the
   mandatory newspaper-ad PDFs (skipped). `scrapers/ipo.py:documents()` picks the right
-  PDF and size-budgets them for Gemini. Existence check via a tiny `Range: bytes=0-3` GET.
+  PDF and size-budgets them for the LLM. Existence check via a tiny `Range: bytes=0-3` GET.
 - **`content/equities/EQUITY_L.csv`** — the full NSE listed-companies master
   (symbol · company name · ISIN, ~2,400 rows): `200` plain HTTP → `equity_master`
   table (classifies SHP holders as listed vs unlisted — the Elcid finder).

@@ -147,7 +147,7 @@ def _fetch_doc(symbol: str, doc: str) -> tuple[str, bytes] | None:
 
 
 def documents(symbol: str, *, budget_mb: float = 18.0) -> list[tuple[str, bytes]]:
-    """Offer documents for Gemini, primary-source, in priority order within a size
+    """Offer documents for the LLM, primary-source, in priority order within a size
     budget (the RHP is always kept even if large): RHP → price-band KPIs → anchor book.
     Returns ``[(label, pdf-bytes), ...]``; empty if nothing is published yet."""
     out: list[tuple[str, bytes]] = []

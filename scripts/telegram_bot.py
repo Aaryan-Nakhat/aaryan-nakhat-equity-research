@@ -1,9 +1,9 @@
 """Telegram bot — message a company name, get a deep equity report back.
 
 Flow: you send "Adani Power" (optionally "... consolidated") -> the bot resolves
-it to NSE symbol(s) [local map, else Gemini+Google-Search]; if several match it
+it to NSE symbol(s) [local map, else LLM+Google-Search]; if several match it
 shows buttons to pick one; then it ingests-on-demand, builds the deep brief,
-runs the Gemini forensic analysis, and replies with the report (inline + a .md
+runs the LLM forensic analysis, and replies with the report (inline + a .md
 file).
 
 Only whitelisted Telegram user IDs are served. Run:
@@ -12,7 +12,7 @@ Only whitelisted Telegram user IDs are served. Run:
     uv run python scripts/telegram_bot.py
 
 Env: TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS (comma-separated numeric IDs)
-plus the Gemini/Vertex vars. See .env.example.
+plus the LLM/Vertex vars. See .env.example.
 """
 
 from __future__ import annotations

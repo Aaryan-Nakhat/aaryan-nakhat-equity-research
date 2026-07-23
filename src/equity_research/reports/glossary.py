@@ -3,7 +3,7 @@
 Every metric we surface should be self-explaining: *what it is*, *typical /
 benchmark values*, and *how to read the current value* — with a sector caveat
 where the "normal" range shifts by business model. This module is the
-deterministic backbone (consistent, no LLM); the Gemini narrative then adds the
+deterministic backbone (consistent, no LLM); the LLM narrative then adds the
 company-specific, sector-aware reading on top.
 
 - ``read(key, value)``    -> short inline tag, e.g. "9.5% — fair"

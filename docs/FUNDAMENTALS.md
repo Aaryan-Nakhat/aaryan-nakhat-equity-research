@@ -160,7 +160,7 @@ SG&A ≈ employee + other expenses; Altman X4 uses book equity unless `--mcap` g
   pledge-rise alert. Degrades to `n/a` if the feed is unavailable.
 - **Contingent liabilities & related-party transactions** are **not** in the
   structured XBRL (no such tags) — they live in annual-report notes; supply a
-  filing PDF and the Gemini step extracts them.
+  filing PDF and the LLM step extracts them.
 
 For the **Monte-Carlo DCF / reverse-DCF / Benford / sector z-scores** quant layer
 (`analysis/quant.py`), see [`REPORTS.md`](REPORTS.md).

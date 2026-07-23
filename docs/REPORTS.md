@@ -1,7 +1,7 @@
-# Reports — Gemini synthesis + email (Phase 4)
+# Reports — LLM synthesis + email (Phase 4)
 
 The capstone: assemble every quant signal into one **analytical brief**, have
-**Gemini** (via Vertex AI or the Gemini Developer API) turn it (plus an optional
+**LLM** (via Vertex AI or the Developer API) turn it (plus an optional
 filing PDF) into a structured investment thesis, and **email** the result.
 `src/equity_research/reports/`.
 
@@ -11,7 +11,7 @@ filing PDF) into a structured investment thesis, and **email** the result.
 brief.build_brief(con, symbol)        # deterministic — all primary-source signals
         │   (fundamentals · forensic · technicals · valuation · sector)
         ▼
-synthesize.synthesize_thesis(brief)   # Gemini (gemini-2.5-pro) — qualitative read + verdict
+synthesize.synthesize_thesis(brief)   # LLM (gemini-2.5-pro) — qualitative read + verdict
         │   + optional concall/annual-report PDF (inline bytes)
         ▼
 email.send_report(subject, report)    # SMTP
@@ -29,7 +29,7 @@ Validated on RELIANCE.
 
 ## Synthesis (`reports/synthesize.py`)
 
-Gemini via the `google-genai` SDK (`gemini-2.5-pro` by default, override with
+LLM via the `google-genai` SDK (`gemini-2.5-pro` by default, override with
 `GEMINI_MODEL`), streaming. System prompt = a sober Indian-equity analyst told to
 ground every claim in the brief, respect `n/a`/caveats, and emit a 4-part note
 (Verdict · Why · Risks · What to watch). An optional PDF (concall transcript /
@@ -43,7 +43,7 @@ brief — this is where management commentary enters the thesis.
   The key file is **gitignored** (`gcp-service-account.json` / `*service-account*.json`).
   Falls back to `GOOGLE_APPLICATION_CREDENTIALS`, then to `gcloud` ADC if neither
   is set.
-- **Gemini Developer API**: just `GOOGLE_API_KEY` (from aistudio.google.com).
+- **Developer API**: just `GOOGLE_API_KEY` (from aistudio.google.com).
 
 The client auto-selects Vertex when `GOOGLE_GENAI_USE_VERTEXAI` is truthy, else
 the Developer API key.
@@ -62,7 +62,7 @@ Config via env (`SMTP_HOST/PORT/USER/PASS`, `REPORT_FROM`, `REPORT_TO`) — see
 
 ```bash
 uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2   # brief only, no creds
-uv run python scripts/research_report.py RELIANCE --shares 1353.2             # + Gemini thesis
+uv run python scripts/research_report.py RELIANCE --shares 1353.2             # + LLM thesis
 uv run python scripts/research_report.py RELIANCE --deep --shares 1353.2      # full forensic deep-dive
 uv run python scripts/research_report.py RELIANCE --pdf transcript.pdf        # + read a filing
 uv run python scripts/research_report.py RELIANCE --deep --out reliance.pdf   # write charted PDF
@@ -77,7 +77,7 @@ Balance Sheet / Cash Flow (CFO·CFI·CFF)** tables plus a complete derived layer
 margins, ROE/ROCE/ROIC/ROA, leverage, liquidity, working-capital &
 cash-conversion days, **FCF / FCFF / FCFE**, CFO/PAT & CFO/EBITDA (incl. 3- and
 5-yr rolled), the quarterly trend, and forensic scores with full component
-breakdowns. The Gemini call uses a section-by-section forensic prompt and is
+breakdowns. The LLM call uses a section-by-section forensic prompt and is
 **output-uncapped**.
 
 **Business overview (leads the report).** Before any table, the deep report opens
@@ -123,7 +123,7 @@ unreliable for Indian cyclicals/financials/capex-heavy names, valuation leans on
   so peaks/troughs don't mislead) + P/B; **everything else → P/E**. It also shows the current
   multiple as a **percentile of the stock's own history** (`valuation.multiple_percentile`),
   and — when management gave explicit guidance — a **forward multiple**
-  (`synthesize.extract_guidance`: a Gemini read of the concalls → guided revenue/EBITDA/PAT →
+  (`synthesize.extract_guidance`: an LLM read of the concalls → guided revenue/EBITDA/PAT →
   forward EV/EBITDA / P/E, threaded in via `pipeline.generate_report`).
 - **§11 leads with the reverse-DCF** ("what perpetual growth the price implies vs history →
   plausible/demanding") as the centrepiece; the **Monte-Carlo FCFF-DCF is only a secondary
@@ -162,7 +162,7 @@ plus a cooldown-free backfill for symbols that predate the feature.
 meaningful filings since the last fiscal year-end (plus the latest results)** —
 results, concall transcripts, investor presentations, ratings, M&A, etc.
 (`pipeline._filings_for_analysis`, richest-first, capped ~12 docs / 15 MB to stay
-under Gemini's inline limit) and feeds them all to Gemini, so every on-demand
+under the LLM's inline limit) and feeds them all to the LLM, so every on-demand
 report folds in management guidance + contingent-liability / related-party notes.
 Generic — works for any NSE symbol (new or famous). No manual `--pdf` needed.
 
@@ -223,7 +223,7 @@ Every headline metric is annotated so the report stands on its own:
   shows `n/a`, and the corporate-event types. Built once and cached
   (`glossary.guide_pdf`) and attached to report emails as a **separate
   `Metrics_and_ratings_guide.pdf`** (not in the report body/PDF).
-- The Gemini prompt is told to explain each metric it cites and judge it **for this
+- The LLM prompt is told to explain each metric it cites and judge it **for this
   company's sector/business model** (a vanilla DCF understates a true compounder;
   utilities run lower ROCE; etc.).
 - **Alert bodies** carry the same plain-English reading (what the number means +
@@ -234,16 +234,16 @@ Every headline metric is annotated so the report stands on its own:
 `scripts/telegram_bot.py` — message a company name, get a deep report back.
 
 ```
-You: "Adani Power"  ──►  resolve (Gemini + Google Search) ──►  one match? run it
+You: "Adani Power"  ──►  resolve (LLM + Google Search) ──►  one match? run it
                                                           └─► several? buttons → you pick
-   ──►  ensure-ingested (on demand) ──►  deep brief ──►  Gemini forensic ──►  reply (formatted inline + PDF)
+   ──►  ensure-ingested (on demand) ──►  deep brief ──►  LLM forensic ──►  reply (formatted inline + PDF)
 ```
 
-- **Resolver** (`reports/resolve.py`): Gemini + Google-Search grounding maps free
+- **Resolver** (`reports/resolve.py`): LLM + Google-Search grounding maps free
   text → exact NSE symbol(s). Returns **one** when certain, **up to 5 ranked**
   otherwise (handles small-cap / newly-listed names, not just a fixed universe).
 - **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` —
-  ingests financials on demand for any NSE symbol, builds the brief, runs Gemini.
+  ingests financials on demand for any NSE symbol, builds the brief, runs the LLM.
 - **Reply formatting**: the analysis is sent inline as **Telegram MarkdownV2**
   (via `telegramify-markdown` — bold, bullets, emojis, tables as aligned monospace
   blocks; plain-text fallback if a chunk won't parse), and the full report is
@@ -383,7 +383,7 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
   churn** (`funds.holdings_churn`) — what the manager **bought / exited / added / trimmed**
   between the two latest SEBI monthly disclosures, **equity-only** (CDs / T-bills / TREPS that
   roll over monthly are filtered via `_is_equity_holding`, else routine treasury drowns the signal).
-- **Analysis** (`synthesize.fund_thesis`) — a Gemini **verdict** (Buy / Accumulate / Hold /
+- **Analysis** (`synthesize.fund_thesis`) — an LLM **verdict** (Buy / Accumulate / Hold /
   Switch / Avoid + who it suits) over the deterministic report: reads alpha-vs-beta, up/down
   capture, SIP-XIRR-vs-CAGR, churn and watchlist overlap (flagging duplicated risk when the fund
   largely holds names you own directly). Best-effort — the report still ships numbers-only if it fails.
@@ -413,7 +413,7 @@ issues (name · price band · dates · live subscription); reply with a number (
   prioritised within an ~18 MB budget (RHP always kept) since a pre-listing company has **no XBRL**
   — the analysis is RHP-driven, not the deterministic quant engine.
 
-`synthesize.ipo_analysis` (Gemini reads the RHP + price-band ad + anchor doc, grounded on the
+`synthesize.ipo_analysis` (LLM reads the RHP + price-band ad + anchor doc, grounded on the
 verified issue facts) produces: snapshot · **offer structure — fresh-issue vs OFS and what it
 signals** (fresh → company funded = positive; heavy OFS → insiders exiting = caution) · restated
 financials · **valuation at the band vs listed peers** · use of proceeds · key risks · demand
@@ -434,8 +434,8 @@ the RHP via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.
-- Gemini synthesis + email are built and import-clean; **live runs need the
-  Gemini/Vertex env vars + `SMTP_*`** (user-supplied, not in repo).
+- LLM synthesis + email are built and import-clean; **live runs need the
+  LLM/Vertex env vars + `SMTP_*`** (user-supplied, not in repo).
 - Follow-ups: auto-fetch the latest concall transcript / results PDF from the
   BSE announcement feed (so `--pdf` isn't manual); HTML email formatting;
   schedule via the nightly refresh; multi-stock watchlist digest.
