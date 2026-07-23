@@ -125,10 +125,17 @@ def _find_pending(req: EmailRequest) -> tuple[str, list] | None:
     return None
 
 
-def _clear_pending(key: str) -> None:
+def _clear_consumed(key: str, cands: list) -> None:
+    """Delete the pending menu at ``key`` ONLY if it still holds the menu we just
+    answered. The report handlers arm a NEW menu (the deeper-cut follow-up) under the
+    same thread key during handling — an unconditional post-send delete would wipe
+    that fresh menu (the bug that broke 'reply 1' after an IPO-list choice)."""
     con = connect()
     try:
-        con.execute("DELETE FROM alert_state WHERE symbol='__email__' AND key=?", [key])
+        row = con.execute("SELECT value FROM alert_state WHERE symbol='__email__' AND key=?",
+                          [key]).fetchone()
+        if row and json.loads(row[0]).get("cands") == cands:
+            con.execute("DELETE FROM alert_state WHERE symbol='__email__' AND key=?", [key])
     finally:
         con.close()
 
@@ -559,7 +566,22 @@ def handle_request(req: EmailRequest) -> None:
             _send_ipo_report(symbol[4:], req, name)
         else:
             _send_report(symbol, req, resolved_name=name, consolidated=basis)
-        _clear_pending(key)     # only after a successful send — a crash must not eat the reply
+        # after a successful send (a crash must not eat the reply) — and surgical, so the
+        # deeper-cut menu the handler just armed under this thread key survives
+        _clear_consumed(key, cands)
+        return
+
+    # a numbered reply that matched no live menu must NEVER fall through to the subject
+    # parsers — a thread subject that inherited 'ipo:'/'fund:' via 'Re:' would turn the
+    # bare number into a garbage lookup. Say what happened instead.
+    if sel is not None and re.match(r"^\s*re:", req.subject or "", flags=re.I):
+        if found:
+            _reply_text(req, f"That menu has {len(found[1])} option(s) — reply with a "
+                             f"number between 1 and {len(found[1])}.")
+        else:
+            _reply_text(req, "There's no active menu in this thread any more (menus expire "
+                             "after 24h or after being used). Send a fresh request — a company "
+                             "name, `fund: <name>`, or `ipo: ongoing`.")
         return
 
     # 1b) explicit fund request ('fund: <name>' / 'mf: <name>')
