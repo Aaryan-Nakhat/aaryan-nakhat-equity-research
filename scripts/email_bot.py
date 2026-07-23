@@ -141,11 +141,15 @@ def _clear_consumed(key: str, cands: list) -> None:
 
 
 # ----------------- helpers -----------------
-def _re_subject(subject: str, suffix: str = "") -> str:
+def _re_subject(subject: str) -> str:
+    """'Re: <original subject>' — NEVER append suffixes: Gmail only groups messages
+    into one conversation when the subject matches (ignoring Re:), so a decorated
+    subject ('… — growth triggers') forks a brand-new thread despite correct
+    In-Reply-To/References. One request flow = one subject = one thread."""
     s = subject.strip()
     if not s.lower().startswith("re:"):
         s = f"Re: {s}"
-    return f"{s}{suffix}"
+    return s
 
 
 def _clean_query(subject: str) -> str:
@@ -238,7 +242,7 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
           f"timeline-tagged and rated HIGH / MEDIUM / OPTIONALITY conviction, grounded in {grounded}.\n\n"
           "_(More deeper cuts coming soon.)_")
     emailer.send_report(
-        _re_subject(req.subject, " — want a deeper cut?"),
+        _re_subject(req.subject),
         md, to=req.sender, html=emailer.body_html(md, symbol),
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
@@ -298,7 +302,7 @@ def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = Non
     else:
         body += "\n\n_(The PDF couldn't be generated this time — the full 1-pager is above.)_"
     emailer.send_report(
-        _re_subject(req.subject, " — growth triggers"),
+        _re_subject(req.subject),
         body,
         to=req.sender,
         html=emailer.body_html(body, f"{symbol} — growth triggers"),
@@ -384,7 +388,7 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
     md = (f"**{title}** — reply to this email with just the number for a full pre-listing "
           f"analysis (financials, fresh/OFS, valuation vs peers, risks, apply-or-not):\n\n"
           f"```\n{lines}\n```\n\n(Reply within {PENDING_TTL_H}h.)")
-    emailer.send_report(_re_subject(req.subject, f" — {kind} IPOs"), md, to=req.sender,
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
                         html=emailer.body_html(md, "IPOs"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("listed %d %s IPOs to %s", len(ipos), kind, req.sender)
@@ -413,7 +417,7 @@ def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) ->
     else:
         body += "\n\n_(The PDF couldn't be generated this time — the full note is above.)_"
     emailer.send_report(
-        _re_subject(req.subject, " — IPO analysis"), body, to=req.sender,
+        _re_subject(req.subject), body, to=req.sender,
         html=emailer.body_html(body, f"{symbol} — IPO"), attachments=attachments,
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
@@ -451,7 +455,7 @@ def _send_choices(query: str, cands: list, req: EmailRequest) -> None:
           f'the number:**\n\n```\n' + "\n".join(lines) + "\n```\n\n"
           f"(Reply within {PENDING_TTL_H}h; otherwise just send a fresh email.)")
     emailer.send_report(
-        _re_subject(req.subject, " — which one?"),
+        _re_subject(req.subject),
         md,
         to=req.sender,
         html=emailer.body_html(md),

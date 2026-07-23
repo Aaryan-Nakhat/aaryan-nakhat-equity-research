@@ -312,6 +312,11 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
   numbered reply resolves against the thread it was sent in, never a stale one from
   another thread. (Thread identity = a hash of the References root; a lone live menu
   is the unambiguous fallback if a reply's threading headers are missing.)
+- **One request = one Gmail thread**: every email in a flow (ack → report → deeper-cut
+  menu → growth triggers) is sent with the **same subject** (`Re: <original>`) plus
+  In-Reply-To/References — Gmail only groups a conversation when the subject matches,
+  so the old decorated subjects ("… — growth triggers", "… — which one?") forked a new
+  thread per email. The body headings carry the description instead.
 - **Deeper-cut menu** (opt-in follow-ups): right **after** each deep report the bot
   sends a **separate short in-thread email** — "want a deeper cut? reply with the
   number" (`_send_followup_menu`); replying with a bare number runs that deeper
