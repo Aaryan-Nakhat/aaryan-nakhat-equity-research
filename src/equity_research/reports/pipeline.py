@@ -17,7 +17,8 @@ from equity_research.common.db import connect
 from equity_research.common.http import fetch_bytes
 from equity_research.reports import glossary
 from equity_research.ingest import (ingest_annual_financials, ingest_financials,
-                                    ingest_insider_trades, ingest_shareholding)
+                                    ingest_insider_trades, ingest_shareholding,
+                                    ingest_shp_holders)
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import (business_overview, extract_guidance,
@@ -172,6 +173,16 @@ def ensure_ingested(symbol: str, con: duckdb.DuckDBPyConnection) -> bool:
     have = con.execute("SELECT COUNT(*) FROM financials WHERE symbol = ?", [symbol]).fetchone()[0] > 0
     need_fin = not have or _financials_stale(con, symbol)
     need_sh = _shareholding_stale(con, symbol)
+    # holder-level SHP is newer than the pledge snapshot — refresh on the same quarterly
+    # cadence, but ALSO backfill any symbol that has none yet (first-report upgrade path,
+    # regardless of the cooldown so existing fresh symbols still gain the section).
+    no_shp = con.execute("SELECT COUNT(*) FROM shp_holders WHERE symbol = ?",
+                         [symbol]).fetchone()[0] == 0
+    if no_shp or (need_sh and not _refresh_attempted_recently(con, symbol)):
+        try:
+            ingest_shp_holders(symbol, con)
+        except Exception:  # noqa: BLE001
+            pass
     if (need_fin or need_sh) and not _refresh_attempted_recently(con, symbol):
         if need_fin:
             try:  # idempotent upsert — re-lands the latest filings, appends any new period

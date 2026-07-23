@@ -277,6 +277,16 @@ product launch, policy change, or structural shift.
 - **Quantified impact:** numbers wherever the filings allow — incremental revenue (₹ cr), \
 margin expansion (bps), volume growth (%), capacity/utilisation, addressable market, \
 order-book/bid-pipeline value.
+- **Estimated business impact (₹ cr and %):** REQUIRED for every trigger — translate the \
+trigger into money so its magnitude can be judged independently of conviction:
+  - **Incremental annual revenue: ₹X cr (≈Y% of TTM revenue)** — use the verified TTM \
+revenue supplied as the denominator. When the filings give a range, show the range.
+  - Where estimable, the incremental EBITDA/earnings (₹ cr, using the segment's or \
+company's margin — state which) and the **potential market-cap impact: ≈Z%** (incremental \
+earnings × the company's current multiple, against the verified market cap — state the \
+multiple used). If a step is genuinely not estimable from the filings, write \
+"*not estimable from filings*" for that step only — never invent, but never skip the \
+whole line when the revenue leg IS estimable.
 - **Timeline:** when it starts flowing into the P&L (e.g. "H2 FY27", "commissioning Q1 FY28").
 - **Conviction:** **HIGH CONVICTION** (already visible in order book / capex / policy), \
 **MEDIUM CONVICTION** (management-guided, not yet contracted), or **OPTIONALITY** \
@@ -296,7 +306,13 @@ What can delay or derail each high-conviction trigger — execution, regulatory,
 demand-cyclicality, or balance-sheet risk.
 
 ### 5. Trigger scoreboard
-A markdown table: | # | Trigger | Revenue/earnings impact | Timeline | Conviction |
+A markdown table:
+| # | Trigger | Est. impact (₹ cr) | % of TTM revenue | Potential mcap impact | Timeline | Conviction |
+**Sort the scoreboard by estimated ₹ cr impact (largest first) — NOT by conviction** — so a \
+big MEDIUM-conviction trigger is never buried under small HIGH-conviction ones. After the \
+table add one line — **Priority read:** — naming any MEDIUM/OPTIONALITY trigger whose \
+estimated impact ranks in the top 3, e.g. "Trigger #2 is only MEDIUM conviction but carries \
+the largest ₹ impact — size it on probability, don't ignore it."
 
 **Quality & sourcing rules (strict):**
 - Every trigger must be **company-specific and verifiable** from the filings — cite the \

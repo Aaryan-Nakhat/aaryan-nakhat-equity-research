@@ -140,6 +140,30 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS shp_holders (
+        symbol          VARCHAR,
+        as_of           DATE,      -- SHP quarter-end
+        holder_name     VARCHAR,
+        pct             DOUBLE,    -- % of total shares
+        shares          BIGINT,
+        category        VARCHAR,   -- individual/HUF · mutual fund · FPI · body corporate …
+        is_promoter     BOOLEAN,   -- Table II (promoter/promoter group) vs public >1%
+        classification  VARCHAR,   -- LISTED company · unlisted pvt company · trust · …
+        matched_symbol  VARCHAR,   -- NSE symbol when the holder itself is listed (Elcid pattern)
+        updated_at      TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol, as_of, holder_name)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS equity_master (
+        symbol        VARCHAR,     -- every NSE-listed company (EQUITY_L.csv)
+        company_name  VARCHAR,
+        isin          VARCHAR,
+        updated_at    TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS mf_scheme (
         scheme_code   INTEGER,          -- AMFI scheme code (unique per plan/option)
         isin_growth   VARCHAR,          -- ISIN (Div Payout / Growth)

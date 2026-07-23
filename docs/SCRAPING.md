@@ -37,8 +37,13 @@ Install browsers once: `uv run scrapling install`.
   listed-peer table), `ANCHOR_<SYM>.zip` (anchor allotment). Each zip also carries the
   mandatory newspaper-ad PDFs (skipped). `scrapers/ipo.py:documents()` picks the right
   PDF and size-budgets them for Gemini. Existence check via a tiny `Range: bytes=0-3` GET.
-- **Verdict:** plain `Fetcher`. **This is how we get NSE bhavcopy + delivery % + IPO docs.**
-  No browser needed.
+- **`content/equities/EQUITY_L.csv`** — the full NSE listed-companies master
+  (symbol · company name · ISIN, ~2,400 rows): `200` plain HTTP → `equity_master`
+  table (classifies SHP holders as listed vs unlisted — the Elcid finder).
+- **SHP XBRL** — `corporate/xbrl/SHP_*.xml` (from the share-holdings-master catalog's
+  `xbrl` field): `200` plain HTTP, ~1 MB; holder-level shareholding tables.
+- **Verdict:** plain `Fetcher`. **This is how we get NSE bhavcopy + delivery % + IPO docs
+  + the listed master + SHP holder tables.** No browser needed.
 
 ### ⚠️ NSE APIs (`www.nseindia.com/api/...`) — browser tier, partial
 - Plain HTTP (even with homepage→get-quotes cookie priming + Chrome TLS
@@ -103,7 +108,7 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 | `/api/corporate-board-meetings?index=equities&from_date=&to_date=` | ✅ 200 (date range needed for full upcoming list) | `market_feeds()` |
 | `/api/event-calendar?from_date=&to_date=` | ✅ 200 (upcoming results/AGM/fund-raising) | `market_feeds()` |
 | `/api/corporates-corporateActions?index=equities&from_date=&to_date=` | ✅ 200 (ex-dividend/split/bonus dates) | `corporate_actions()` / `market_feeds()` |
-| `/api/corporate-share-holdings-master?index=equities&symbol=…` | ✅ 200 (full shareholding pattern) | — |
+| `/api/corporate-share-holdings-master?index=equities&symbol=…` | ✅ 200 (probed 2026-07-23) — quarterly SHP catalog; each row carries promoter/public totals **and a direct `xbrl` URL on nsearchives (plain HTTP)**. The XBRL (`in-bse-shp` taxonomy) holds the **holder-level tables** — every promoter account + every public >1% holder as typed-dimension members; the axis names the category, promoter rows carry `TypeOfPromoterShareholding`, %s filed as fractions. | `nse_shp.latest_shp()` / `parse_shp_xbrl()` |
 | `/api/option-chain-equities?symbol=…` | ✅ 200 (empty when closed) | `option_chain_equity()` |
 | `/api/equity-stockIndices?index=NIFTY 50` | ❌ 404 (path moved) | — |
 | `/api/option-chain-indices?symbol=NIFTY` | ❌ 404 (path moved) | — |

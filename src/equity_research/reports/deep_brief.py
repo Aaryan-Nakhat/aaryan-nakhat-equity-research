@@ -124,6 +124,63 @@ def _insider_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
     return L
 
 
+def _shp_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
+    """Holder-level shareholding (latest SHP filing) — every promoter account + every
+    public >1% holder, sorted highest→lowest, each tagged with what the holder IS
+    (individual / LISTED company / unlisted pvt / MF / FPI / …). Listed-company holders
+    are the *Elcid pattern*: a small listed vehicle sitting on a big stake. [] if none."""
+    rows = con.execute(
+        "SELECT holder_name, pct, category, is_promoter, classification, matched_symbol "
+        "FROM shp_holders WHERE symbol = ? AND as_of = "
+        "(SELECT max(as_of) FROM shp_holders WHERE symbol = ?) ORDER BY pct DESC",
+        [symbol, symbol]).fetchall()
+    if not rows:
+        return []
+    as_of = con.execute("SELECT max(as_of) FROM shp_holders WHERE symbol = ?", [symbol]).fetchone()[0]
+
+    def tag(cls, matched):
+        if cls == "LISTED company":
+            return f"🏛 **LISTED company ({matched})**" if matched else "🏛 **LISTED company**"
+        return {"unlisted pvt company": "🔒 unlisted pvt company",
+                "unlisted company": "🔒 unlisted company",
+                "individual / HUF": "👤 individual / HUF",
+                "NRI / foreign individual": "👤 NRI / foreign individual",
+                "mutual fund": "🏦 mutual fund", "insurance company": "🏦 insurance company",
+                "FPI": "🌍 FPI", "bank / FI": "🏦 bank / FI", "trust": "🤝 trust",
+                "LLP": "🔒 LLP", "employee trust": "🤝 employee trust",
+                "government": "🏛 government"}.get(cls, cls)
+
+    def fmt(r):
+        name, pct, _cat, _prom, cls, matched = r
+        return f"| {name} | {pct:.2f}% | {tag(cls, matched)} |"
+
+    prom = [r for r in rows if r[3]]
+    pub = [r for r in rows if not r[3]]
+    L = [f"### Shareholding — who actually owns it (as of {as_of:%d-%b-%Y})", ""]
+    listed_holders = [r for r in rows if r[4] == "LISTED company"]
+    if listed_holders:
+        names = " · ".join(f"**{r[0]}**{f' ({r[5]})' if r[5] else ''} at {r[1]:.2f}%"
+                           for r in listed_holders)
+        L += [f"🎯 **Listed-company holders (the Elcid pattern):** {names} — a listed vehicle "
+              "holding a meaningful stake; check whether ITS market cap prices in this holding.", ""]
+    if prom:
+        total = sum(r[1] for r in prom)
+        L += [f"**Promoter & promoter group** ({total:.2f}% across {len(prom)} accounts, "
+              "highest→lowest):", "", "| Holder | % | What it is |", "|---|---|---|"]
+        L += [fmt(r) for r in prom]
+        L.append("")
+    if pub:
+        L += [f"**Public holders above 1%** ({len(pub)} disclosed, highest→lowest):", "",
+              "| Holder | % | What it is |", "|---|---|---|"]
+        L += [fmt(r) for r in pub]
+        L.append("")
+    L.append("_From the company's SEBI Reg-31 shareholding-pattern XBRL on NSE (primary). "
+             "'LISTED company' means the holder itself trades on NSE — the way Elcid "
+             "Investments held ~3% of Asian Paints._")
+    L.append("")
+    return L
+
+
 def _table(headers: list[str], rows: list[list[str]]) -> str:
     out = ["| " + " | ".join(headers) + " |",
            "|" + "|".join(["---"] * len(headers)) + "|"]
@@ -417,6 +474,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
              "filings (see the Analysis section); not in the structured XBRL.")
     L.append("")
     L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
+    L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)
