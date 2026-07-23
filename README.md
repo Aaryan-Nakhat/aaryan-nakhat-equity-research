@@ -41,9 +41,13 @@ Personal use. Not a hosted product.
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
   filing-grounded business overview** (what it does, segment revenue-mix %, market cap /
-  TAM / penetration, order book for order-driven names) and every valuation/forensic/
-  technical section carries a plain-English "how to read this"; it also offers an opt-in
-  **growth-triggers 1-pager** (reply `1`) — forward-looking, conviction-tagged catalysts.
+  TAM / penetration, order book for order-driven names), carries a **holder-level
+  shareholding section** (every promoter account + public >1% holder from the SHP XBRL,
+  sorted, each classified individual / **LISTED company** (the Elcid pattern, with its
+  symbol) / unlisted pvt / MF / FPI), and every valuation/forensic/technical section has a
+  plain-English "how to read this"; it also offers an opt-in **growth-triggers 1-pager**
+  (reply `1`) — forward-looking catalysts, each with an **estimated ₹ cr / % business
+  impact** and an impact-sorted scoreboard so big medium-conviction triggers aren't buried.
   And **push** — a **full daily digest at
   18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
