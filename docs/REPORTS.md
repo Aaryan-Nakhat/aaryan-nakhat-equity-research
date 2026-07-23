@@ -144,6 +144,20 @@ Reg 7(2) disclosures (`insider_trades` table, ingested on demand in `ensure_inge
 with a one-line **net read** over the last 6 months (promoter/director + open-market
 buys − sells → "net buyers ₹X cr — conviction" vs "net sellers — caution").
 
+**Shareholding — who actually owns it:** a `### Shareholding` block
+(`deep_brief._shp_block`) renders the **holder-level shareholding pattern** from the
+company's latest SEBI Reg-31 SHP XBRL (`scrapers/nse_shp.py` → `shp_holders` table):
+every promoter/promoter-group account plus every public >1% holder, **sorted
+highest→lowest**, each tagged with **what the holder is** — 👤 individual/HUF ·
+🏛 **LISTED company (with its NSE symbol)** · 🔒 unlisted pvt company · 🏦 MF /
+insurance / bank · 🌍 FPI · 🤝 trust. Listed-vs-unlisted is resolved by
+normalised-name match against the full NSE listed master (`equity_master`, from
+EQUITY_L.csv, ~2,400 names, monthly-refreshed). A 🎯 **"Elcid pattern"** callout
+tops the section whenever a holder is itself a listed company (the way ELCIDIN held
+~2.95% of Asian Paints) — the exact situation where a tiny listed vehicle can
+massively re-rate on its stake value. Ingested with the quarterly ownership refresh,
+plus a cooldown-free backfill for symbols that predate the feature.
+
 **Auto multi-filing read:** `generate_report` auto-fetches **all the company's
 meaningful filings since the last fiscal year-end (plus the latest results)** —
 results, concall transcripts, investor presentations, ratings, M&A, etc.
@@ -306,7 +320,13 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
   `pipeline.generate_growth_triggers` → `synthesize.growth_triggers`, a
   forward-looking catalysts note (5–7 concrete triggers, each quantified +
   timeline + **HIGH / MEDIUM / OPTIONALITY** conviction tag, a "what's in the
-  price" read, risks, and a scoreboard table). It's **grounded in the same primary
+  price" read, risks, and a scoreboard table). Every trigger also carries an
+  **estimated business impact in ₹ cr and %** — incremental annual revenue as ₹X cr
+  (≈Y% of TTM revenue) and, where estimable, the potential market-cap impact %
+  (with the multiple assumption stated) — and the scoreboard is **sorted by ₹ impact,
+  not conviction**, with a closing "Priority read" that flags any MEDIUM/OPTIONALITY
+  trigger whose impact ranks top-3, so a big medium-conviction trigger is never
+  buried under small high-conviction ones. It's **grounded in the same primary
   filings** the deep report reads (concalls / investor presentations / results —
   *not* the open web), and its Section-1 snapshot is injected from the deterministic
   numbers (`_snapshot_facts`: mcap/CMP/TTM revenue & margins/ROE/ROCE/P·E/P·B/promoter

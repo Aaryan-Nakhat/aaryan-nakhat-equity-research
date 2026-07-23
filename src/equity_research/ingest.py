@@ -261,6 +261,76 @@ def store_pledge(con: duckdb.DuckDBPyConnection, data: dict[str, dict | None]) -
     return _write_shareholding(con, [_pledge_row(s, p) for s, p in data.items()])
 
 
+# ----------------- holder-level shareholding (SHP XBRL) -----------------
+_EQUITY_L = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+
+
+def ingest_equity_master(con: duckdb.DuckDBPyConnection, *, max_age_days: int = 30) -> int:
+    """Land the full NSE listed-companies master (symbol ↔ company name) from
+    EQUITY_L.csv (plain HTTP). Skipped when fresher than ``max_age_days`` —
+    it's the lookup that tags a shareholder as itself a LISTED company."""
+    row = con.execute("SELECT max(updated_at) FROM equity_master").fetchone()
+    if row and row[0] and (datetime.now() - row[0]).days < max_age_days:
+        return 0
+    import csv
+    import io
+    text = fetch_bytes(_EQUITY_L).decode("utf-8", "replace")
+    rows = []
+    for r in csv.DictReader(io.StringIO(text)):
+        r = {k.strip(): (v or "").strip() for k, v in r.items() if k}
+        if r.get("SYMBOL") and r.get("NAME OF COMPANY"):
+            rows.append({"symbol": r["SYMBOL"], "company_name": r["NAME OF COMPANY"],
+                         "isin": r.get("ISIN NUMBER") or None})
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows, columns=["symbol", "company_name", "isin"])
+    con.register("_eqm", df)
+    try:
+        con.execute("INSERT OR REPLACE INTO equity_master (symbol, company_name, isin) "
+                    "SELECT * FROM _eqm")
+    finally:
+        con.unregister("_eqm")
+    return len(df)
+
+
+def ingest_shp_holders(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
+    """Land the latest holder-level shareholding pattern for ``symbol`` — every
+    promoter/promoter-group account + every public >1% holder, each classified
+    (individual / listed company / unlisted pvt / MF / FPI / …). Best-effort."""
+    from equity_research.scrapers import nse_shp
+    data = nse_shp.holders(symbol)
+    if not data or not data.get("as_of"):
+        return 0
+    ingest_equity_master(con)                              # staleness-guarded
+    listed = {nse_shp.norm_name(n): s for s, n in
+              con.execute("SELECT symbol, company_name FROM equity_master").fetchall()}
+    listed.pop("", None)
+    rows = []
+    for h in data["holders"]:
+        if not h["pct"] and not h.get("shares"):
+            continue                                       # empty promoter placeholder rows
+        cls, matched = nse_shp.classify(h, listed)
+        if matched == symbol:                              # the company itself, not a holder
+            matched = None
+        rows.append({"symbol": symbol, "as_of": data["as_of"], "holder_name": h["name"],
+                     "pct": round(h["pct"], 4), "shares": h.get("shares"),
+                     "category": h["category"], "is_promoter": h["is_promoter"],
+                     "classification": cls, "matched_symbol": matched})
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows, columns=["symbol", "as_of", "holder_name", "pct", "shares",
+                                     "category", "is_promoter", "classification",
+                                     "matched_symbol"])
+    con.register("_shph", df)
+    try:
+        con.execute("INSERT OR REPLACE INTO shp_holders (symbol, as_of, holder_name, pct, "
+                    "shares, category, is_promoter, classification, matched_symbol) "
+                    "SELECT * FROM _shph")
+    finally:
+        con.unregister("_shph")
+    return len(df)
+
+
 _INSIDER_COLS = ["symbol", "did", "disclosure_dt", "trade_to_dt", "acq_name", "category",
                  "mode", "txn_type", "qty", "value_cr", "hold_before_pct",
                  "hold_after_pct", "regulation"]
