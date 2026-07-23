@@ -240,10 +240,11 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
 
 
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
-                 consolidated: bool | None = None) -> None:
+                 consolidated: bool | None = None, *, ack: bool = True) -> None:
     log.info("generating report for %s (req from %s, basis=%s)", symbol, req.sender,
              {True: "consolidated", False: "standalone"}.get(consolidated, "auto"))
-    _ack(symbol, req, resolved_name)
+    if ack:                                     # fresh queries pre-ack at pickup instead
+        _ack(symbol, req, resolved_name)
     report_md = generate_report(symbol, deep=True, consolidated=consolidated)  # full report — body + PDF
     pdf = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
@@ -414,10 +415,14 @@ def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) ->
 
 
 def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
-    """Route an 'ipo:' request → a live/upcoming list, or a named-IPO note."""
+    """Route an 'ipo:' request → a live/upcoming list, or a named-IPO note. Ack first —
+    the NSE list fetch is browser-tier (~1-2 min) and silence provokes resends."""
     if kind == "list":
+        _reply_text(req, f"📩 Got it — fetching the {val} IPO list from NSE "
+                         "(its bot-protected API takes ~1–2 min). The list will land in this thread.")
         _send_ipo_list(val, req)
         return
+    _reply_text(req, f"📩 Got it — looking up the IPO '{val}' on NSE (~1–2 min).")
     # a named IPO — match against live then upcoming by symbol / company substring
     q = val.lower()
     pool = (_ipo_list_safe(ipo.list_current) or []) + (_ipo_list_safe(ipo.list_upcoming) or [])
@@ -569,11 +574,14 @@ def handle_request(req: EmailRequest) -> None:
         _handle_ipo(iq[0], iq[1], req)
         return
 
-    # 2) fresh query from the subject
+    # 2) fresh query from the subject. Ack IMMEDIATELY at pickup — symbol resolution can
+    #    take minutes, and a silent gap reads as "the bot is dead" and provokes resends.
     query = _clean_query(req.subject)
     if not query:
         _reply_text(req, "Send a company name in the Subject line, e.g. 'Adani Power'.")
         return
+    _reply_text(req, f"📩 Got it — resolving **{query}** and building the deep report. "
+                     "This takes a few minutes; everything will land in this thread.")
     try:
         cands = resolve(query)
     except Exception:  # noqa: BLE001
@@ -583,7 +591,8 @@ def handle_request(req: EmailRequest) -> None:
     if not cands:
         _reply_text(req, f"Couldn't resolve '{query}' to an NSE symbol. Try the exact name.")
     elif len(cands) == 1:
-        _send_report(cands[0].symbol, req, resolved_name=cands[0].name, consolidated=basis)
+        _send_report(cands[0].symbol, req, resolved_name=cands[0].name, consolidated=basis,
+                     ack=False)                      # already acked at pickup
     else:
         _set_pending(req, query, cands)
         _send_choices(query, cands, req)
