@@ -106,14 +106,14 @@ data already scrapable via `nse_archives`/`nse_api`); ADX.
 ### Phase 4 — LLM integration + reports — ✅ done (live)
 **Built + live** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
 `brief`/`deep_brief` assemble all quant signals → `synthesize.synthesize_thesis`
-(**the LLM `the-model` via the provider AI**, service-account auth, streaming, reads
+(**LLM `the-model` via the provider AI**, service-account auth, streaming, reads
 an optional concall/annual-report PDF) → delivered via:
 - **Telegram bot** (`scripts/telegram_bot.py`, always-on Windows scheduled task):
-  name → `resolve` (the LLM+Search) → deep report, **formatted inline (MarkdownV2)
+  name → `resolve` (LLM+Search) → deep report, **formatted inline (MarkdownV2)
   + styled PDF** (`reports/pdf.py`). Live-validated on RELIANCE / EXPWR.
 - **CLI** (`research_report.py`) and **email** (`reports/email.py`, SMTP).
 
-(LLM provider is the LLM — reuses an existing a cloud the provider key, employer-
+(LLM provider is LLM — reuses an existing a cloud the provider key, employer-
 authorized; the brief/email layers are provider-agnostic.)
 
 **Remaining (optional):** YoY annual-report diffing.
@@ -130,7 +130,7 @@ a **self-healing daily scan** (fires once per trading day at the first heartbeat
   (results · dividend · split · rights · QIP · scheme/M&A · open offer · concall ·
   board meeting · AGM · credit rating · order win · pledge …), and **forensic/fundamental
   flips** (Altman/Beneish/Piotroski/CFO-PAT/pledge) — with `alert_state` dedup +
-  first-sight seeding, and **inline the LLM analysis** of notable filing PDFs (capped 5).
+  first-sight seeding, and **inline LLM analysis** of notable filing PDFs (capped 5).
 Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. the watchlist populated.
 
 ### Phase 6 — depth, quant, email channel & report enrichment — ✅ done
@@ -143,7 +143,7 @@ Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. the watchlist populated.
 - **Self-explaining metrics** (`reports/glossary.py`): inline band tags + a standalone,
   cached **`Metrics_and_ratings_guide.pdf`** attached separately (not in the report body/PDF);
   covers the metrics plus the categorical outputs (Verdict scale, P/E n/a reasons, event types).
-- **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds the LLM
+- **Auto multi-filing read** (`pipeline._filings_for_analysis`): every report feeds LLM
   all meaningful filings since the last FY-end + latest results; **consolidated** auto-picked
   for holding-cos (or forced via the email subject). Generic for any NSE symbol.
 - **SEBI Integrated Filing source** (post-ANANTRAJ review): the legacy
@@ -229,7 +229,7 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
   NII/RII); offer documents from the predictable archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`
   — **RHP** (full prospectus) · **RATIOS** (price-band ad → KPIs / valuation-at-band / listed peers)
   · **ANCHOR** (allotment). `upcoming` is filtered to issues whose RHP is published.
-- **Analysis ✅ done** (`synthesize.ipo_analysis`, `pipeline.generate_ipo_report`): the LLM reads
+- **Analysis ✅ done** (`synthesize.ipo_analysis`, `pipeline.generate_ipo_report`): LLM reads
   the RHP + price-band ad + anchor doc, grounded on verified issue facts → snapshot · **fresh-issue
   vs OFS + what it signals** · restated financials · valuation-at-band vs peers · use of proceeds ·
   RHP risks · demand (subscription + anchor) · **APPLY / AVOID / NEUTRAL** verdict. No XBRL exists
@@ -302,7 +302,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
 ## 4. Where the LLM fits
 
 The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
-(the LLM) adds value on the **unstructured** side:
+(LLM) adds value on the **unstructured** side:
 - Digesting 200-page annual reports & concall transcripts.
 - YoY diffing risk factors / accounting policy / RPTs.
 - Synthesising everything into a readable thesis with a verdict and *reasons*,
@@ -322,4 +322,4 @@ The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
 ## 6. Stack
 
 Python 3.12 · `uv` · `scrapling` · DuckDB · pandas · the LLM (`the LLM SDK`, via
-the provider AI / the LLM Developer API) · email delivery.
+the provider AI / Developer API) · email delivery.

@@ -1,4 +1,4 @@
-"""Reusable report pipeline: ensure data → build brief → the LLM → full report.
+"""Reusable report pipeline: ensure data → build brief → LLM → full report.
 
 Used by both the CLI (scripts/research_report.py) and the Telegram bot. Handles
 on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
@@ -57,7 +57,7 @@ def _filings_for_analysis(symbol: str, *, max_docs: int = 12,
                           max_bytes: int = 15_000_000) -> list[tuple[str, bytes]]:
     """All meaningful filing PDFs for ``symbol`` since the last fiscal year-end
     (plus the latest results, even if older), richest-first, capped by count and
-    total size. Returns [(label, pdf-bytes)] for the report's the LLM call. Generic
+    total size. Returns [(label, pdf-bytes)] for the report's LLM call. Generic
     — works for any NSE-listed symbol; never raises."""
     try:
         anns = nse_api.corporate_announcements_batch([symbol]).get(symbol) or []
@@ -253,7 +253,7 @@ def _prefer_consolidated(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
 def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None = None,
                     pdf_path: str | None = None, target_shares: float | None = None,
                     synthesize: bool = True) -> str:
-    """Full report (brief + the LLM analysis) for ``symbol``. Ingests on demand.
+    """Full report (brief + LLM analysis) for ``symbol``. Ingests on demand.
 
     ``consolidated=None`` (default) auto-picks consolidated for holding-cos.
     """
@@ -434,7 +434,7 @@ def report_summary(symbol: str, *, consolidated: bool = False) -> str:
 
     Headline price/valuation, the Monte-Carlo DCF fair value + margin of safety,
     quality/forensic snapshot, and an at-a-glance red-flag list. The full deep
-    report (tables + charts + the LLM analysis) goes in the attached PDF.
+    report (tables + charts + LLM analysis) goes in the attached PDF.
     """
     symbol = symbol.upper()
     con = connect()

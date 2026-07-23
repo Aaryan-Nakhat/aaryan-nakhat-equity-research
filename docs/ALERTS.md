@@ -23,7 +23,7 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 
 ## Bot commands
 
-- `/watch <name>` — resolve (the LLM+search) → add → ingest financials → seed state
+- `/watch <name>` — resolve (LLM+search) → add → ingest financials → seed state
   (buttons if several match).
 - `/unwatch <SYMBOL>` · `/watchlist` · `/scan` (run now).
 
@@ -48,7 +48,7 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   results dates, ex-dividend / split / bonus dates, AGM / fund-raising
   (`scan.watchlist_upcoming` from NSE's board-meetings + event-calendar +
   corporate-actions feeds, fetched with a date range). Board-meeting **purposes are
-  LLM-labelled** in one batched the LLM call (`synthesize.label_events`) into clean
+  LLM-labelled** in one batched LLM call (`synthesize.label_events`) into clean
   plain-English (e.g. "Q1 results & dividend"); a keyword heuristic
   (`_bm_purpose`, after-"consider", case-insensitive) is the per-item fallback.
   Every record is parsed best-effort and each digest section is built
@@ -94,7 +94,7 @@ bot was down), deduped by `scan.already_intraday_today`/`mark_intraday`
   (`nse_api.live_quotes_batch` → `getSymbolData`; the old `quote-equity`/`equity-stockIndices`
   paths are dead). Best-effort per symbol (a few small/SME names may not quote on `EQ`/`N`).
 - **Events (filed today):** the watchlist's non-routine corporate filings dated *today*
-  (`corporate_announcements_batch` → `alerts._categorise`); **no** heavy per-PDF the LLM read
+  (`corporate_announcements_batch` → `alerts._categorise`); **no** heavy per-PDF LLM read
   here (kept fast) — the 18:00 digest does the deep read.
 - **🔬 Insider & promoter (today):** today's *material* PIT disclosures (`_intraday_insider`).
 

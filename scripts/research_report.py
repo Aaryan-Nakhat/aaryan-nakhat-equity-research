@@ -1,9 +1,9 @@
-"""End-to-end research report: assemble brief -> the LLM thesis -> PDF / email.
+"""End-to-end research report: assemble brief -> LLM thesis -> PDF / email.
 
     # just the quant brief (no API/email needed):
     uv run python scripts/research_report.py RELIANCE --dry-run --shares 1353.2
 
-    # brief + the LLM synthesis, printed (needs the LLM/the provider env — see .env.example):
+    # brief + LLM synthesis, printed (needs LLM/the provider env — see .env.example):
     uv run python scripts/research_report.py RELIANCE --shares 1353.2
 
     # + attach a concall transcript / annual report PDF for the model to read:
@@ -55,10 +55,10 @@ def main(argv: list[str]) -> int:
 
     print(brief)
     if dry_run:
-        print("\n[--dry-run: skipping the LLM synthesis and email]")
+        print("\n[--dry-run: skipping LLM synthesis and email]")
         return 0
 
-    # Synthesis (needs the LLM/the provider env — see .env.example).
+    # Synthesis (needs LLM/the provider env — see .env.example).
     from equity_research.reports.synthesize import synthesize_thesis
     mode = "forensic deep-dive" if deep else "thesis"
     print("\n" + "=" * 60 + f"\nSynthesising {mode} with the LLM...\n")

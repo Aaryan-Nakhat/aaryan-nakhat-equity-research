@@ -1,6 +1,6 @@
 """Resolve a free-text company name/query to NSE trading symbol candidates.
 
-Uses the LLM + Google Search grounding so it works for any listed name, including
+Uses LLM + Google Search grounding so it works for any listed name, including
 small-cap and recently-listed companies (not limited to a local universe).
 Returns up to 5 ranked candidates, or exactly one when the model is certain.
 The caller disambiguates when there's more than one.

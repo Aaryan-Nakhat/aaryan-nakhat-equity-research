@@ -1,6 +1,6 @@
 """LLM synthesis — turn the quant brief (+ optional filing PDF) into a thesis.
 
-Uses Google's the LLM via the `the LLM SDK` SDK. The deterministic brief carries
+Uses Google's LLM via the `the LLM SDK` SDK. The deterministic brief carries
 the numbers; the model's job is the qualitative read: weigh the signals, fold in
 management commentary from a concall transcript / annual report (if supplied),
 and produce a structured verdict with reasons.
@@ -9,7 +9,7 @@ Auth — set in the environment (see ``.env.example``), two options:
   - **the provider AI** (a cloud GCP): LLM_USE_CLOUD=true,
     LLM_PROJECT, LLM_REGION (+ ADC, or a the provider API key via
     GOOGLE_API_KEY for express mode).
-  - **the LLM Developer API**: GOOGLE_API_KEY (or LLM_API_KEY) only.
+  - **Developer API**: GOOGLE_API_KEY (or LLM_API_KEY) only.
 Model via LLM_MODEL (default the-model). See ``docs/REPORTS.md``.
 """
 
@@ -566,7 +566,7 @@ commentary, no blank lines, no markdown. One line per input number, in order."""
 
 def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
     """Concise plain-English labels for a batch of NSE filing / board-meeting texts in ONE
-    the LLM call (cheap — one call per scan). Returns a list aligned to ``texts`` ("" where
+    LLM call (cheap — one call per scan). Returns a list aligned to ``texts`` ("" where
     the model gave nothing for that item); returns all-"" on any failure so the caller falls
     back to its heuristic. Never raises."""
     items = [" ".join((t or "").split())[:400] for t in texts]
