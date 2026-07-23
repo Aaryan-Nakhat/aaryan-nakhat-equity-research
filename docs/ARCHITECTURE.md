@@ -117,7 +117,7 @@ heartbeat gate: once/trading-day in the 12:30–14:00 IST window (already_intrad
 
 | Layer | Does | Files |
 |---|---|---|
-| **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
+| **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds}.py` |

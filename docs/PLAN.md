@@ -263,11 +263,12 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
 - **Guidance-vs-delivery (management credibility)** — store each extracted forward guidance
   (`synthesize.extract_guidance`, already shipped); when actuals land, compare guided vs delivered
   → a habitual-over-promiser score that discounts the current guidance. Builds on today's work.
-- **Ownership / stake-change tracking** — ingest NSE quarterly shareholding pattern (promoter %,
-  FII %, DII %, MF %); flag promoter/institutional stake increases (conviction) vs trims + pledge
-  upticks (red flag). Primary data; complements the forensic block. *(Adjacent **insider/promoter
-  PIT trades** — `/api/corporates-pit` → digest alert + report section — are **done**; the
-  remaining piece is the quarterly SHP stake-trend.)*
+- **Ownership / stake-change tracking** — flag promoter/institutional stake increases
+  (conviction) vs trims + pledge upticks (red flag) **quarter-over-quarter**. *(Adjacent
+  **insider/promoter PIT trades** are **done**, and the **holder-level SHP snapshot is now
+  shipped** — `scrapers/nse_shp.py` → `shp_holders`, rendered in the deep report with each
+  holder classified individual / LISTED company (the Elcid pattern) / unlisted pvt / MF /
+  FPI. The remaining piece is the QoQ stake-trend diff over accumulating quarters.)*
 
 **Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
 `positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +

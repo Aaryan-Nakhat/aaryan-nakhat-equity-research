@@ -41,7 +41,7 @@
 | Live quote + market depth (top-5 order book) | 🟡 | JSON endpoint; cookie + referer. |
 | Corporate announcements / filings (results, transcripts, PPTs) | 🟡 | JSON + PDF links. |
 | Corporate actions (dividend/bonus/split/buyback) | 🟡 | JSON. |
-| Shareholding pattern | 🟡 | Quarterly promoter/FII/DII/public split. |
+| Shareholding pattern | 🟡 | Quarterly promoter/FII/DII/public split. **Holder-level tables** (every promoter account + public >1% holder, with names) come from the filing's **SHP XBRL on nsearchives (plain HTTP)** via the share-holdings-master catalog — `scrapers/nse_shp.py`; classified listed/unlisted via the EQUITY_L.csv master. |
 | Insider trading (SAST / PIT disclosures) | 🟡 | JSON. |
 | Bulk / block deals | 🟡 | |
 | FII / DII daily cash activity | 🟡 | NSE-published. |
