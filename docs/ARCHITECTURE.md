@@ -120,7 +120,7 @@ heartbeat gate: once/trading-day in the 12:30–14:00 IST window (already_intrad
 | **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
-| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds}.py` |
+| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff, holdco-discount + fundamental screeners) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds,ownership,holdco,screener}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report** (returns/risk/holdings/overlap) | `reports/{brief,deep_brief,fund_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary}.py` |
 | **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **Vertex** (service account) |
 | **Deliver** | bot(s) + midday (12:30) & full (18:00) scans; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

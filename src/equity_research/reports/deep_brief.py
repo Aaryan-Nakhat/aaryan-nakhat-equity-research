@@ -18,7 +18,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from equity_research.analysis import forensic, fundamentals, quant, sector, technical, valuation
+from equity_research.analysis import (forensic, fundamentals, ownership, quant, sector,
+                                      technical, valuation)
 from equity_research.analysis.fundamentals import load_annual
 from equity_research.reports import glossary
 
@@ -178,6 +179,39 @@ def _shp_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
              "'LISTED company' means the holder itself trades on NSE — the way Elcid "
              "Investments held ~3% of Asian Paints._")
     L.append("")
+    return L
+
+
+def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
+    """Quarter-over-quarter ownership diff (needs ≥2 SHP snapshots) — who entered, exited,
+    added or trimmed, notable holders (promoter / MF / FPI / listed) first. [] if <2 quarters."""
+    ch = ownership.ownership_changes(con, symbol)
+    if not ch:
+        return []
+    L = [f"### Ownership changes ({ch['prev_as_of']:%b-%Y} → {ch['as_of']:%b-%Y})", ""]
+    if not (ch["entered"] or ch["exited"] or ch["added"] or ch["trimmed"]):
+        L += ["- _No material change in the disclosed holder base quarter-over-quarter._", ""]
+        return L
+
+    def _who(r):
+        star = " ⭐" if r["notable"] else ""
+        kind = (r["classification"] if r["classification"] == "LISTED company"
+                else "promoter" if r["is_promoter"] else r["category"])
+        return f"**{r['name']}** ({kind}){star}"
+
+    for r in ch["entered"]:
+        L.append(f"- 🆕 **New:** {_who(r)} — {r['pct']:.2f}%")
+    for r in ch["added"]:
+        L.append(f"- 🟢 **Added:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
+                 f"(+{r['delta']:.2f}pp)")
+    for r in ch["trimmed"]:
+        L.append(f"- 🔴 **Trimmed:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
+                 f"({r['delta']:.2f}pp)")
+    for r in ch["exited"]:
+        L.append(f"- ⚪ **Exited:** {_who(r)} — was {r['prev_pct']:.2f}%")
+    L += ["", "_Diff of the two most recent SEBI Reg-31 shareholding filings. ⭐ = notable "
+          "(promoter / mutual fund / FPI / insurer / listed-company holder) — real "
+          "conviction or distribution, above retail churn._", ""]
     return L
 
 
@@ -475,6 +509,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     L.append("")
     L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
     L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
+    L += _ownership_changes_block(con, symbol)          # QoQ diff — who entered / exited / moved
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)

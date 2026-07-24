@@ -158,6 +158,16 @@ tops the section whenever a holder is itself a listed company (the way ELCIDIN h
 massively re-rate on its stake value. Ingested with the quarterly ownership refresh,
 plus a cooldown-free backfill for symbols that predate the feature.
 
+**Ownership changes (quarter-over-quarter):** an `### Ownership changes` block
+(`deep_brief._ownership_changes_block` → `analysis.ownership.ownership_changes`) diffs the
+**two most recent SHP snapshots** and reports who **entered / added / trimmed / exited**,
+with the percentage-point move — **notable holders first** (⭐ promoter / mutual fund / FPI /
+insurer / listed-company holder = real conviction or distribution, above retail churn).
+`ensure_ingested` keeps ≥2 quarters per symbol: a name with fewer gets a 4-quarter
+**backfill** (`ingest_shp_history` → `nse_shp.all_quarters`, parsing each quarter's SHP XBRL),
+so the diff works on the first report rather than after waiting a quarter. (Verified live:
+Asian Paints Mar→Jun 2026 → SBI MF trimmed 5.20%→4.31%, ICICI Pru trimmed, UTI MF exited.)
+
 **Auto multi-filing read:** `generate_report` auto-fetches **all the company's
 meaningful filings since the last fiscal year-end (plus the latest results)** —
 results, concall transcripts, investor presentations, ratings, M&A, etc.
@@ -288,6 +298,9 @@ PULL  you email a stock name (Subject) from an allowlisted address
         ▼  instant ack → reply in-thread: the FULL deep report in the body
            + the same report (tables + charts) as the attached PDF
            ▼  then a separate "want a deeper cut? reply 1) growth triggers" email
+        │  other Subjects: `fund: <name>` · `ipo: ongoing|upcoming|<name>` ·
+        │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
+        │  discounts) — each a numbered list; reply a number → that name's deep report
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
@@ -430,6 +443,32 @@ the RHP via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand
 > boilerplate *General Information Document* — instead of the real prospectus. `_pick_pdf` now
 > matches the **file name** (largest match wins), which is the difference between "not disclosed"
 > and a full 3-year restated financial table.
+
+## Screeners — idea generation (`analysis/screener.py`, `analysis/holdco.py`)
+
+Email commands that **find** ideas (not just analyse named ones); both reply a **numbered list**
+and a **number-reply runs that name's full deep report** (reusing the pending-menu UX — plain
+`SYM` candidates → `_send_report`). Delivered on-demand (no scheduled push), one thread each.
+
+- **`screen: value`** (aliases `screen: quality`, bare `screen`) → `screener.fundamental_screen`
+  ranks the Nifty-500 (symbols with ingested financials) on a composite: **40% quality**
+  (Piotroski F), **35% forensic** (Altman-safe + Beneish-clean + low Sloan accruals + no pledge),
+  **25% cheapness** (current P/E — P/B for financials via `sector.valuation_lens` — as a *low
+  percentile of its own history*). Each pillar is rank-normalised across the scored set; a missing
+  pillar maps to the median so one gap doesn't sink a name. Reuses `forensic.*` / `valuation.*` /
+  `sector.*` — nothing re-derives numbers.
+- **`screen: holdco`** → `holdco.holdco_discounts` generalises the **Elcid trade**: it inverts
+  `shp_holders` into `holder → [(investee, pct)]` for holders that are themselves NSE-listed,
+  values each stake (`pct% × investee market cap`, `valuation.market_cap`), sums to a **stake NAV**,
+  and compares to the holder's **own market cap** → a **discount %**, deepest first. Counts only
+  **disclosed listed** stakes (SHP promoter + public >1%); unlisted subsidiaries aren't valued (the
+  email says so). Coverage grows with SHP ingested.
+
+**Seeding** (`scripts/backfill_universe.py`, one-time, idempotent/resumable): for the Nifty-500 +
+a curated holdco list it lands **financials** (`ingest_financials`/`_annual` → shares for market cap
++ forensic inputs) and **4 quarters of SHP** (`ingest_shp_history` → holder tables for the holdco
+reverse-index and the ownership diff). Run it once (bot **stopped** first — single-writer DuckDB):
+`uv run python scripts/backfill_universe.py` (`--holdcos-only` for a fast holdco-only seed).
 
 ## Status / follow-ups
 

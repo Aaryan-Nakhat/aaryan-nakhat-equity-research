@@ -263,12 +263,13 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
 - **Guidance-vs-delivery (management credibility)** — store each extracted forward guidance
   (`synthesize.extract_guidance`, already shipped); when actuals land, compare guided vs delivered
   → a habitual-over-promiser score that discounts the current guidance. Builds on today's work.
-- **Ownership / stake-change tracking** — flag promoter/institutional stake increases
-  (conviction) vs trims + pledge upticks (red flag) **quarter-over-quarter**. *(Adjacent
-  **insider/promoter PIT trades** are **done**, and the **holder-level SHP snapshot is now
-  shipped** — `scrapers/nse_shp.py` → `shp_holders`, rendered in the deep report with each
-  holder classified individual / LISTED company (the Elcid pattern) / unlisted pvt / MF /
-  FPI. The remaining piece is the QoQ stake-trend diff over accumulating quarters.)*
+- **Ownership / stake-change tracking — ✅ shipped.** Insider/promoter PIT trades, the
+  holder-level SHP snapshot (each holder classified individual / LISTED company / unlisted pvt /
+  MF / FPI), **and** the **quarter-over-quarter diff** (`analysis/ownership.py` →
+  `deep_brief._ownership_changes_block`) now report who entered / added / trimmed / exited, notable
+  holders first. Multi-quarter history via `nse_shp.all_quarters` / `ingest_shp_history` (a
+  4-quarter backfill makes the diff work on the first report). *Remaining nicety:* surface a
+  material QoQ move as a digest alert (SHP is quarterly, so low-frequency).
 
 **Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
 `positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +
@@ -279,15 +280,17 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   holdings/overlap/reports/forensic-look-through are Phases 3–5). Personal MF portfolio
   tracking (overlap, XIRR, concentration) was scoped but deprioritised vs signal + research.
 - Macro overlay (RBI / MOSPI) feeding sector calls.
-- **Idea-generation screener** across a broad universe to *find* ideas, not just analyse known
-  ones (the system's biggest "monitor → discover" gap). Two phases:
-  - *Phase 1 — price/technical screen (feasible now, no new data):* over the full-market EOD we
-    already hold (~4,100 symbols), surface 52-week breakouts/breakdowns, **delivery-% spikes**
-    (institutional conviction), momentum and % from the 200-DMA → a weekly "what's moving" list.
-  - *Phase 2 — fundamental + forensic screen (the real edge):* one-time bulk-ingest of the
-    Nifty-500's financials (the Integrated-Filing scraper now works), then rank the universe on
-    quality (ROCE, CFO/PAT, low debt) + **forensic** (clean Altman/Beneish/accruals/no pledge) +
-    cheap-vs-own-history, and **auto-deep-report** the top candidates (screen finds, LLM diligences).
+- **Idea-generation screener** — *find* ideas, not just analyse known ones (the system's biggest
+  "monitor → discover" gap).
+  - *Fundamental + forensic screen — ✅ shipped* (`analysis/screener.py`, email **`screen: value`**):
+    over the Nifty-500 (financials bulk-ingested via `scripts/backfill_universe.py`), rank on quality
+    (Piotroski) + forensic (Altman/Beneish/accruals/no-pledge) + cheap-vs-own-history → a **ranked
+    numbered list**; reply a number → that name's deep report. (User chose ranked-list-only over
+    auto-deep-report; the price/technical weekly screen was dropped.)
+  - *Holdco-discount screen — ✅ shipped* (`analysis/holdco.py`, email **`screen: holdco`**): the
+    Elcid trade generalised — listed holders whose disclosed listed-stake NAV exceeds their own
+    market cap. *Next:* widen SHP coverage beyond Nifty-500 + known holdcos; value unlisted stakes
+    from financials.
 - **10-yr G-Sec yield** in the market header — the last deferred macro feed. FBIL's `gsec`
   endpoint returns only archive-file metadata (not inline yields); needs the archive download
   parsed, or a CCIL/RBI source. (USD/INR via FBIL and gold/silver/crude via MCX are **done**.)
