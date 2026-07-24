@@ -46,20 +46,26 @@ _KNOWN_HOLDCOS = [
 ]
 
 
-def _universe(con, *, holdcos_only: bool) -> list[str]:
+def _universe(con, *, holdcos_only: bool, only_missing: bool) -> list[str]:
     holdcos = list(dict.fromkeys(_KNOWN_HOLDCOS))
     if holdcos_only:
-        return holdcos
-    n500 = [r[0] for r in con.execute(
-        "SELECT symbol FROM sector_map WHERE universe = 'NIFTY500' ORDER BY symbol").fetchall()]
-    # union, preserving order (Nifty-500 first, then any holdco not already in it)
-    seen = set(n500)
-    return n500 + [h for h in holdcos if h not in seen]
+        syms = holdcos
+    else:
+        n500 = [r[0] for r in con.execute(
+            "SELECT symbol FROM sector_map WHERE universe = 'NIFTY500' ORDER BY symbol").fetchall()]
+        seen = set(n500)                                    # Nifty-500 first, then extra holdcos
+        syms = n500 + [h for h in holdcos if h not in seen]
+    if only_missing:                                        # skip symbols that already have financials
+        have = {r[0] for r in con.execute("SELECT DISTINCT symbol FROM financials").fetchall()}
+        syms = [s for s in syms if s not in have]
+    return syms
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--holdcos-only", action="store_true", help="just the curated holdco list")
+    ap.add_argument("--only-missing", action="store_true",
+                    help="skip symbols that already have financials (the fast gap-fill)")
     ap.add_argument("--limit", type=int, default=0, help="process only the first N symbols")
     ap.add_argument("--skip-financials", action="store_true", help="SHP only (faster)")
     ap.add_argument("--skip-shp", action="store_true", help="financials only")
@@ -70,7 +76,7 @@ def main() -> None:
     try:
         log.info("refreshing the listed master (EQUITY_L.csv)…")
         ingest_equity_master(con)
-        syms = _universe(con, holdcos_only=args.holdcos_only)
+        syms = _universe(con, holdcos_only=args.holdcos_only, only_missing=args.only_missing)
         if args.limit:
             syms = syms[: args.limit]
         log.info("universe: %d symbols%s", len(syms),
