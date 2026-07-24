@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
+from equity_research.analysis import holdco, screener  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
@@ -471,6 +472,104 @@ def _reply_text(req: EmailRequest, text: str) -> None:
                         in_reply_to=req.message_id, references=req.references or req.message_id)
 
 
+# ----------------- screeners (idea generation) -----------------
+def _screen_query(subject: str) -> str | None:
+    """Parse a screener request → 'holdco' | 'value' (default), or None if not a screen.
+    Accepts 'screen: holdco', 'screen: value', 'screen: quality', or a bare 'screen'."""
+    m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
+    if not m:
+        return None
+    val = m.group(1).strip().lower()
+    return "holdco" if val in ("holdco", "holdcos", "holding", "discount", "discounts") else "value"
+
+
+def _screen_run(fn, *, timeout: int = 300):
+    """Run a screener under a HARD timeout (they loop the universe with per-symbol analysis).
+    Returns None on timeout/error so the caller replies honestly instead of hanging."""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(fn).result(timeout=timeout)
+    except Exception:  # noqa: BLE001
+        log.exception("screener run timed out / failed")
+        return None
+    finally:
+        ex.shutdown(wait=False)
+
+
+def _crore(v) -> str:
+    if v is None:
+        return "n/a"
+    return f"₹{v/1e5:,.2f} L cr" if v >= 1e5 else f"₹{v:,.0f} cr"
+
+
+def _send_fundamental_screen(req: EmailRequest) -> None:
+    """Ranked value+quality+forensic screen → a numbered list; reply a number → deep report."""
+    log.info("running fundamental screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — running the quality + forensic + cheapness screen across "
+                     "the Nifty-500 (~1–2 min). The ranked list will land in this thread.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: screener.fundamental_screen(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The screen timed out this time — please resend `screen: value` in a moment.")
+        return
+    if not rows:
+        _reply_text(req, "No names scored — the universe's financials may not be ingested yet. "
+                         "Run the one-time `backfill_universe.py` to seed the Nifty-500.")
+        return
+    lines = "\n".join(
+        f"  {i:>2}) {r['symbol']:<12} {r['composite']:>5.1f}  {r['name'][:34]:<34} {r['why']}"
+        for i, r in enumerate(rows, 1))
+    md = ("**🔎 Value + quality + forensic screen — Nifty-500** (composite 0-100: 40% quality · "
+          "35% forensic · 25% cheap-vs-own-history). **Reply with a number for that stock's full "
+          f"deep report.**\n\n```\n{lines}\n```\n\n"
+          f"_The screen finds; your reply diligences. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]      # plain SYM → numbered reply → deep report
+    _set_pending(req, "screen:value", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Screen — value"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent fundamental screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_holdco_screen(req: EmailRequest) -> None:
+    """Holdco-discount screen → listed holders whose stake NAV exceeds their own market cap."""
+    log.info("running holdco screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning for holding companies trading below the value of their "
+                     "listed stakes (the Elcid pattern). ~1 min; the ranked list will land here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: holdco.holdco_discounts(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The holdco scan timed out — please resend `screen: holdco` in a moment.")
+        return
+    if not rows:
+        _reply_text(req, "No holdcos surfaced yet — this needs SHP ingested across the universe. "
+                         "Run the one-time `backfill_universe.py` (Nifty-500 + known holdcos) to seed it.")
+        return
+    out = []
+    for i, r in enumerate(rows, 1):
+        disc = f"{r['discount_pct']:+.0f}% disc" if r["discount_pct"] is not None else "own mcap n/a"
+        top = ", ".join(f"{inv} {pct:.1f}%" for inv, _nm, pct, _v in r["top_stakes"][:3])
+        out.append(f"  {i:>2}) {r['holder']:<12} {disc:<14} own {_crore(r['own_mcap_cr'])} vs "
+                   f"NAV {_crore(r['stake_nav_cr'])} — {top}")
+    md = ("**🏦 Holdco discounts — listed stake NAV vs own market cap** (the Elcid trade, generalised). "
+          "**Reply with a number for that holding company's full deep report.**\n\n```\n"
+          + "\n".join(out) + "\n```\n\n"
+          "_Counts only **disclosed listed** stakes (SHP promoter + public >1% tables); unlisted "
+          f"subsidiaries aren't valued. Coverage grows with SHP ingested. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["holder"], r["holder_name"]) for r in rows]
+    _set_pending(req, "screen:holdco", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Screen — holdco"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent holdco screen (%d names) to %s", len(rows), req.sender)
+
+
 # ----------------- fund (mutual-fund) reports -----------------
 class _FundCand:
     """Minimal Candidate shim so fund matches reuse the pending/disambiguation UX."""
@@ -598,6 +697,15 @@ def handle_request(req: EmailRequest) -> None:
     iq = _ipo_query(req.subject)
     if iq:
         _handle_ipo(iq[0], iq[1], req)
+        return
+
+    # 1d) explicit screener ('screen: value' / 'screen: holdco' / bare 'screen')
+    sq = _screen_query(req.subject)
+    if sq:
+        if sq == "holdco":
+            _send_holdco_screen(req)
+        else:
+            _send_fundamental_screen(req)
         return
 
     # 2) fresh query from the subject. Ack IMMEDIATELY at pickup — symbol resolution can

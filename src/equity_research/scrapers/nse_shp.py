@@ -63,27 +63,18 @@ def _axis_label(axis: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", " ", s).lower() or "other"
 
 
-def latest_shp(symbol: str) -> dict | None:
-    """Newest SHP catalog row for ``symbol`` →
-    ``{as_of, xbrl_url, promoter_pct, public_pct}`` (or None)."""
+def _num(v) -> float | None:
     try:
-        rows = fetch_api(_MASTER + q(symbol))
-    except Exception:  # noqa: BLE001 — catalog fetch is best-effort
-        log.exception("SHP master fetch failed for %s", symbol)
+        return float(v)
+    except (TypeError, ValueError):
         return None
-    if not isinstance(rows, list) or not rows:
-        return None
-    r = rows[0]
+
+
+def _catalog_meta(r: dict) -> dict | None:
+    """One SHP catalog row → ``{as_of, xbrl_url, promoter_pct, public_pct}`` (None if no XBRL)."""
     url = (r.get("xbrl") or "").strip()
     if not url:
         return None
-
-    def _num(v) -> float | None:
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
-
     as_of = None
     try:
         as_of = datetime.strptime((r.get("date") or "").strip(), "%d-%b-%Y").date()
@@ -91,6 +82,50 @@ def latest_shp(symbol: str) -> dict | None:
         pass
     return {"as_of": as_of, "xbrl_url": url,
             "promoter_pct": _num(r.get("pr_and_prgrp")), "public_pct": _num(r.get("public_val"))}
+
+
+def _catalog(symbol: str) -> list[dict]:
+    """The SHP master catalog for ``symbol`` — one row per filed quarter, newest first."""
+    try:
+        rows = fetch_api(_MASTER + q(symbol))
+    except Exception:  # noqa: BLE001 — catalog fetch is best-effort
+        log.exception("SHP master fetch failed for %s", symbol)
+        return []
+    return rows if isinstance(rows, list) else []
+
+
+def latest_shp(symbol: str) -> dict | None:
+    """Newest SHP catalog row for ``symbol`` →
+    ``{as_of, xbrl_url, promoter_pct, public_pct}`` (or None)."""
+    for r in _catalog(symbol):
+        meta = _catalog_meta(r)
+        if meta:
+            return meta
+    return None
+
+
+def all_quarters(symbol: str, n: int = 4) -> list[dict]:
+    """The most recent ``n`` SHP filings for ``symbol``, newest first →
+    ``[{as_of, promoter_pct, public_pct, holders:[...]}, ...]``. Each quarter's XBRL is
+    parsed via :func:`parse_shp_xbrl`; quarters that fail to fetch/parse are skipped."""
+    out: list[dict] = []
+    seen: set = set()
+    for r in _catalog(symbol):
+        if len(out) >= n:
+            break
+        meta = _catalog_meta(r)
+        if not meta or meta["as_of"] in seen:
+            continue
+        try:
+            rows = parse_shp_xbrl(fetch_bytes(meta["xbrl_url"]))
+        except Exception:  # noqa: BLE001 — one bad quarter shouldn't drop the rest
+            log.exception("SHP XBRL parse failed for %s (%s)", symbol, meta["xbrl_url"])
+            continue
+        if not rows:
+            continue
+        seen.add(meta["as_of"])
+        out.append({**meta, "holders": rows})
+    return out
 
 
 def parse_shp_xbrl(raw: bytes) -> list[dict]:

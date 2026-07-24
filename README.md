@@ -37,6 +37,12 @@ Personal use. Not a hosted product.
   restated financials, **valuation at the band vs listed peers**, use of proceeds, RHP risks,
   demand (subscription + anchor book), and an **APPLY / AVOID / NEUTRAL** verdict. All primary
   NSE sources (the RHP / price-band KPIs / anchor docs) — **no grey-market/GMP**. `scrapers/ipo.py`.
+- **Discover** *(new track)* — screeners that *find* ideas, not just analyse named ones.
+  **Email `screen: value`** → the Nifty-500 ranked on quality (Piotroski) + forensic
+  (Altman/Beneish/accruals/no-pledge) + cheap-vs-own-history → a numbered list; reply a number →
+  that name's full deep report. **Email `screen: holdco`** → the **Elcid trade, generalised**:
+  listed holding companies whose disclosed listed-stake NAV exceeds their own market cap, ranked by
+  discount. `analysis/screener.py`, `analysis/holdco.py`; seed once with `scripts/backfill_universe.py`.
 - **Report** — LLM reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
@@ -44,7 +50,9 @@ Personal use. Not a hosted product.
   TAM / penetration, order book for order-driven names), carries a **holder-level
   shareholding section** (every promoter account + public >1% holder from the SHP XBRL,
   sorted, each classified individual / **LISTED company** (the Elcid pattern, with its
-  symbol) / unlisted pvt / MF / FPI), and every valuation/forensic/technical section has a
+  symbol) / unlisted pvt / MF / FPI) plus a **quarter-over-quarter ownership diff** (who
+  entered / added / trimmed / exited, notable holders first), and every
+  valuation/forensic/technical section has a
   plain-English "how to read this"; it also offers an opt-in **growth-triggers 1-pager**
   (reply `1`) — forward-looking catalysts, each with an **estimated ₹ cr / % business
   impact** and an impact-sorted scoreboard so big medium-conviction triggers aren't buried.

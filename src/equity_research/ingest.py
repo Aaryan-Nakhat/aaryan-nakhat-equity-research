@@ -293,26 +293,22 @@ def ingest_equity_master(con: duckdb.DuckDBPyConnection, *, max_age_days: int = 
     return len(df)
 
 
-def ingest_shp_holders(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
-    """Land the latest holder-level shareholding pattern for ``symbol`` — every
-    promoter/promoter-group account + every public >1% holder, each classified
-    (individual / listed company / unlisted pvt / MF / FPI / …). Best-effort."""
+def _write_shp_quarter(symbol: str, quarter: dict, listed: dict,
+                       con: duckdb.DuckDBPyConnection) -> int:
+    """Classify + upsert one SHP quarter's holder rows. ``quarter`` is
+    ``{as_of, holders:[...]}``; ``listed`` maps norm_name → NSE symbol."""
     from equity_research.scrapers import nse_shp
-    data = nse_shp.holders(symbol)
-    if not data or not data.get("as_of"):
+    as_of = quarter.get("as_of")
+    if not as_of:
         return 0
-    ingest_equity_master(con)                              # staleness-guarded
-    listed = {nse_shp.norm_name(n): s for s, n in
-              con.execute("SELECT symbol, company_name FROM equity_master").fetchall()}
-    listed.pop("", None)
     rows = []
-    for h in data["holders"]:
+    for h in quarter["holders"]:
         if not h["pct"] and not h.get("shares"):
             continue                                       # empty promoter placeholder rows
         cls, matched = nse_shp.classify(h, listed)
         if matched == symbol:                              # the company itself, not a holder
             matched = None
-        rows.append({"symbol": symbol, "as_of": data["as_of"], "holder_name": h["name"],
+        rows.append({"symbol": symbol, "as_of": as_of, "holder_name": h["name"],
                      "pct": round(h["pct"], 4), "shares": h.get("shares"),
                      "category": h["category"], "is_promoter": h["is_promoter"],
                      "classification": cls, "matched_symbol": matched})
@@ -329,6 +325,39 @@ def ingest_shp_holders(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
     finally:
         con.unregister("_shph")
     return len(df)
+
+
+def _listed_master(con: duckdb.DuckDBPyConnection) -> dict:
+    """norm_name → NSE symbol over the whole listed master (the holder classifier)."""
+    from equity_research.scrapers import nse_shp
+    ingest_equity_master(con)                              # staleness-guarded
+    listed = {nse_shp.norm_name(n): s for s, n in
+              con.execute("SELECT symbol, company_name FROM equity_master").fetchall()}
+    listed.pop("", None)
+    return listed
+
+
+def ingest_shp_holders(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
+    """Land the latest holder-level shareholding pattern for ``symbol`` — every
+    promoter/promoter-group account + every public >1% holder, each classified
+    (individual / listed company / unlisted pvt / MF / FPI / …). Best-effort."""
+    from equity_research.scrapers import nse_shp
+    data = nse_shp.holders(symbol)
+    if not data or not data.get("as_of"):
+        return 0
+    return _write_shp_quarter(symbol, data, _listed_master(con), con)
+
+
+def ingest_shp_history(symbol: str, con: duckdb.DuckDBPyConnection, quarters: int = 4) -> int:
+    """Land the most recent ``quarters`` SHP filings for ``symbol`` (newest first) so
+    quarter-over-quarter ownership diffs work immediately. Idempotent — each quarter is a
+    distinct ``as_of`` snapshot. Returns total holder rows written. Best-effort."""
+    from equity_research.scrapers import nse_shp
+    quarters_data = nse_shp.all_quarters(symbol, n=quarters)
+    if not quarters_data:
+        return 0
+    listed = _listed_master(con)
+    return sum(_write_shp_quarter(symbol, qd, listed, con) for qd in quarters_data)
 
 
 _INSIDER_COLS = ["symbol", "did", "disclosure_dt", "trade_to_dt", "acq_name", "category",
