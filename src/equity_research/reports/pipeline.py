@@ -60,9 +60,12 @@ def _filings_for_analysis(symbol: str, *, max_docs: int = 12,
     total size. Returns [(label, pdf-bytes)] for the report's LLM call. Generic
     — works for any NSE-listed symbol; never raises."""
     try:
-        anns = nse_api.corporate_announcements_batch([symbol]).get(symbol) or []
+        raw = nse_api.corporate_announcements_batch([symbol]).get(symbol) or []
     except Exception:  # noqa: BLE001
         return []
+    if isinstance(raw, dict):                            # some symbols return {"data": [...]} not a bare list
+        raw = raw.get("data") or []
+    anns = [a for a in raw if isinstance(a, dict)]        # drop any stray non-dict entries
 
     def _dt(a):
         try:
