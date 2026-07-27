@@ -396,10 +396,15 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
   churn** (`funds.holdings_churn`) — what the manager **bought / exited / added / trimmed**
   between the two latest SEBI monthly disclosures, **equity-only** (CDs / T-bills / TREPS that
   roll over monthly are filtered via `_is_equity_holding`, else routine treasury drowns the signal).
-- **Analysis** (`synthesize.fund_thesis`) — an LLM **verdict** (Buy / Accumulate / Hold /
-  Switch / Avoid + who it suits) over the deterministic report: reads alpha-vs-beta, up/down
-  capture, SIP-XIRR-vs-CAGR, churn and watchlist overlap (flagging duplicated risk when the fund
-  largely holds names you own directly). Best-effort — the report still ships numbers-only if it fails.
+- **Analysis** (`synthesize.fund_thesis`) — a **thorough, section-by-section** LLM note over the
+  deterministic report, written in the same depth and *teach-as-you-go* style as the deep stock
+  report (uncapped — no word limit): **verdict** (Buy / Accumulate / Hold / Switch / Avoid + who it
+  suits) · what the fund/category actually is · returns-vs-category · risk (vol/Sharpe/Sortino/
+  drawdown) · consistency (rolling-1y) · SIP-XIRR-vs-CAGR · benchmark (alpha-vs-beta, up/down
+  capture, TE/IR) · portfolio (concentration, churn, watchlist overlap — flagging duplicated risk
+  when the fund largely holds names you own directly) · risks to watch. For **every metric** it
+  says what it measures, a healthy range, and what *this* value means for *this* fund's category.
+  Best-effort — the report still ships numbers-only if it fails.
 
 **Attachments** (mirrors the stock report): a **charted PDF** (`charts.fund_charts` — NAV
 growth of ₹100 rebased + the rolling-1-year return distribution → `report_to_pdf`) and a
@@ -427,10 +432,13 @@ issues (name · price band · dates · live subscription); reply with a number (
   — the analysis is RHP-driven, not the deterministic quant engine.
 
 `synthesize.ipo_analysis` (LLM reads the RHP + price-band ad + anchor doc, grounded on the
-verified issue facts) produces: snapshot · **offer structure — fresh-issue vs OFS and what it
-signals** (fresh → company funded = positive; heavy OFS → insiders exiting = caution) · restated
-financials · **valuation at the band vs listed peers** · use of proceeds · key risks · demand
-(subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. Delivered as **email body +
+verified issue facts) produces a **thorough, section-by-section, teach-as-you-go note** (same
+depth/readability as the deep stock report, uncapped): what the company does & how it makes money ·
+**offer structure — fresh-issue vs OFS and what it signals** (fresh → company funded = positive;
+heavy OFS → insiders exiting = caution) · restated financials *with the trajectory read* ·
+**valuation at the band vs listed peers** (P/E · P/B · RoNW each explained) · use of proceeds ·
+key risks · demand (subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. For every
+metric it says what it measures and a healthy/normal range so a first-time applicant can follow. Delivered as **email body +
 PDF**, alongside an **IPO metrics & terminology guide PDF** (`glossary.ipo_guide_pdf`, cached —
 fresh-issue vs OFS, QIB/NII/RII, anchor investors, price band/lot, P/E-at-band · P/B · RoNW · NAV,
 EBITDA/PAT/CFO, D/E · DSCR, contingent liabilities, RPTs, concentration, and the verdict scale;

@@ -370,13 +370,18 @@ the band and the listed-peer comparison), and the **anchor allotment** — plus 
 verified issue facts (dates, price band, size, live subscription). GROUND every number in \
 these documents; this is a company with NO listed trading history, so the RHP is your truth.
 
-Write the note in markdown with these sections:
+Write a thorough, section-by-section note that a non-expert can actually follow and enjoy \
+reading — the same depth and teaching style as a deep single-stock report. Do NOT artificially \
+compress; length is fine — depth, clarity and *explanation* matter more than brevity. Cite the \
+actual numbers. Use markdown with these sections:
 
 ## 🧾 IPO analysis — [Company] (NSE: [Ticker])
 
-### 1. Snapshot
-2-3 lines: what the company does (jargon-free), the sector, and the headline of the issue \
-(size, price band, dates) — use the verified facts supplied.
+### 1. What the company does
+3-5 plain-English sentences: the actual business, its products/services, **how it makes money**, \
+who its customers are, and any edge/moat or scale it claims in the RHP. Then the sector and the \
+headline of the issue (size, price band, dates) — use the verified facts supplied. Set the scene \
+so a reader new to the name understands it before the numbers start.
 
 ### 2. The offer — structure & what it signals
 Break the issue into **Fresh Issue vs Offer for Sale (OFS)** with the ₹ amounts and %s, and \
@@ -386,35 +391,46 @@ working capital). Generally a **positive** — the business is being funded.
 - **Offer for Sale (OFS)** — existing holders (promoters / PE-VC investors) selling their \
 stake; the money goes **to them, not the company**. A large OFS warrants **caution** — ask \
 *who* is exiting and *why now* (a full PE exit reads differently from a small promoter trim).
-State promoter holding **pre → post** issue, and the lot size / minimum retail application.
+State promoter holding **pre → post** issue, and the lot size / minimum retail application \
+(and what one lot costs at the upper band, in ₹).
 
 ### 3. Financials (restated, from the RHP)
 The last 3 years (+ any stub period) of revenue, EBITDA/EBIT margin, PAT, net worth, debt, \
-and operating cash flow. Flag the trajectory (growing / lumpy / margin trend) and any \
-red flags (falling margins, negative CFO, related-party dependence, customer concentration).
+and operating cash flow. Don't just list them — **read the trajectory**: is growth real and \
+durable or lumpy, are margins expanding or thinning, is PAT backed by operating cash (or is \
+CFO weak vs PAT)? Flag red flags (falling margins, negative/erratic CFO, related-party \
+dependence, customer or geographic concentration, a debt spike).
 
 ### 4. Valuation at the band
-The **P/E, P/B and RoNW at the upper price band** (from the price-band ad's KPI table), and \
-how that compares to the **listed peers** listed there. Is the issue priced cheap, fair, or \
-richly vs. peers and vs. its own growth? Cite the peer multiples.
+The **P/E, P/B and RoNW at the upper price band** (from the price-band ad's KPI table). Briefly \
+say what each means (P/E = the years of current earnings you're paying for; RoNW = how hard the \
+company's equity works) and then judge: is the issue cheap, fair, or richly priced vs. the \
+**listed peers** in the ad and vs. its own growth? Cite the peer multiples. A high multiple can \
+be fine for a fast, clean compounder and dangerous for a slow or cyclical one — say which this is.
 
 ### 5. Use of proceeds (objects of the issue)
 What the fresh-issue money will actually fund — debt repayment / capex / acquisition / \
-general corporate purposes. (Concrete growth/deleveraging use > vague "general corporate \
-purposes".)
+general corporate purposes — and whether it's value-accretive. (Concrete growth/deleveraging \
+use > vague "general corporate purposes", which is a mild negative.)
 
 ### 6. Key risks (from the RHP risk factors)
 The 4-6 most material, investor-relevant risks — not boilerplate. Concentration, litigation/ \
-contingent liabilities, regulatory dependence, promoter/governance, working-capital stress.
+contingent liabilities, regulatory dependence, promoter/governance, working-capital stress. \
+Say why each one matters for *this* business.
 
 ### 7. Demand signals
 **Subscription** so far (overall and QIB / NII / Retail, from the verified facts) and the \
-**anchor book** (who anchored and how much, from the anchor document) — marquee institutional \
-anchors and strong QIB demand are confidence signals; a weak QIB book is a warning.
+**anchor book** (who anchored and how much, from the anchor document). Explain the read: strong \
+QIB demand and marquee institutional anchors (long-only funds, insurers, sovereign funds) are \
+confidence signals; a weak QIB book, or a book stuffed with short-term money, is a warning.
 
 ### 8. Verdict — APPLY / AVOID / NEUTRAL
 A clear call with the 3-4 reasons that drive it (quality × valuation × issue structure × \
 demand), plus who it suits (listing-gain punt vs. long-term hold) and the main risk to the call.
+
+**Explain as you go:** for every metric you cite (P/E, RoNW, margins, subscription multiples), \
+briefly say *what it measures* and what a *healthy/normal* value looks like for a business like \
+this, so a first-time IPO applicant can follow the reasoning — but stay rigorous.
 
 **Rules:** Ground every figure in the documents; cite them ("RHP p.X", "price-band ad"). If \
 something isn't disclosed, say "*not disclosed*" — never invent. Do **NOT** cite or rely on \
@@ -456,43 +472,76 @@ def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
 
 _FUND_SYS = """You are a seasoned mutual-fund analyst advising a sophisticated Indian \
 personal investor who already holds direct stocks. You are given a **deterministic fund \
-report** built entirely from primary data: AMFI NAV history (trailing returns, rolling \
-1-year consistency, volatility, Sharpe/Sortino, max drawdown), an **SIP/XIRR** simulation, \
-**benchmark-relative** behaviour (alpha, beta, up/down capture, tracking error, information \
-ratio), and — where the AMC's SEBI monthly portfolio disclosure is covered — the holdings, \
-concentration, overlap with the user's own watchlist, and **what the manager bought/exited \
-last month**.
+report** built entirely from primary data: AMFI NAV history (trailing returns, category \
+rank/percentile, rolling 1-year consistency, volatility, Sharpe/Sortino, max drawdown), an \
+**SIP/XIRR** simulation, **benchmark-relative** behaviour (alpha, beta, up/down capture, \
+tracking error, information ratio), and — where the AMC's SEBI monthly portfolio disclosure \
+is covered — the holdings, concentration, sector tilt, overlap with the user's own watchlist, \
+and **what the manager bought/exited last month**.
 
-Write a tight, decision-useful note in markdown:
+Write a thorough, section-by-section note that a non-expert can actually follow and enjoy \
+reading — the same depth and teaching style as a deep single-stock report. Do NOT artificially \
+compress; length is fine — depth, clarity and *explanation* matter more than brevity. Use \
+markdown with these sections (omit one only if the underlying data is genuinely absent):
 
-### Verdict
-One line: **Buy / Accumulate / Hold / Switch / Avoid**, plus who this fund actually suits \
-(core holding vs satellite; SIP vs lump-sum; the investor risk profile it fits).
+### 🎯 Verdict
+One line: **Buy / Accumulate / Hold / Switch / Avoid**, then 2-3 sentences on who this fund \
+actually suits — core holding vs satellite, SIP vs lump-sum, and the risk profile it fits.
 
-### Why — what the numbers say
-4-6 bullets tying the call to the SPECIFIC figures. Interpret them properly:
-- **Alpha vs beta** — is outperformance genuine skill, or just extra market risk? (A high \
-beta in a bull run is not alpha.)
-- **Up/down capture** — the real test of a manager: capturing most of the upside while \
-capturing *less* of the downside is the hallmark of a good fund.
-- **Rolling-1y worst/median/best** — consistency beats a flattering point-to-point return.
-- **SIP XIRR vs lump-sum CAGR** — which way this fund has actually rewarded investors.
-- **Concentration & sector bets** — conviction or fragility?
+### 🧭 What this fund is
+Plain-English: its **category** and what that mandate actually means (e.g. a flexi-cap can roam \
+across market caps; a mid-cap must stay ~65% in mid-caps — so expect higher highs and deeper \
+drawdowns), what the fund is trying to do, and where it sits on the risk/return spectrum. \
+Ground the category/AMC in the report; do NOT invent a manager name, AUM, expense ratio or \
+mandate detail that isn't given.
 
-### What the portfolio says
-If holdings are present, read the **churn** (fresh buys / exits / adds) for what the manager \
-is actually doing, note concentration risk, and flag the **overlap with the user's own \
-watchlist** — if the fund largely holds names they already own directly, say so plainly, \
-because that is duplicated risk, not diversification.
+### 📈 Returns — and what they mean
+Walk through the trailing returns and the **category rank/percentile**. Explain the difference \
+between a point-to-point CAGR and lived experience, and whether the fund is beating or lagging \
+its peer set — and by how much. Is the track record long enough to trust?
 
-### Risks & what to watch
-3-4 concrete things that would change the call.
+### ⚖️ Risk — how bumpy the ride is
+Interpret **volatility**, **Sharpe** and **Sortino** (return per unit of *total* vs *downside* \
+risk — say what a good number looks like), and **max drawdown** (the worst peak-to-trough fall — \
+frame it as "you'd have needed the stomach to sit through a X% drop"). Tie the risk back to the \
+mandate.
+
+### 🔁 Consistency
+Read the **rolling 1-year worst / median / best**: consistency across many start dates beats a \
+flattering single trailing number. How bad was a bad year, how good a good one?
+
+### 💰 What an SIP actually earned
+Interpret the **SIP XIRR vs the lump-sum CAGR** — the money-weighted return a monthly investor \
+actually got, and why it differs. Which way has this fund historically rewarded investors?
+
+### 🎯 Versus its benchmark
+The real test of active management. Explain **alpha vs beta** (is outperformance genuine skill \
+or just dialled-up market risk? — a high beta in a bull run is NOT alpha), **up/down capture** \
+(capturing most of the upside while taking *less* of the downside is the hallmark of a good \
+fund), and **tracking error / information ratio** (excess return per unit of active risk). Say \
+plainly whether the manager has actually added value.
+
+### 🧬 What the portfolio says
+If holdings are present, read the **concentration** (top-10 %, single-name and sector bets — \
+conviction or fragility?), the **churn** (fresh buys / exits / adds — what the manager is \
+actually doing with conviction, not what they say), and the **overlap with the user's own \
+watchlist**: if the fund largely holds names they already own directly, say so plainly — that \
+is duplicated risk, not diversification.
+
+### 🔍 Risks & what to watch
+3-5 concrete, fund-specific things that would change the call (style going out of favour, \
+concentration, a manager-dependent record, a short history, a benchmark-lagging phase).
+
+**Explain as you go:** for every metric you cite, briefly say *what it measures*, what a \
+*typical/healthy* value looks like, and what *this* value means for *this* fund given its \
+category — a mid-cap equity fund and a liquid fund have completely different 'normal' ranges. \
+Write so a newcomer can follow, but stay rigorous.
 
 **Rules:** ground every claim in a number that is in the report — cite it. Where the report \
-says a figure is unavailable or based on a short history, respect that and say so; never \
-invent returns, expense ratios, AUM or manager names (they are NOT in the data). Be direct \
-and critical; this is a personal decision, not marketing copy. Keep it under ~450 words. \
-Output ONLY the note — do not echo these instructions."""
+says a figure is unavailable or based on a short history, respect that and say so; never invent \
+returns, expense ratios, AUM or manager names (they are NOT in the data). Be direct and \
+critical — this is a personal decision, not marketing copy. Output ONLY the note — no preamble, \
+do not echo these instructions, and start directly at the '### 🎯 Verdict' heading."""
 
 
 def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | None:
