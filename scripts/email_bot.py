@@ -33,10 +33,12 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
-from equity_research.analysis import holdco, screener  # noqa: E402
+from equity_research import screen_digest  # noqa: E402
+from equity_research.analysis import holdco, investors, screener  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
+from equity_research.reports import md  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
@@ -474,13 +476,23 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 # ----------------- screeners (idea generation) -----------------
 def _screen_query(subject: str) -> str | None:
-    """Parse a screener request → 'holdco' | 'value' (default), or None if not a screen.
-    Accepts 'screen: holdco', 'screen: value', 'screen: quality', or a bare 'screen'."""
+    """Parse a screener request → 'holdco' | 'investors' | 'value' (default), or None if not
+    a screen. Accepts 'screen: holdco', 'screen: investors', 'screen: value', bare 'screen'."""
     m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
     if not m:
         return None
     val = m.group(1).strip().lower()
-    return "holdco" if val in ("holdco", "holdcos", "holding", "discount", "discounts") else "value"
+    if val in ("holdco", "holdcos", "holding", "discount", "discounts"):
+        return "holdco"
+    if val in ("investors", "investor", "hni", "hnis", "marquee", "bigbull", "big bull"):
+        return "investors"
+    return "value"
+
+
+def _investor_query(subject: str) -> str | None:
+    """Parse 'investor: <name>' / 'hni: <name>' → the free-text name, or None."""
+    m = re.match(r"^\s*(?:re:\s*)?(?:investor|hni)\s*[:\-]\s*(.+)$", subject, flags=re.I)
+    return m.group(1).strip() if m and m.group(1).strip() else None
 
 
 def _screen_run(fn, *, timeout: int = 300):
@@ -502,6 +514,9 @@ def _crore(v) -> str:
     return f"₹{v/1e5:,.2f} L cr" if v >= 1e5 else f"₹{v:,.0f} cr"
 
 
+_md_table = md.table          # shared markdown pipe-table helper (renders as styled <table>)
+
+
 def _send_fundamental_screen(req: EmailRequest) -> None:
     """Ranked value+quality+forensic screen → a numbered list; reply a number → deep report."""
     log.info("running fundamental screen (req from %s)", req.sender)
@@ -519,12 +534,15 @@ def _send_fundamental_screen(req: EmailRequest) -> None:
         _reply_text(req, "No names scored — the universe's financials may not be ingested yet. "
                          "Run the one-time `backfill_universe.py` to seed the Nifty-500.")
         return
-    lines = "\n".join(
-        f"  {i:>2}) {r['symbol']:<12} {r['composite']:>5.1f}  {r['name'][:34]:<34} {r['why']}"
-        for i, r in enumerate(rows, 1))
-    md = ("**🔎 Value + quality + forensic screen — Nifty-500** (composite 0-100: 40% quality · "
-          "35% forensic · 25% cheap-vs-own-history). **Reply with a number for that stock's full "
-          f"deep report.**\n\n```\n{lines}\n```\n\n"
+    table = _md_table(
+        ["#", "Symbol", "Company", "Score", "Why"],
+        [[i, r["symbol"], r["name"][:34], f"{r['composite']:.1f}", r["why"]]
+         for i, r in enumerate(rows, 1)],
+        align="rllrl")
+    md = ("**🔎 Value + quality + forensic screen — Nifty-500**\n\n"
+          "Composite 0-100: 40% quality · 35% forensic · 25% cheap-vs-own-history. "
+          "**Reply with a number for that stock's full deep report.**\n\n"
+          + table + "\n\n"
           f"_The screen finds; your reply diligences. (Reply within {PENDING_TTL_H}h.)_")
     cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]      # plain SYM → numbered reply → deep report
     _set_pending(req, "screen:value", cands)
@@ -551,23 +569,130 @@ def _send_holdco_screen(req: EmailRequest) -> None:
         _reply_text(req, "No holdcos surfaced yet — this needs SHP ingested across the universe. "
                          "Run the one-time `backfill_universe.py` (Nifty-500 + known holdcos) to seed it.")
         return
-    out = []
+    tbl_rows = []
     for i, r in enumerate(rows, 1):
-        disc = f"{r['discount_pct']:+.0f}% disc" if r["discount_pct"] is not None else "own mcap n/a"
+        disc = f"{r['discount_pct']:+.0f}%" if r["discount_pct"] is not None else "n/a"
         top = ", ".join(f"{inv} {pct:.1f}%" for inv, _nm, pct, _v in r["top_stakes"][:3])
-        out.append(f"  {i:>2}) {r['holder']:<12} {disc:<14} own {_crore(r['own_mcap_cr'])} vs "
-                   f"NAV {_crore(r['stake_nav_cr'])} — {top}")
-    md = ("**🏦 Holdco discounts — listed stake NAV vs own market cap** (the Elcid trade, generalised). "
-          "**Reply with a number for that holding company's full deep report.**\n\n```\n"
-          + "\n".join(out) + "\n```\n\n"
-          "_Counts only **disclosed listed** stakes (SHP promoter + public >1% tables); unlisted "
-          f"subsidiaries aren't valued. Coverage grows with SHP ingested. (Reply within {PENDING_TTL_H}h.)_")
+        tbl_rows.append([i, r["holder"], disc, _crore(r["own_mcap_cr"]),
+                         _crore(r["stake_nav_cr"]), top])
+    table = _md_table(
+        ["#", "Holdco", "Discount", "Own mcap", "Stake NAV", "Top listed stakes"],
+        tbl_rows, align="rlrrrl")
+    md = ("**🏦 Holdco discounts — listed stake NAV vs own market cap** (the Elcid trade, generalised)\n\n"
+          "**Reply with a number for that holding company's full deep report.**\n\n"
+          + table + "\n\n"
+          "_Discount = 1 − own market cap ÷ stake NAV. Counts only **disclosed listed** stakes "
+          "(SHP promoter + public >1% tables); unlisted subsidiaries aren't valued. Coverage grows "
+          f"with SHP ingested. (Reply within {PENDING_TTL_H}h.)_")
     cands = [_MenuItem(r["holder"], r["holder_name"]) for r in rows]
     _set_pending(req, "screen:holdco", cands)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
                         html=emailer.body_html(md, "Screen — holdco"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent holdco screen (%d names) to %s", len(rows), req.sender)
+
+
+_INVESTOR_CAVEAT = ("_Tracks the SHP public/promoter tables — only holders **disclosed by "
+                    "name** are visible (public stakes below ~1% aren't filed at all), and "
+                    "coverage is bounded by the SHP universe ingested so far. A drop out of the "
+                    "list can mean a full exit **or** trimming below the ~1% disclosure floor._")
+
+
+def _send_investor_screen(req: EmailRequest) -> None:
+    """What every tracked marquee investor did last quarter (entered/exited/added/trimmed),
+    across the SHP data → numbered list of the stocks they moved; reply → deep report."""
+    log.info("running investor-moves screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — checking what the tracked marquee investors did last quarter "
+                     "across the shareholding data. Lands in this thread shortly.")
+    con = connect()
+    try:
+        moves = _screen_run(lambda: investors.all_moves(con))
+    finally:
+        con.close()
+    if moves is None:
+        _reply_text(req, "The investor scan timed out — please resend `screen: investors` shortly.")
+        return
+    if not moves:
+        _reply_text(req, "No tracked investor showed a disclosed move ≥0.5pp last quarter across "
+                         "the ingested SHP universe.\n\n" + _INVESTOR_CAVEAT)
+        return
+    sym_arrow = {"entered": "🟢 new", "exited": "🔴 exit", "added": "➕ add", "trimmed": "➖ trim"}
+    tbl_rows, cands, n = [], [], 0
+    for canon in investors.roster():
+        m = moves.get(canon)
+        if not m:
+            continue
+        for kind in ("entered", "added", "trimmed", "exited"):
+            for r in m[kind]:
+                n += 1
+                delta = (f"{r['delta']:+.2f}pp" if "delta" in r
+                         else (f"{r['pct']:.2f}%" if kind == "entered" else f"was {r['prev_pct']:.2f}%"))
+                tbl_rows.append([n, canon, sym_arrow[kind], r["symbol"], delta, r["name"][:28]])
+                cands.append(_MenuItem(r["symbol"], r["name"]))
+    table = _md_table(["#", "Investor", "Move", "Symbol", "Δ / stake", "Company"],
+                      tbl_rows, align="rllrrl")
+    md = (f"**👤 Marquee-investor moves — last disclosed quarter** ({len(moves)} of "
+          f"{len(investors.roster())} tracked names moved)\n\n"
+          "**Reply with a number for that stock's full deep report.**\n\n"
+          + table + "\n\n" + _INVESTOR_CAVEAT + f"\n\n_(Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:investors", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Screen — investors"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent investor-moves screen (%d moves, %d investors) to %s", n, len(moves), req.sender)
+
+
+def _send_investor(name: str, req: EmailRequest) -> None:
+    """One marquee investor's current book + last-quarter moves → numbered holdings;
+    reply → deep report on any of them."""
+    canon = investors.resolve(name)
+    if not canon:
+        roster = ", ".join(investors.roster()[:8])
+        _reply_text(req, f"'{name}' isn't a tracked investor. Try one of: {roster}… "
+                         "or `screen: investors` for everyone's latest moves.")
+        return
+    log.info("running investor book for %s (req from %s)", canon, req.sender)
+    _reply_text(req, f"📩 Got it — pulling **{canon}**'s disclosed holdings and last-quarter "
+                     "moves from the shareholding data.")
+    con = connect()
+    try:
+        book = _screen_run(lambda: investors.holdings(con, canon))
+        mv = _screen_run(lambda: investors.moves(con, canon))
+    finally:
+        con.close()
+    if not book:
+        _reply_text(req, f"No disclosed (≥~1%) holdings found for **{canon}** in the ingested "
+                         "SHP universe yet.\n\n" + _INVESTOR_CAVEAT)
+        return
+    table = _md_table(["#", "Symbol", "Company", "Stake", "As of"],
+                      [[i, r["symbol"], r["name"][:34], f"{r['pct']:.2f}%", f"{r['as_of']:%b-%Y}"]
+                       for i, r in enumerate(book, 1)], align="rllrr")
+    parts = [f"**👤 {canon} — disclosed holdings** ({len(book)} names ≥~1%)\n\n"
+             "**Reply with a number for that stock's full deep report.**\n\n" + table]
+    if mv and (mv["entered"] or mv["exited"] or mv["added"] or mv["trimmed"]):
+        def _fmt(items, kind):
+            return ", ".join(
+                (f"{r['symbol']} ({r['delta']:+.2f}pp)" if "delta" in r
+                 else (f"{r['symbol']} ({r['pct']:.2f}%)" if kind == "entered"
+                       else f"{r['symbol']} (was {r['prev_pct']:.2f}%)")) for r in items)
+        mv_lines = ["", "**Last-quarter moves:**"]
+        if mv["entered"]:
+            mv_lines.append(f"- 🟢 **New:** {_fmt(mv['entered'], 'entered')}")
+        if mv["added"]:
+            mv_lines.append(f"- ➕ **Added:** {_fmt(mv['added'], 'added')}")
+        if mv["trimmed"]:
+            mv_lines.append(f"- ➖ **Trimmed:** {_fmt(mv['trimmed'], 'trimmed')}")
+        if mv["exited"]:
+            mv_lines.append(f"- 🔴 **Exited / below disclosure:** {_fmt(mv['exited'], 'exited')}")
+        parts.append("\n".join(mv_lines))
+    parts.append("\n" + _INVESTOR_CAVEAT + f"\n\n_(Reply within {PENDING_TTL_H}h.)_")
+    md = "\n\n".join(parts)
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in book]
+    _set_pending(req, f"investor:{canon}", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, f"{canon} — holdings"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent investor book for %s (%d holdings) to %s", canon, len(book), req.sender)
 
 
 # ----------------- fund (mutual-fund) reports -----------------
@@ -699,11 +824,19 @@ def handle_request(req: EmailRequest) -> None:
         _handle_ipo(iq[0], iq[1], req)
         return
 
-    # 1d) explicit screener ('screen: value' / 'screen: holdco' / bare 'screen')
+    # 1d) explicit marquee-investor book ('investor: <name>' / 'hni: <name>')
+    nq = _investor_query(req.subject)
+    if nq:
+        _send_investor(nq, req)
+        return
+
+    # 1e) explicit screener ('screen: value' / 'screen: holdco' / 'screen: investors' / bare)
     sq = _screen_query(req.subject)
     if sq:
         if sq == "holdco":
             _send_holdco_screen(req)
+        elif sq == "investors":
+            _send_investor_screen(req)
         else:
             _send_fundamental_screen(req)
         return
@@ -810,6 +943,46 @@ def maybe_scan() -> None:
     scan.mark_scanned()
 
 
+def _push_screen_digest(md_text: str) -> bool:
+    """Deliver the weekly screener-movements digest. Returns True if sent."""
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send screen digest")
+        return False
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"📡 Screener movements — {today}", md_text, to=to,
+                        html=emailer.body_html(md_text, "Screener movements"))
+    log.info("screen digest sent to %s", to)
+    return True
+
+
+def maybe_screen_digest() -> None:
+    """Fire the weekly trigger-based screener digest once per ISO week (Sunday ≥18:00 IST):
+    holdco / fundamental / investor deltas vs the last run. No email if nothing crossed a
+    threshold. Fingerprints advance ONLY after a successful send, so a delivery failure
+    re-surfaces the same deltas next time rather than eating them."""
+    now = datetime.now(IST)
+    if now.weekday() != 6 or now.hour < SCAN_HOUR:      # Sunday evening, weekly
+        return
+    if not screen_digest.due_this_week():
+        return
+    log.info("weekly screen digest firing")
+    con = connect()
+    try:
+        delta = screen_digest.build_screen_delta(con)
+        md_text = screen_digest.format_screen_digest(delta)
+        if md_text is None:
+            screen_digest.commit_screen_state(con, delta)   # nothing triggered — mark week done
+            log.info("screen digest: no triggers this week")
+            return
+        if _push_screen_digest(md_text):
+            screen_digest.commit_screen_state(con, delta)   # advance fingerprints ONLY after send
+    except Exception:  # noqa: BLE001
+        log.exception("screen digest failed")               # no commit → retried next heartbeat
+    finally:
+        con.close()
+
+
 # ----------------- main loop -----------------
 def main() -> None:
     channels = os.environ.get("CHANNELS", "email").lower()
@@ -840,6 +1013,7 @@ def main() -> None:
                 _drain(inbox)
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
+                maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sun ≥18:00)
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")

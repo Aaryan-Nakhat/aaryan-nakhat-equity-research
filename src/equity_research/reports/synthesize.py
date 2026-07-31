@@ -95,7 +95,13 @@ ROCE/higher leverage can be fine for utilities; a vanilla DCF understates a true
 compounder). Write so a non-expert can follow, but stay rigorous.
 
 Respect any n/a or caveat in the brief; never invent data. Be specific and \
-critical — this is a forensic review, not a summary."""
+critical — this is a forensic review, not a summary.
+
+**Tables:** when you present figures as a table, make it valid GitHub-flavoured markdown — \
+a header row, a `|---|` separator line, one row per line, the SAME column count in every row \
+— kept to **at most 5 columns** with units in the header (not repeated in each cell). Never \
+output a space-aligned/ASCII table or one wider than 5 columns; if you have more dimensions \
+(e.g. many years), split into two smaller tables or summarise the rest in prose."""
 
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -435,8 +441,10 @@ this, so a first-time IPO applicant can follow the reasoning — but stay rigoro
 **Rules:** Ground every figure in the documents; cite them ("RHP p.X", "price-band ad"). If \
 something isn't disclosed, say "*not disclosed*" — never invent. Do **NOT** cite or rely on \
 **grey-market premium (GMP)** or any unofficial/grey-market chatter — it is not a primary \
-source. Be specific and decisive; length is fine, but no filler. Output ONLY the finished \
-note — do not echo these instructions, and start at the '## 🧾 IPO analysis' heading."""
+source. Be specific and decisive; length is fine, but no filler. Any table must be valid \
+markdown (a header, a `|---|` separator, equal columns per row), ≤5 columns, never a \
+space-aligned/ASCII table. Output ONLY the finished note — do not echo these instructions, \
+and start at the '## 🧾 IPO analysis' heading."""
 
 
 def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
@@ -540,8 +548,10 @@ Write so a newcomer can follow, but stay rigorous.
 **Rules:** ground every claim in a number that is in the report — cite it. Where the report \
 says a figure is unavailable or based on a short history, respect that and say so; never invent \
 returns, expense ratios, AUM or manager names (they are NOT in the data). Be direct and \
-critical — this is a personal decision, not marketing copy. Output ONLY the note — no preamble, \
-do not echo these instructions, and start directly at the '### 🎯 Verdict' heading."""
+critical — this is a personal decision, not marketing copy. Any table must be valid markdown (a \
+header, a `|---|` separator, equal columns per row), ≤5 columns, never a space-aligned/ASCII \
+table. Output ONLY the note — no preamble, do not echo these instructions, and start directly \
+at the '### 🎯 Verdict' heading."""
 
 
 def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | None:

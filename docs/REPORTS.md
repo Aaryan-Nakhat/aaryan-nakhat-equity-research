@@ -300,11 +300,16 @@ PULL  you email a stock name (Subject) from an allowlisted address
            ▼  then a separate "want a deeper cut? reply 1) growth triggers" email
         │  other Subjects: `fund: <name>` · `ipo: ongoing|upcoming|<name>` ·
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
-        │  discounts) — each a numbered list; reply a number → that name's deep report
+        │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
+        │  `investor: <name>` (one HNI's disclosed book + moves) — each a numbered
+        │  list; reply a number → that name's deep report
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
         Holiday/weekend-skipped.
+PUSH  Sunday >=18:00 IST, once per ISO week → screen_digest → ONE "Screener
+        movements" email: holdco / fundamental / investor **deltas only** vs the last
+        run (nothing crossed a threshold → no email). Trigger-based, not a full dump.
 ```
 
 - **Inbound** (`reports/inbox.py`): one Gmail account both sends and reads. IMAP
@@ -454,9 +459,11 @@ the RHP via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand
 
 ## Screeners — idea generation (`analysis/screener.py`, `analysis/holdco.py`)
 
-Email commands that **find** ideas (not just analyse named ones); both reply a **numbered list**
+Email commands that **find** ideas (not just analyse named ones); each replies a **numbered list**
 and a **number-reply runs that name's full deep report** (reusing the pending-menu UX — plain
-`SYM` candidates → `_send_report`). Delivered on-demand (no scheduled push), one thread each.
+`SYM` candidates → `_send_report`). On-demand **and** pushed weekly (see the digest below). Every
+list is a **real markdown table** (`reports/md.table` → styled `<table>`), not the old code-fenced
+text that collapsed on phones.
 
 - **`screen: value`** (aliases `screen: quality`, bare `screen`) → `screener.fundamental_screen`
   ranks the Nifty-500 (symbols with ingested financials) on a composite: **40% quality**
@@ -471,6 +478,23 @@ and a **number-reply runs that name's full deep report** (reusing the pending-me
   and compares to the holder's **own market cap** → a **discount %**, deepest first. Counts only
   **disclosed listed** stakes (SHP promoter + public >1%); unlisted subsidiaries aren't valued (the
   email says so). Coverage grows with SHP ingested.
+- **`screen: investors`** / **`investor: <name>`** → `analysis/investors.py` tracks a curated
+  **25 marquee investors** (Rekha Jhunjhunwala, Mukul Agrawal, Vijay Kedia, Dolly Khanna, Akash
+  Bhanshali, Sunil Singhania/Abakkus, …). Matching is **curated, not fuzzy** — each name carries
+  hand-verified alias token-sets and a holder matches only when an alias is a *subset* of its name
+  tokens (so 'Vijay Kedia' hits 'VIJAY KISHANLAL KEDIA' but 'damani' never hits 'CHOODAMANI').
+  `screen: investors` lists **what every tracked name did last disclosed quarter** (entered / added /
+  trimmed / exited, ≥0.5pp/0.5% floor); `investor: <name>` shows **one person's disclosed book +
+  moves**. Only holders **named** in the SHP (≥~1%) are visible; an exit can be a full sale or a trim
+  below the disclosure floor; coverage = SHP universe ingested.
+
+**Weekly digest** (`src/equity_research/screen_digest.py`, `email_bot.maybe_screen_digest`): once per
+ISO week (Sunday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
+message with **only the deltas** vs the last run — a holdco newly discounted / widening ≥5pp, a stock
+entering the top-15 or climbing ≥10 ranks, a tracked investor's fresh moves. Fingerprints live in
+`alert_state` (`screen_fp_*`) and advance **only after a successful send** (so a delivery failure
+re-surfaces the deltas); if nothing crossed a threshold, **no email**. The fundamental screen sorts
+`(-composite, symbol)` so ranks are deterministic and the deltas don't jitter on ties.
 
 **Seeding** (`scripts/backfill_universe.py`, one-time, idempotent/resumable): for the Nifty-500 +
 a curated holdco list it lands **financials** (`ingest_financials`/`_annual` → shares for market cap
