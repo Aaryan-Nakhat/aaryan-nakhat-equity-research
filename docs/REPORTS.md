@@ -307,7 +307,7 @@ PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
         Holiday/weekend-skipped.
-PUSH  Sunday >=18:00 IST, once per ISO week → screen_digest → ONE "Screener
+PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screener
         movements" email: holdco / fundamental / investor **deltas only** vs the last
         run (nothing crossed a threshold → no email). Trigger-based, not a full dump.
 ```
@@ -489,7 +489,7 @@ text that collapsed on phones.
   below the disclosure floor; coverage = SHP universe ingested.
 
 **Weekly digest** (`src/equity_research/screen_digest.py`, `email_bot.maybe_screen_digest`): once per
-ISO week (Sunday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
+ISO week (Saturday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
 message with **only the deltas** vs the last run — a holdco newly discounted / widening ≥5pp, a stock
 entering the top-15 or climbing ≥10 ranks, a tracked investor's fresh moves. Fingerprints live in
 `alert_state` (`screen_fp_*`) and advance **only after a successful send** (so a delivery failure
