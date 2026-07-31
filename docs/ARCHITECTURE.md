@@ -3,8 +3,9 @@
 End to end: primary NSE/BSE/MCX/FBIL data → DuckDB → deterministic fundamental / forensic /
 technical / (sector-appropriate) valuation analysis + signals → LLM writes the thesis →
 delivered by email (or Telegram) either **on demand** (you name a stock) or **pushed** as a
-**midday (12:30)** and **full (18:00)** watchlist digest, with PDF reports and holiday-aware
-scheduling. Per-area detail lives in [`SCRAPING.md`](SCRAPING.md),
+**midday (12:30)** and **full (18:00)** watchlist digest plus a **weekly (Sat 18:00)
+screener-movements** digest, with PDF reports and holiday-aware scheduling. Per-area detail lives
+in [`SCRAPING.md`](SCRAPING.md),
 [`FUNDAMENTALS.md`](FUNDAMENTALS.md), [`TECHNICAL.md`](TECHNICAL.md),
 [`REPORTS.md`](REPORTS.md), [`ALERTS.md`](ALERTS.md).
 
@@ -113,6 +114,20 @@ heartbeat gate: once/trading-day in the 12:30–14:00 IST window (already_intrad
         (the 18:00 digest stays the authoritative deduped record)
 ```
 
+## Flow D — Push: weekly "screener-movements" digest (Sat 18:00 IST)
+
+```
+heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (screen_digest.due_this_week)
+        │
+        ▼  screen_digest.build_screen_delta() runs all three screens and diffs vs the
+              last run's fingerprint (alert_state screen_fp_*):
+              • holdco — newly discounted / discount widened ≥5pp
+              • fundamental — entering top-15 / climbing ≥10 ranks (deterministic sort)
+              • investors — a tracked marquee name's fresh entered/added/trimmed/exited
+        ▼  ONE 📡 "Screener movements" email of DELTAS ONLY (nothing crossed → no email);
+           fingerprints advance only AFTER a successful send (commit_screen_state)
+```
+
 ## Component → file map
 
 | Layer | Does | Files |
@@ -120,7 +135,7 @@ heartbeat gate: once/trading-day in the 12:30–14:00 IST window (already_intrad
 | **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
-| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff, holdco-discount + fundamental screeners) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds,ownership,holdco,screener}.py` |
-| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report** (returns/risk/holdings/overlap) | `reports/{brief,deep_brief,fund_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary}.py` |
+| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff, holdco-discount + fundamental screeners, marquee-investor tracking) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds,ownership,holdco,screener,investors}.py` |
+| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report** (returns/risk/holdings/overlap); shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **Vertex** (service account) |
-| **Deliver** | bot(s) + midday (12:30) & full (18:00) scans; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + midday (12:30) & full (18:00) scans + weekly (Sat 18:00) screener-movements digest; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; `screen: value/holdco/investors`, `investor: <name>` → screeners; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `screen_digest.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

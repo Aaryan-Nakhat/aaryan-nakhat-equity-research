@@ -42,7 +42,12 @@ Personal use. Not a hosted product.
   (Altman/Beneish/accruals/no-pledge) + cheap-vs-own-history → a numbered list; reply a number →
   that name's full deep report. **Email `screen: holdco`** → the **Elcid trade, generalised**:
   listed holding companies whose disclosed listed-stake NAV exceeds their own market cap, ranked by
-  discount. `analysis/screener.py`, `analysis/holdco.py`; seed once with `scripts/backfill_universe.py`.
+  discount. **Email `screen: investors`** / **`investor: <name>`** → track ~25 **marquee investors**
+  (Jhunjhunwala, Mukul Agrawal, Kedia, …) across the shareholding data — each one's disclosed book
+  and what they entered / added / trimmed / exited last quarter. Every list is a real table; a
+  **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas across all three.
+  `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `screen_digest.py`; seed
+  once with `scripts/backfill_universe.py`.
 - **Report** — LLM reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
