@@ -957,12 +957,12 @@ def _push_screen_digest(md_text: str) -> bool:
 
 
 def maybe_screen_digest() -> None:
-    """Fire the weekly trigger-based screener digest once per ISO week (Sunday ≥18:00 IST):
+    """Fire the weekly trigger-based screener digest once per ISO week (Saturday ≥18:00 IST):
     holdco / fundamental / investor deltas vs the last run. No email if nothing crossed a
     threshold. Fingerprints advance ONLY after a successful send, so a delivery failure
     re-surfaces the same deltas next time rather than eating them."""
     now = datetime.now(IST)
-    if now.weekday() != 6 or now.hour < SCAN_HOUR:      # Sunday evening, weekly
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:      # Saturday evening, weekly
         return
     if not screen_digest.due_this_week():
         return
@@ -1013,7 +1013,7 @@ def main() -> None:
                 _drain(inbox)
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
-                maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sun ≥18:00)
+                maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")

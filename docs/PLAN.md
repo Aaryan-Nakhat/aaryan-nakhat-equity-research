@@ -296,7 +296,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
     alias token-sets (subset match, no loose LIKE) → each investor's disclosed book + QoQ moves
     (entered/added/trimmed/exited, ≥0.5 floor). *Next:* widen SHP coverage so more names light up.
   - *Proactive weekly digest — ✅ shipped* (`screen_digest.py`, `email_bot.maybe_screen_digest`):
-    one Sunday-evening "Screener movements" email with **trigger-based deltas only** across all three
+    one Saturday-evening "Screener movements" email with **trigger-based deltas only** across all three
     screens (fingerprints in `alert_state`, advance only after send; no email if nothing moved).
     Order-book>sales screen was **dropped** (order book isn't a structured field — LLM-extraction only).
   - *Table readability — ✅ shipped*: interactive screens now emit **real markdown tables**
