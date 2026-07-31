@@ -140,18 +140,22 @@ def piotroski_f(con: duckdb.DuckDBPyConnection, symbol: str, *,
         return Score("Piotroski F", None, missing=missing,
                      note="needs all 9-signal inputs across 2 years")
 
-    roa_c, roa_p = ni_c / ta_c, ni_p / ta_p
-    signals = {
-        "roa_pos": ni_c > 0,
-        "cfo_pos": cfo_c > 0,
-        "d_roa_pos": roa_c > roa_p,
-        "accrual_cfo>ni": cfo_c > ni_c,
-        "d_leverage_down": (ltd_c / ta_c) < (ltd_p / ta_p),
-        "d_currentratio_up": (ca_c / cl_c) > (ca_p / cl_p),
-        "no_dilution": sh_c <= sh_p,
-        "d_grossmargin_up": ((sales_c - cogs_c) / sales_c) > ((sales_p - cogs_p) / sales_p),
-        "d_assetturnover_up": (sales_c / ta_c) > (sales_p / ta_p),
-    }
+    try:
+        roa_c, roa_p = ni_c / ta_c, ni_p / ta_p
+        signals = {
+            "roa_pos": ni_c > 0,
+            "cfo_pos": cfo_c > 0,
+            "d_roa_pos": roa_c > roa_p,
+            "accrual_cfo>ni": cfo_c > ni_c,
+            "d_leverage_down": (ltd_c / ta_c) < (ltd_p / ta_p),
+            "d_currentratio_up": (ca_c / cl_c) > (ca_p / cl_p),
+            "no_dilution": sh_c <= sh_p,
+            "d_grossmargin_up": ((sales_c - cogs_c) / sales_c) > ((sales_p - cogs_p) / sales_p),
+            "d_assetturnover_up": (sales_c / ta_c) > (sales_p / ta_p),
+        }
+    except ZeroDivisionError:      # degenerate period (zero sales / assets / current liabilities)
+        return Score("Piotroski F", None, missing=["zero denominator"],
+                     note="degenerate period — a ratio input was zero")
     f = float(sum(1 for v in signals.values() if v))
     return Score("Piotroski F", f, {k: float(v) for k, v in signals.items()})
 
@@ -194,15 +198,19 @@ def beneish_m(con: duckdb.DuckDBPyConnection, symbol: str, *,
         return Score("Beneish M", None, missing=missing,
                      note="needs all 8-variable inputs across 2 years")
 
-    dsri = (rec_c / sales_c) / (rec_p / sales_p)
-    gm_c, gm_p = (sales_c - cogs_c) / sales_c, (sales_p - cogs_p) / sales_p
-    gmi = gm_p / gm_c
-    aqi = (1 - (ca_c + ppe_c) / ta_c) / (1 - (ca_p + ppe_p) / ta_p)
-    sgi = sales_c / sales_p
-    depi = (dep_p / (dep_p + ppe_p)) / (dep_c / (dep_c + ppe_c))
-    sgai = (sga_c / sales_c) / (sga_p / sales_p)
-    tata = (ni_c - cfo_c) / ta_c
-    lvgi = (liab_c / ta_c) / (liab_p / ta_p)
+    try:
+        dsri = (rec_c / sales_c) / (rec_p / sales_p)
+        gm_c, gm_p = (sales_c - cogs_c) / sales_c, (sales_p - cogs_p) / sales_p
+        gmi = gm_p / gm_c
+        aqi = (1 - (ca_c + ppe_c) / ta_c) / (1 - (ca_p + ppe_p) / ta_p)
+        sgi = sales_c / sales_p
+        depi = (dep_p / (dep_p + ppe_p)) / (dep_c / (dep_c + ppe_c))
+        sgai = (sga_c / sales_c) / (sga_p / sales_p)
+        tata = (ni_c - cfo_c) / ta_c
+        lvgi = (liab_c / ta_c) / (liab_p / ta_p)
+    except ZeroDivisionError:      # a required ratio divided by zero (degenerate period)
+        return Score("Beneish M", None, missing=["zero denominator"],
+                     note="degenerate period — a ratio input was zero")
 
     comps = {"DSRI": dsri, "GMI": gmi, "AQI": aqi, "SGI": sgi,
              "DEPI": depi, "SGAI": sgai, "TATA": tata, "LVGI": lvgi}
