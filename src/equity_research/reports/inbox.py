@@ -15,9 +15,17 @@ from datetime import date, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
-from imapclient import IMAPClient
+from imapclient import IMAPClient, SocketTimeout
 
 from equity_research.reports.email import BOT_HEADER
+
+# Bound every blocking socket op so a half-open / silently-dropped Gmail connection
+# raises instead of hanging the IDLE loop forever (the main loop catches it and
+# reconnects). This does NOT cut the IDLE wait short — during idle_check imapclient
+# sets the socket to non-blocking and uses select() with its own timeout, then
+# restores this read timeout afterwards; the read timeout only governs the quick
+# round-trips (idle handshake, idle_done, search, fetch, flag).
+_SOCKET_TIMEOUT = SocketTimeout(connect=30, read=120)
 
 
 @dataclass(frozen=True)
@@ -81,7 +89,7 @@ class Inbox:
         self._c: IMAPClient | None = None
 
     def connect(self) -> None:
-        self._c = IMAPClient(self.host, port=self.port, ssl=True)
+        self._c = IMAPClient(self.host, port=self.port, ssl=True, timeout=_SOCKET_TIMEOUT)
         self._c.login(self.user, self.password)
         self._c.select_folder("INBOX")
 
