@@ -21,11 +21,15 @@ h3 { font-size: 14px; margin: 14px 0 4px; color: #111; }
 p, li { font-size: 12.5px; color: #161616; }
 em { color: #3a3a3a; }
 strong { color: #000; }
-table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 11px; }
-th, td { border: 1px solid #8c8c8c; padding: 4px 8px; text-align: right; white-space: nowrap; color: #161616; }
-th { background: #d9e8e0; text-align: center; font-weight: 700; color: #0a3d24; }
-td:first-child, th:first-child { text-align: left; font-weight: 600; }
-tr:nth-child(even) td { background: #f1f5f3; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 11.5px;
+        border: 1px solid #b7c7c0; }
+th, td { border: 1px solid #dbe5e0; padding: 6px 10px; text-align: right; white-space: nowrap;
+         color: #161616; vertical-align: top; }
+th { background: #0a5c34; text-align: center; font-weight: 700; color: #ffffff;
+     border-color: #0a5c34; white-space: nowrap; }
+td:first-child, th:first-child { text-align: left; font-weight: 600; color: #0a3d24; }
+tr:nth-child(even) td { background: #eef4f1; }
+tr:hover td { background: #e2efe9; }
 code, pre { font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; }
 pre { background: #f3f5f4; padding: 9px; border: 1px solid #d2d2d2; border-radius: 4px;
       white-space: pre; overflow-x: auto; }

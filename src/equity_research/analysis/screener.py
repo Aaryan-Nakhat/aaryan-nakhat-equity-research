@@ -124,7 +124,10 @@ def fundamental_screen(con: duckdb.DuckDBPyConnection, *, universe: str = "NIFTY
             + _WEIGHTS["forensic"] * r["forensic_n"]
             + _WEIGHTS["cheapness"] * r["cheapness_n"]), 1)
         r["why"] = _why(r)
-    rows.sort(key=lambda r: r["composite"], reverse=True)
+    # composite desc, then symbol asc as a deterministic tie-break — many names share a
+    # rounded composite, and without a stable secondary key the rank order (and so the
+    # weekly digest's "new entrant" deltas) would jitter run-to-run.
+    rows.sort(key=lambda r: (-r["composite"], r["symbol"]))
     return rows[:limit]
 
 

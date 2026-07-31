@@ -291,6 +291,17 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
     Elcid trade generalised — listed holders whose disclosed listed-stake NAV exceeds their own
     market cap. *Next:* widen SHP coverage beyond Nifty-500 + known holdcos; value unlisted stakes
     from financials.
+  - *Marquee-investor / HNI tracking — ✅ shipped* (`analysis/investors.py`, email
+    **`screen: investors`** / **`investor: <name>`**): a curated 25-name roster with hand-verified
+    alias token-sets (subset match, no loose LIKE) → each investor's disclosed book + QoQ moves
+    (entered/added/trimmed/exited, ≥0.5 floor). *Next:* widen SHP coverage so more names light up.
+  - *Proactive weekly digest — ✅ shipped* (`screen_digest.py`, `email_bot.maybe_screen_digest`):
+    one Sunday-evening "Screener movements" email with **trigger-based deltas only** across all three
+    screens (fingerprints in `alert_state`, advance only after send; no email if nothing moved).
+    Order-book>sales screen was **dropped** (order book isn't a structured field — LLM-extraction only).
+  - *Table readability — ✅ shipped*: interactive screens now emit **real markdown tables**
+    (`reports/md.table`) instead of code-fences (which collapsed on phones); `pdf._CSS` table styling
+    refreshed; LLM prompts constrained to valid ≤5-column markdown tables.
 - **10-yr G-Sec yield** in the market header — the last deferred macro feed. FBIL's `gsec`
   endpoint returns only archive-file metadata (not inline yields); needs the archive download
   parsed, or a CCIL/RBI source. (USD/INR via FBIL and gold/silver/crude via MCX are **done**.)
