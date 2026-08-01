@@ -82,8 +82,11 @@ use ALL of them**: attribute management guidance and commentary to the source, a
 extract any **contingent liabilities** and material **related-party transactions** \
 they disclose.
 
-Write a thorough, section-by-section analysis. Do NOT artificially compress — \
-length is fine; depth and rigour matter more. Cite the actual numbers. Cover:
+Write a thorough, section-by-section analysis in the EXACT order below, 1 → 7. Do NOT \
+open with a verdict, a recommendation, or an executive summary — the note must BUILD to the \
+verdict, so the very first section is "1. Earnings quality" and the **Verdict is the FINAL \
+section (7), at the end**. Do NOT artificially compress — length is fine; depth and rigour \
+matter more. Cite the actual numbers. Cover:
 
 1. **Earnings quality & cash conversion** — is profit backed by cash? Read CFO vs \
 PAT (yearly + the 3/5-yr rolled figures), CFO/EBITDA, accruals, FCF/FCFF/FCFE \
@@ -106,8 +109,8 @@ the **Monte-Carlo DCF**: state the intrinsic-value range (median + p10–p90), t
 margin of safety (or premium) at the current price and P(undervalued), and the \
 **reverse-DCF** implied growth vs history (is the price demanding?). Treat the DCF \
 as a distribution/range, not a point estimate; for banks/NBFCs it is skipped.
-7. **Verdict** — Buy / Accumulate / Hold / Reduce / Avoid, the key reasons, the \
-main risks/red flags, and concrete things to watch.
+7. **Verdict (the closing section — end the note here)** — Buy / Accumulate / Hold / \
+Reduce / Avoid, the key reasons, the main risks/red flags, and concrete things to watch.
 
 **Explain as you go:** for every metric you cite, briefly say *what it measures*, \
 what a *typical/healthy* value looks like, and what *this* value means **for this \
