@@ -24,6 +24,28 @@ from google.genai import types
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
 
+# Shared house-style for every long-form note (deep stock, IPO, fund, growth triggers).
+# Appended to each system prompt so the formatting rules are identical everywhere and a
+# fix lands in one place. Targets the real render failures: tables written inline inside a
+# sentence (so markdown never parses them), and numbered points strung into one paragraph.
+_FORMATTING = """
+
+**Formatting for readability (follow these exactly — they control how the note renders):**
+- Write clean GitHub-flavoured markdown that renders correctly once converted to HTML.
+- **Bold the terms and numbers that matter** — the verdict, metric names, and the figures a \
+reader should not miss — so the note is skimmable. Do not bold whole sentences.
+- Use a few **tasteful emojis** as visual anchors on headings and signals — e.g. 🎯 verdict, \
+📈 growth, 💰 cash/returns, 🧾 valuation, ⚖️ balance-sheet, ✅ a green flag, ⚠️ a caution, \
+🔴 a red flag. Make them meaningful, at most one per heading or point — never decorative clutter.
+- **Tables must be real, standalone markdown tables.** Put a blank line BEFORE and AFTER every \
+table, and NEVER place a table inline inside a sentence or a bullet. Header row, a `|---|` \
+separator row beneath it, one row per line, the SAME column count in every row, at most 5 \
+columns, units in the header (not repeated in each cell). Never output a space-aligned/ASCII table.
+- **Lists must be real markdown lists.** Begin the list on its own line with a blank line before \
+it, and put EACH item on its OWN line starting with `- ` (or `1.`, `2.`, …). NEVER string points \
+together inside one paragraph like "1. … 2. … 3. …" — that renders as an unreadable run-on.
+- Leave a blank line between every paragraph, heading, table and list so nothing runs together."""
+
 _SYSTEM = """You are a sober, sell-side-grade equity analyst covering Indian \
 stocks. You are given a quantitative brief assembled from PRIMARY sources only \
 (exchange filings, XBRL financials, EOD prices). Optionally you are also given a \
@@ -101,7 +123,7 @@ critical — this is a forensic review, not a summary.
 a header row, a `|---|` separator line, one row per line, the SAME column count in every row \
 — kept to **at most 5 columns** with units in the header (not repeated in each cell). Never \
 output a space-aligned/ASCII table or one wider than 5 columns; if you have more dimensions \
-(e.g. many years), split into two smaller tables or summarise the rest in prose."""
+(e.g. many years), split into two smaller tables or summarise the rest in prose.""" + _FORMATTING
 
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -333,7 +355,7 @@ present it as a company-specific fact.
 specific, no fluff. Length is fine — cover every real trigger; do not artificially compress \
 or truncate. If the filings are thin, say so and give what is grounded.
 - Output ONLY the finished document — do NOT echo these instructions, the section \
-descriptions, or the bracketed placeholders; start directly at the '## 🚀 Growth triggers' heading."""
+descriptions, or the bracketed placeholders; start directly at the '## 🚀 Growth triggers' heading.""" + _FORMATTING
 
 
 def growth_triggers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
@@ -444,7 +466,7 @@ something isn't disclosed, say "*not disclosed*" — never invent. Do **NOT** ci
 source. Be specific and decisive; length is fine, but no filler. Any table must be valid \
 markdown (a header, a `|---|` separator, equal columns per row), ≤5 columns, never a \
 space-aligned/ASCII table. Output ONLY the finished note — do not echo these instructions, \
-and start at the '## 🧾 IPO analysis' heading."""
+and start at the '## 🧾 IPO analysis' heading.""" + _FORMATTING
 
 
 def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
@@ -551,7 +573,7 @@ returns, expense ratios, AUM or manager names (they are NOT in the data). Be dir
 critical — this is a personal decision, not marketing copy. Any table must be valid markdown (a \
 header, a `|---|` separator, equal columns per row), ≤5 columns, never a space-aligned/ASCII \
 table. Output ONLY the note — no preamble, do not echo these instructions, and start directly \
-at the '### 🎯 Verdict' heading."""
+at the '### 🎯 Verdict' heading.""" + _FORMATTING
 
 
 def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | None:

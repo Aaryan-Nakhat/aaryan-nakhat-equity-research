@@ -48,6 +48,15 @@ brief — this is where management commentary enters the thesis.
 The client auto-selects Vertex when `GOOGLE_GENAI_USE_VERTEXAI` is truthy, else
 the Developer API key.
 
+**Shared house-style (`synthesize._FORMATTING`):** one formatting block is appended to **all
+four** long-form prompts — the deep stock analysis, the IPO note, the fund note and the
+growth-triggers 1-pager — so the rendering rules are identical everywhere and a fix lands in
+one place. It requires **bolded key terms/figures**, a few **tasteful emojis** on headings and
+signals (🎯 verdict · 📈 growth · ⚠️/🔴 flags …), and — the two real render failures it
+targets — that every **table** be a standalone markdown block with a blank line before/after
+(never inline in a sentence) and every **list** be a real markdown list with each item on its
+own line (never `1. … 2. …` strung into one paragraph, which renders as an unreadable run-on).
+
 ## Email (`reports/email.py`)
 
 `send_report(subject, body, *, to, html, attachments, in_reply_to, references)`
@@ -162,7 +171,15 @@ plus a cooldown-free backfill for symbols that predate the feature.
 (`deep_brief._ownership_changes_block` → `analysis.ownership.ownership_changes`) diffs the
 **two most recent SHP snapshots** and reports who **entered / added / trimmed / exited**,
 with the percentage-point move — **notable holders first** (⭐ promoter / mutual fund / FPI /
-insurer / listed-company holder = real conviction or distribution, above retail churn).
+insurer / listed-company holder = real conviction or distribution, above retail churn). Every
+line shows the **explicit transition** — `0.00% → 3.57%` for an entrant, `2.09% → 0.00%` for
+an exit, `x% → y%` for a move — never a bare "was/now". Matching across quarters is
+**name-normalised** (case/punctuation-insensitive) with a conservative **token-subset** and a
+**re-spelling** fallback (same promoter-flag + category, a shared ≥4-char surname/AMC token,
+near-identical stake), so the *same* holder disclosed under a slightly different label —
+`LIFE INSURANCE CORPORATION OF INDIA` vs `Life Insurance Corporation of India`, or a promoter
+whose name the filing re-spells (`K NITYANANDA REDDY` → `KAMBAM NITHYANANDA REDDY`) — reads as
+one continuous move, not a spurious exit-and-re-entry in both lists.
 `ensure_ingested` keeps ≥2 quarters per symbol: a name with fewer gets a 4-quarter
 **backfill** (`ingest_shp_history` → `nse_shp.all_quarters`, parsing each quarter's SHP XBRL),
 so the diff works on the first report rather than after waiting a quarter. (Verified live:
@@ -197,7 +214,11 @@ best-effort ingests **annual** financials for up to ~6 same-sector peers that la
 them (cached after), so §10's peer comparison shows real comparables instead of the
 one-or-two stocks that happened to be ingested. When fewer than 3 peers have a
 comparable P/E, the sector-percentile line is replaced by an "insufficient peer
-data" note (the peer table still renders).
+data" note (the peer table still renders). The table (`deep_brief._peer_comparison`) is
+**grouped into large / mid / small-cap tiers** (≥ ₹50,000 cr · ₹10,000–50,000 cr · < ₹10,000 cr,
+bands shown inline), up to 5 peers per tier ranked by market cap plus a **M-cap column**, and
+lists each peer by **readable company name** (from `sector_map`/`equity_master`), not ticker —
+the target marked ◄ in its own tier.
 
 **Consolidated vs standalone:** `generate_report(consolidated=None)` **defaults to
 consolidated whenever it exists** — the whole group (parent + subs + JVs) is the
@@ -222,11 +243,13 @@ Every headline metric is annotated so the report stands on its own:
 - **Inline band tags** on forensic/quant/pledge lines (e.g. `ROCE 9.5% — weak`,
   `pledge 2.4% — good`, `margin of safety 19% — some`) via `glossary.read/label`.
 - **"How to read this" explainer blocks** close each of §10 Valuation, §11
-  reverse-DCF, §12 statistical forensics and §13 technical snapshot — multi-line,
-  bolded definitions of every metric shown (P/E · P/B · earnings yield · EV/EBITDA ·
-  own-history percentile · forward multiple; reverse-DCF · Monte-Carlo range · margin
-  of safety · WACC · terminal growth; Benford MAD · sector z-scores; SMA · RSI ·
-  golden/death cross) so a non-expert can read the numbers without the separate guide.
+  reverse-DCF, §12 statistical forensics and §13 technical snapshot. §10's **valuation lens**
+  now prints **each multiple on its own line** (P/E · P/B · earnings yield, plus EV/EBITDA for
+  cyclicals and ROE for financials) with a plain-English gloss and a cheap/dear cue right next
+  to the value; the §10–§13 explainers themselves are written as **flowing prose paragraphs**
+  (not bullet lists) covering own-history percentile · forward multiple; reverse-DCF ·
+  Monte-Carlo range · margin of safety · WACC · terminal growth; Benford MAD · sector z-scores;
+  SMA · RSI · golden/death cross — so a non-expert can read the numbers without the separate guide.
 - A standalone **Metrics & ratings guide** — what each metric is (typical values,
   sector caveats) **plus the categorical outputs and their possible values**: the
   **Verdict** scale (Buy / Accumulate / Hold / Reduce / Avoid), why a Movers P/E
