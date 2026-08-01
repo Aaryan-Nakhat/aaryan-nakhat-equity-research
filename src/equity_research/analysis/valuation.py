@@ -92,8 +92,10 @@ def snapshot(con: duckdb.DuckDBPyConnection, symbol: str,
     t = ttm(con, symbol, consolidated)
     ttm_net = (t.get("ttm_net_profit_cr") or np.nan) * CR
     eq = latest.get("Equity")
-    note = ("shares from latest annual (FY-end %s) - unadjusted for any later "
-            "bonus/split; pass shares_override to correct" % a.index[-1].year)
+    note = ("Share count used for market cap is taken from the latest annual filing "
+            "(FY-end %s). If the company has since done a bonus issue or stock split, the "
+            "count — and therefore the P/E, P/B and market cap here — may be slightly off "
+            "until the next annual filing is ingested." % a.index[-1].year)
     return {
         "price": price,
         "price_date": price_date,

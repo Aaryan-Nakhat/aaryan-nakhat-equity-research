@@ -200,7 +200,7 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
         return f"**{r['name']}** ({kind}){star}"
 
     for r in ch["entered"]:
-        L.append(f"- 🆕 **New:** {_who(r)} — {r['pct']:.2f}%")
+        L.append(f"- 🆕 **New:** {_who(r)} — 0.00% → {r['pct']:.2f}% (+{r['pct']:.2f}pp)")
     for r in ch["added"]:
         L.append(f"- 🟢 **Added:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
                  f"(+{r['delta']:.2f}pp)")
@@ -208,7 +208,8 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
         L.append(f"- 🔴 **Trimmed:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
                  f"({r['delta']:.2f}pp)")
     for r in ch["exited"]:
-        L.append(f"- ⚪ **Exited:** {_who(r)} — was {r['prev_pct']:.2f}%")
+        L.append(f"- ⚪ **Exited:** {_who(r)} — {r['prev_pct']:.2f}% → 0.00% "
+                 f"(−{r['prev_pct']:.2f}pp)")
     L += ["", "_Diff of the two most recent SEBI Reg-31 shareholding filings. ⭐ = notable "
           "(promoter / mutual fund / FPI / insurer / listed-company holder) — real "
           "conviction or distribution, above retail churn._", ""]
@@ -220,6 +221,77 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
            "|" + "|".join(["---"] * len(headers)) + "|"]
     out += ["| " + " | ".join(r) + " |" for r in rows]
     return "\n".join(out)
+
+
+def _names(con: duckdb.DuckDBPyConnection) -> dict[str, str]:
+    """symbol → readable company name (sector_map.company, then equity_master.company_name)."""
+    m: dict[str, str] = {}
+    for sql, col in (("SELECT symbol, company FROM sector_map WHERE company IS NOT NULL", 0),
+                     ("SELECT symbol, company_name FROM equity_master "
+                      "WHERE company_name IS NOT NULL", 1)):
+        try:
+            for s, c in con.execute(sql).fetchall():
+                m.setdefault(s, c)
+        except Exception:  # noqa: BLE001 — either table/column may be absent; name falls back to symbol
+            pass
+    return m
+
+
+# market-cap tier bands (₹ crore) — labelled inline so the reader sees the cutoffs used
+_CAP_TIERS = [("Large cap (≥ ₹50,000 cr)", 50_000, float("inf")),
+              ("Mid cap (₹10,000–50,000 cr)", 10_000, 50_000),
+              ("Small cap (< ₹10,000 cr)", 0, 10_000)]
+
+
+def _cap_tier(mcap_cr: float | None) -> str | None:
+    if mcap_cr is None or mcap_cr != mcap_cr:
+        return None
+    for label, lo, hi in _CAP_TIERS:
+        if lo <= mcap_cr < hi:
+            return label
+    return None
+
+
+def _peer_comparison(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool) -> list[str]:
+    """Peer table grouped into large / mid / small cap (≤5 per tier), companies shown by
+    **name** not symbol, the target marked ◄. Peers share the NSE industry. [] if too thin."""
+    names = _names(con)
+    pcols = ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"]
+    recs = []
+    for ps in [symbol, *sector.peers(con, symbol)]:
+        r = quant._ratios(con, ps, consolidated)
+        if not r:
+            continue
+        mcap = valuation.snapshot(con, ps, consolidated).get("market_cap_cr")
+        recs.append({"sym": ps, "name": names.get(ps, ps), "mcap": mcap, "r": r,
+                     "target": ps == symbol})
+    if len(recs) < 2:
+        return []
+    by_tier: dict[str, list[dict]] = {t[0]: [] for t in _CAP_TIERS}
+    unclassified: list[dict] = []
+    for rec in recs:
+        t = _cap_tier(rec["mcap"])
+        (by_tier[t] if t else unclassified).append(rec)
+
+    hdr = ["Company", "M-cap (₹cr)", *pcols]
+    lines = ["", "### Peer comparison — by market-cap tier", "",
+             "_Peers share this company's NSE industry classification, grouped by size (bands "
+             "shown), up to 5 peers per tier ranked by market cap. Company names are shown, not "
+             "tickers; ◄ marks the company this report is about (always listed in its own tier)._",
+             ""]
+    any_table = False
+    for label, _lo, _hi in _CAP_TIERS:
+        members = sorted(by_tier[label], key=lambda r: -(r["mcap"] or 0))
+        if not members:
+            continue
+        chosen = [r for r in members if r["target"]]                # the target, if in this tier
+        chosen += [r for r in members if not r["target"]][:5]       # + up to 5 peers
+        chosen.sort(key=lambda r: -(r["mcap"] or 0))
+        rows = [[rec["name"] + (" ◄" if rec["target"] else ""), _f(rec["mcap"], 0)]
+                + [_f(rec["r"].get(c), 1) for c in pcols] for rec in chosen]
+        lines += [f"**{label}**", "", _table(hdr, rows), ""]
+        any_table = True
+    return lines if any_table else []
 
 
 def _cover(ebit, fin) -> str:
@@ -504,8 +576,11 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  "total shares encumbered.")
     else:
         L.append("- **Promoter pledge:** n/a (no shareholding snapshot).")
-    L.append("- **Contingent liabilities / related-party transactions:** read from the company's "
-             "filings (see the Analysis section); not in the structured XBRL.")
+    L.append("- **Contingent liabilities / related-party transactions:** these live in the "
+             "notes-to-accounts of the results and annual report, not in the structured XBRL this "
+             "brief is built from — so the **Analysis section below extracts them from the filing "
+             "PDFs** where the company discloses them (quarterly notes give the headline figure; "
+             "the full schedule is in the annual report).")
     L.append("")
     L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
     L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
@@ -522,30 +597,53 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     if snap:
         pe, pb, ey = snap.get("pe_ttm"), snap.get("pb"), snap.get("earnings_yield_%")
         ev_val = evd.get("ev_ebitda")
-        L.append(f"- Market cap ₹{_f(snap.get('market_cap_cr'),0)} cr"
-                 + (f" ({industry})" if industry else ""))
+        is_cyclical = lens == "cyclical" and ev_val is not None and ev_val == ev_val and ev_val > 0
+        L.append(f"- Market cap **₹{_f(snap.get('market_cap_cr'),0)} cr**"
+                 + (f" · sector: {industry}" if industry else ""))
+        if lens == "financial":
+            primary = ("**P/B judged against ROE** — the right lens for a lender; its P/E and a "
+                       "DCF are unreliable, so they are shown only for context")
+        elif is_cyclical:
+            primary = ("**EV/EBITDA on mid-cycle margins** — the right lens for an asset-heavy / "
+                       "cyclical business, because trailing P/E is misleading at cycle peaks and troughs")
+        else:
+            primary = "**P/E** — the standard lens for a normal earnings-compounder"
+        L += [f"- **Valuation lens for this business:** {primary}.", "",
+              "Each multiple on its own line, with what it says here — and whether that reads "
+              "cheap or dear:", ""]
+        # P/E
+        L.append(f"- **P/E (TTM) = {_f(pe,1,lo=0,hi=2000)}** — rupees paid today for ₹1 of the last "
+                 "twelve months' profit. Lower looks cheaper, but a low P/E can equally signal a "
+                 "cyclical earnings peak or a value trap, so it only means something *against the "
+                 "stock's own history and its peers*, never on its own.")
+        # P/B
+        L.append(f"- **P/B = {_f(pb,2,lo=0,hi=200)}** — rupees paid for ₹1 of net worth (book "
+                 "value). This is the primary lens for banks/NBFCs, where it must be read *together "
+                 "with ROE* — a higher P/B is only justified by a durably higher ROE.")
+        # earnings yield
+        L.append(f"- **Earnings yield = {_f(ey,2,pct=True,lo=-50,hi=50)}** — the inverse of P/E: "
+                 "annual profit as a percentage of the price you pay. Compare it to the ~7% 10-year "
+                 "government-bond yield (your risk-free alternative) — well below 7% means you are "
+                 "paying up for future growth; near or above it means the earnings are cheap today.")
+        if is_cyclical:
+            mid = evd.get("ev_ebitda_midcycle")
+            midtxt = (f", or **{_f(mid,1,x=True,lo=0,hi=100)}x on mid-cycle margins**"
+                      if mid and mid == mid else "")
+            L.append(f"- **EV/EBITDA = {_f(ev_val,1,x=True,lo=0,hi=100)}x**{midtxt} — enterprise "
+                     f"value (market cap **+** net debt ₹{_f(evd.get('net_debt_cr'),0)} cr) per ₹1 "
+                     "of operating profit. It strips out leverage, so it is the fair lens for "
+                     "capital-heavy / cyclical names — judge it on the mid-cycle figure, not a "
+                     "single peak or trough year.")
         if lens == "financial":
             r0 = af.loc[af.index[-1]]
             roe = (100 * r0["ProfitLossForPeriod"] / r0["Equity"]
                    if r0.get("ProfitLossForPeriod") is not None and r0.get("Equity") else None)
-            L.append(f"- **Lens — financial → P/B on ROE:** P/B {_f(pb,2,lo=0,hi=200)} on ROE "
-                     f"{_f(roe,1,pct=True,lo=-100,hi=100)} · P/E(TTM) {_f(pe,1,lo=0,hi=2000)} · "
-                     f"earnings yield {_f(ey,2,pct=True,lo=-50,hi=50)}")
-            L.append("  - For a lender, judge P/B against ROE (and asset quality) — a richer P/B is "
-                     "warranted only by a durably higher ROE; P/E and DCF are unreliable here.")
-        elif lens == "cyclical" and ev_val is not None and ev_val == ev_val and ev_val > 0:
-            mid = evd.get("ev_ebitda_midcycle")
-            midtxt = f" · mid-cycle {_f(mid,1,x=True,lo=0,hi=100)}" if mid and mid == mid else ""
-            L.append(f"- **Lens — cyclical → EV/EBITDA:** {_f(ev_val,1,x=True,lo=0,hi=100)}{midtxt} · "
-                     f"P/B {_f(pb,2,lo=0,hi=200)} · P/E(TTM) {_f(pe,1,lo=0,hi=2000)} "
-                     f"(EV ₹{_f(evd.get('ev_cr'),0)} cr incl. net debt ₹{_f(evd.get('net_debt_cr'),0)} cr)")
-            L.append("  - Asset-heavy/commodity: judge on **mid-cycle** EV/EBITDA — trailing earnings & "
-                     "P/E swing with the cycle and mislead at peaks/troughs.")
-        else:
-            L.append(f"- **Lens — earnings → P/E:** P/E(TTM) {_f(pe,1,lo=0,hi=2000)} · P/B "
-                     f"{_f(pb,2,lo=0,hi=200)} · earnings yield {_f(ey,2,pct=True,lo=-50,hi=50)}")
+            L.append(f"- **ROE = {_f(roe,1,pct=True,lo=-100,hi=100)}** — how hard the equity works "
+                     "(profit ÷ net worth). For a lender this is the number the P/B has to be earned "
+                     "against: a rich P/B on a mediocre ROE is a warning; a fair P/B on a high, "
+                     "stable ROE is the sweet spot.")
         if snap.get("note"):
-            L.append(f"  - ⚠ {snap['note']}")
+            L.append(f"- ⚠ _{snap['note']}_")
     # own-history percentile band on the lens's primary multiple (more intuitive than median)
     if not hist.empty:
         col = "pb" if lens == "financial" else "pe"
@@ -570,40 +668,23 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  f"({n_peers} peer{'s' if n_peers != 1 else ''} with comparable P/E) — "
                  "sector percentile omitted; see the peer table below")
 
-    # peer comparison table (target ◄ vs sector peers that have data)
-    pcols = ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"]
-    prows = []
-    for ps in [symbol, *sector.peers(con, symbol)]:
-        r = quant._ratios(con, ps, consolidated)
-        if not r:
-            continue
-        prows.append([ps + (" ◄" if ps == symbol else "")] + [_f(r.get(c), 1) for c in pcols])
-        if len(prows) >= 8:
-            break
-    if len(prows) >= 2:
-        # blank lines around the table so the following "## 11." renders as a heading
-        # (a table glued straight to a heading makes the renderer swallow the '##')
-        L += ["", "### Peer comparison", "", _table(["Company"] + pcols, prows), ""]
+    # peer comparison — grouped into large / mid / small cap, companies by name (target ◄)
+    L += _peer_comparison(con, symbol, consolidated)
     L += [
         "",
-        "**How to read the valuation numbers:**",
-        "- **P/E (price ÷ trailing-12-month EPS)** — rupees paid for ₹1 of yearly profit. Lower "
-        "looks cheaper, but a low P/E can flag a cyclical peak or a value trap; it's only "
-        "meaningful against the stock's *own* history and its peers, never in isolation.",
-        "- **P/B (price ÷ book value per share)** — rupees paid for ₹1 of net worth. The primary "
-        "lens for banks/NBFCs, where it must be paired with **ROE** — a rich P/B is justified only "
-        "by a durably high ROE.",
-        "- **Earnings yield (1 ÷ P/E)** — profit as a % of the price you pay; compare it to the "
-        "~7% 10-year government-bond yield, your risk-free alternative.",
-        "- **EV/EBITDA** — enterprise value (market cap **+** net debt) per ₹1 of operating profit; "
-        "it strips out leverage, so it's the fair lens for capital-heavy / cyclical names — judge "
-        "it on **mid-cycle** margins, not a single peak or trough year.",
-        "- **Own-history percentile** — where today's multiple sits within the stock's own range: "
-        "**< 35th = cheap**, **> 65th = rich**, relative to itself (more intuitive than a median).",
-        "- **Forward multiple** — the same ratio on management's *guided* next-year profit; shown "
-        "only when guidance is explicit, so it's a real signpost rather than a projection we invented.",
-        "- The **Lens** line auto-selects the metric most appropriate to this company's sector "
-        "(financial → P/B-on-ROE · cyclical → EV/EBITDA · everything else → P/E).",
+        "**How to read the valuation numbers.** "
+        "The three multiples above each answer a different question, and none of them means much "
+        "in isolation — a number only becomes cheap or dear next to the company's own history and "
+        "its peers. Beyond the multiples themselves, two supporting reads matter. The "
+        "**own-history percentile** places today's multiple within the stock's own past range, "
+        "which is more intuitive than a raw median: below the 35th percentile is cheap relative to "
+        "itself, above the 65th is rich. The **forward multiple**, when it appears, is the same "
+        "ratio computed on the profit management has *explicitly guided* for next year — it shows "
+        "up only when there is real guidance to anchor it, so it is a genuine signpost rather than "
+        "a projection we invented. Finally, the **valuation lens** named above is chosen "
+        "automatically from the company's sector, because the fair yardstick differs by business: "
+        "P/B-on-ROE for financials, EV/EBITDA on mid-cycle margins for asset-heavy cyclicals, and "
+        "P/E for everything else.",
         "",
     ]
 
@@ -654,21 +735,23 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
             L.append(f"- _{inp.note.strip()}_")
     L += [
         "",
-        "**How to read this section:**",
-        "- A **DCF** values a business as the present value of all the cash it will hand its owners "
-        "over time. Rather than *guess* that cash, the **reverse-DCF** flips the question — it "
-        "solves for the growth rate today's *price* already assumes, then asks whether that bar is "
-        "realistic next to what the company has actually delivered. That's the robust read, so it "
-        "leads: clear the implied bar and the stock is cheap; fall short and it's rich.",
-        "- The **Monte-Carlo FCFF-DCF** runs thousands of scenarios (varying growth, margin and "
-        "discount rate) to produce an intrinsic-value **range**, not a single number. **Margin of "
-        "safety** is how far the price sits *below* that range — your cushion for being wrong; a "
-        "price *above* the range means you're paying a premium with no cushion.",
-        "- **WACC** is the blended cost of the company's debt + equity (the discount rate); "
-        "**terminal growth** is the modest rate cash is assumed to grow at forever after the "
-        "forecast. For lenders and deeply cyclical / capex-heavy names a point DCF is unreliable, "
-        "so there the reverse-DCF and the §10 multiples carry the weight.",
-        "- _DCF is assumption-driven — read the distribution/range, not a point estimate._",
+        "**How to read this section.** "
+        "A discounted-cash-flow (DCF) values a business as the present value of all the cash it "
+        "will hand its owners over time. Rather than *guess* that future cash, the reverse-DCF "
+        "flips the question — it solves for the growth rate today's *price* already assumes, then "
+        "asks whether that bar is realistic next to what the company has actually delivered. That "
+        "is the more robust read, which is why it leads: if the company can clear the implied bar "
+        "the stock is cheap, and if it cannot, the stock is rich. The Monte-Carlo cross-check does "
+        "the opposite — it runs thousands of scenarios, varying growth, margin and the discount "
+        "rate, to produce an intrinsic-value *range* rather than a single false-precision number; "
+        "the margin of safety is simply how far the current price sits below that range (your "
+        "cushion for being wrong), and a price above the range means you are paying a premium with "
+        "no cushion at all. Two inputs drive it: WACC is the blended cost of the company's debt and "
+        "equity (the rate future cash is discounted at), and terminal growth is the modest rate "
+        "that cash is assumed to compound at forever after the explicit forecast. For lenders and "
+        "deeply cyclical or capex-heavy names a point-estimate DCF is unreliable, so there the "
+        "reverse-DCF and the §10 multiples carry the weight — and in every case a DCF is "
+        "assumption-driven, so read the range, never a single point.",
     ]
     L.append("")
 
@@ -684,21 +767,24 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     if zs.get("ratios"):
         rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _f(v["z"], 2)]
                 for k, v in zs["ratios"].items()]
+        # blank line BEFORE the table so markdown parses it as a table, not inline pipe-text
         L += [f"- Sector-relative z-scores ({zs.get('industry', '?')}, vs {len(rows)} ratios over peers):",
-              _table(["Ratio", "Value", "Peer mean", "z"], rows)]
+              "", _table(["Ratio", "Value", "Peer mean", "z"], rows), ""]
     else:
         L.append(f"- Sector z-scores: {zs.get('note', 'n/a')}.")
     L += [
         "",
-        "**How to read this section:**",
-        "- **Benford's Law** — in large sets of naturally occurring financial figures the *leading* "
-        "digit isn't uniform: a **1** starts a number ~30% of the time, a 9 only ~5%. **MAD** "
-        "(mean absolute deviation) measures how far the reported numbers stray from that expected "
-        "shape — **low = conforms** (looks natural), **high = numbers look 'engineered'**. It's a "
-        "soft flag to dig into, never proof of anything on its own.",
-        "- **Sector z-scores** put each ratio in **standard deviations from the peer average**: "
-        "**|z| < 1** is in line with peers, **> 2** is a genuine outlier. A high z reads as "
-        "**good** for ROE/ROCE/margins, **expensive** for P/E·P/B, and **more levered** for D/E.",
+        "**How to read this section.** "
+        "Benford's Law observes that in large sets of naturally occurring financial figures the "
+        "*leading* digit is not uniform: a 1 starts a number about 30% of the time and a 9 only "
+        "about 5%. The MAD (mean absolute deviation) score measures how far the company's reported "
+        "numbers stray from that expected shape — a low MAD means they conform and look natural, "
+        "while a high MAD means the numbers look 'engineered'. It is only ever a soft flag to dig "
+        "into, never proof of anything on its own. The sector z-scores then place each of the "
+        "company's ratios in standard deviations from the peer average: within one standard "
+        "deviation is in line with peers, while beyond two is a genuine outlier. Read the direction "
+        "with the metric — a high z-score is good for ROE, ROCE and margins, reads as expensive for "
+        "P/E and P/B, and means more leverage for debt-to-equity.",
     ]
     L.append("")
 
@@ -709,16 +795,16 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
               f"RSI {_f(ts['rsi14'],0)} · {_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
               f"- Signals: {', '.join(ts['signals'])}",
               "",
-              "**How to read this section:**",
-              "- **SMA 20 / 50 / 200** are the average closing prices over the last 20, 50 and 200 "
-              "trading days — smoothing daily noise to reveal the trend. Price **above the 200-day** "
-              "signals a long-term uptrend; the **50-day crossing above the 200-day** is a bullish "
-              "'**golden cross**' regime (the reverse is a bearish '**death cross**').",
-              "- **RSI(14)** measures momentum on a 0–100 scale: **> 70 overbought**, **< 30 "
-              "oversold**, **~40–60 neutral**.",
-              "- **% from 52-week high** shows how far the stock has pulled back from its peak.",
-              "- Technicals describe price **behaviour and timing** — they complement, never "
-              "replace, the fundamentals and valuation above."]
+              "**How to read this section.** "
+              "The SMA 20, 50 and 200 are the average closing prices over the last 20, 50 and 200 "
+              "trading days, smoothing out daily noise to reveal the underlying trend: a price "
+              "above the 200-day average signals a long-term uptrend, and the 50-day crossing above "
+              "the 200-day is a bullish 'golden cross' regime (the reverse being a bearish 'death "
+              "cross'). RSI(14) measures momentum on a 0–100 scale, where above 70 is overbought, "
+              "below 30 is oversold, and roughly 40–60 is neutral. The '% from 52-week high' shows "
+              "how far the stock has pulled back from its recent peak. Taken together, technicals "
+              "describe price behaviour and timing — they complement, never replace, the "
+              "fundamentals and valuation above."]
 
     L += ["", "## 14. Notes"]
     if sector.is_order_driven(industry):     # only relevant to order-book-driven businesses
