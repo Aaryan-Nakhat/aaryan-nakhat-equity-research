@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import holdco, investors, screener  # noqa: E402
+from equity_research.analysis import holdco, investors, screener, smallcap  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
@@ -476,8 +476,9 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 # ----------------- screeners (idea generation) -----------------
 def _screen_query(subject: str) -> str | None:
-    """Parse a screener request → 'holdco' | 'investors' | 'value' (default), or None if not
-    a screen. Accepts 'screen: holdco', 'screen: investors', 'screen: value', bare 'screen'."""
+    """Parse a screener request → 'holdco' | 'investors' | 'smallcap' | 'value' (default), or None
+    if not a screen. Accepts 'screen: holdco', 'screen: investors', 'screen: smallcap',
+    'screen: value', bare 'screen'."""
     m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
     if not m:
         return None
@@ -486,6 +487,8 @@ def _screen_query(subject: str) -> str | None:
         return "holdco"
     if val in ("investors", "investor", "hni", "hnis", "marquee", "bigbull", "big bull"):
         return "investors"
+    if val in ("smallcap", "smallcaps", "small cap", "small-cap", "capex", "smallcap capex"):
+        return "smallcap"
     return "value"
 
 
@@ -550,6 +553,45 @@ def _send_fundamental_screen(req: EmailRequest) -> None:
                         html=emailer.body_html(md, "Screen — value"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent fundamental screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_smallcap_screen(req: EmailRequest) -> None:
+    """Capex-led small-cap discovery screen → a numbered list; reply a number → deep report."""
+    log.info("running small-cap screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — hunting strong small-caps (₹1,000–10,000 cr) led by the "
+                     "**capex cycle**, with traps gated out. ~1–2 min; the ranked list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: smallcap.smallcap_screen(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The small-cap screen timed out this time — please resend `screen: smallcap`.")
+        return
+    if not rows:
+        _reply_text(req, "No small-caps scored yet — the small-cap universe's financials may not be "
+                         "ingested. Run `backfill_universe.py --seed-smallcaps --only-missing` first.")
+        return
+    table = _md_table(
+        ["#", "Symbol", "Company", "Score", "M-cap", "Capex", "Why"],
+        [[i, r["symbol"], r["name"][:26], f"{r['composite']:.1f}", f"{r['mcap']:,.0f}",
+          (f"{r['capex_growth']:.1f}×" if r.get("capex_growth") else "—"), r["why"]]
+         for i, r in enumerate(rows, 1)],
+        align="rllrrll")
+    md = ("**🚀 Small-cap capex-cycle screen — ₹1,000–10,000 cr**\n\n"
+          "Composite 0-100: **30% capex cycle** (capex vs its 3y base · capex÷depr · self-funded) · "
+          "25% capital efficiency (ROCE & trend) · 20% cash/balance-sheet · 15% forensic · "
+          "10% smart-money — with near-distress / manipulation / heavy-pledge / shrinking-revenue "
+          "names **gated out**. Valuation shown for context, not scored. "
+          "**Reply with a number for that stock's full deep report.**\n\n"
+          + table + "\n\n"
+          f"_The screen finds; your reply diligences. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
+    _set_pending(req, "screen:smallcap", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Screen — small-cap capex"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent small-cap screen (%d names) to %s", len(rows), req.sender)
 
 
 def _send_holdco_screen(req: EmailRequest) -> None:
@@ -830,13 +872,15 @@ def handle_request(req: EmailRequest) -> None:
         _send_investor(nq, req)
         return
 
-    # 1e) explicit screener ('screen: value' / 'screen: holdco' / 'screen: investors' / bare)
+    # 1e) explicit screener ('screen: value' / 'holdco' / 'investors' / 'smallcap' / bare)
     sq = _screen_query(req.subject)
     if sq:
         if sq == "holdco":
             _send_holdco_screen(req)
         elif sq == "investors":
             _send_investor_screen(req)
+        elif sq == "smallcap":
+            _send_smallcap_screen(req)
         else:
             _send_fundamental_screen(req)
         return

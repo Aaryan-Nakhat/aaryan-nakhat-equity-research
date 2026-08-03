@@ -31,8 +31,13 @@ from equity_research.ingest import (  # noqa: E402
     ingest_annual_financials,
     ingest_equity_master,
     ingest_financials,
+    ingest_sector_map,
     ingest_shp_history,
 )
+
+# NSE small-cap index constituent lists to seed into sector_map so the small-cap
+# screener has a genuine "before anyone else" universe (Nifty-500 is all large/mid).
+_SMALLCAP_INDICES = ["niftysmallcap250", "niftymicrocap250"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s | %(message)s")
 log = logging.getLogger("backfill-universe")
@@ -51,10 +56,12 @@ def _universe(con, *, holdcos_only: bool, only_missing: bool) -> list[str]:
     if holdcos_only:
         syms = holdcos
     else:
-        n500 = [r[0] for r in con.execute(
-            "SELECT symbol FROM sector_map WHERE universe = 'NIFTY500' ORDER BY symbol").fetchall()]
-        seen = set(n500)                                    # Nifty-500 first, then extra holdcos
-        syms = n500 + [h for h in holdcos if h not in seen]
+        # every symbol tagged in sector_map (Nifty-500 + any small-cap universes seeded via
+        # --seed-smallcaps), then extra holdcos not already covered.
+        tagged = [r[0] for r in con.execute(
+            "SELECT DISTINCT symbol FROM sector_map ORDER BY symbol").fetchall()]
+        seen = set(tagged)
+        syms = tagged + [h for h in holdcos if h not in seen]
     if only_missing:                                        # skip symbols that already have financials
         have = {r[0] for r in con.execute("SELECT DISTINCT symbol FROM financials").fetchall()}
         syms = [s for s in syms if s not in have]
@@ -70,12 +77,21 @@ def main() -> None:
     ap.add_argument("--skip-financials", action="store_true", help="SHP only (faster)")
     ap.add_argument("--skip-shp", action="store_true", help="financials only")
     ap.add_argument("--quarters", type=int, default=4, help="SHP quarters to backfill")
+    ap.add_argument("--seed-smallcaps", action="store_true",
+                    help="first land Nifty Smallcap 250 + Microcap 250 into sector_map, then backfill them")
     args = ap.parse_args()
 
     con = connect()
     try:
         log.info("refreshing the listed master (EQUITY_L.csv)…")
         ingest_equity_master(con)
+        if args.seed_smallcaps:
+            for idx in _SMALLCAP_INDICES:
+                try:
+                    n = ingest_sector_map(con, idx)
+                    log.info("seeded %s into sector_map: %d constituents", idx, n)
+                except Exception:  # noqa: BLE001 — one index list failing shouldn't abort
+                    log.exception("failed to seed %s", idx)
         syms = _universe(con, holdcos_only=args.holdcos_only, only_missing=args.only_missing)
         if args.limit:
             syms = syms[: args.limit]

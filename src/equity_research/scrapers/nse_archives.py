@@ -65,8 +65,16 @@ _CONSTITUENTS = "https://nsearchives.nseindia.com/content/indices/ind_{index}lis
 
 def fetch_constituents(index: str = "nifty500") -> pd.DataFrame:
     """Index constituents with industry classification (Company Name, Industry,
-    Symbol, Series, ISIN Code). ``index`` e.g. 'nifty500', 'nifty50'."""
-    raw = fetch_bytes(_CONSTITUENTS.format(index=index))
+    Symbol, Series, ISIN Code). ``index`` e.g. 'nifty500', 'niftysmallcap250'.
+
+    NSE is inconsistent about the filename: most are ``ind_<index>list.csv`` but a few
+    (e.g. Nifty Microcap 250) insert an underscore — ``ind_<index>_list.csv``. Try the
+    canonical form first, fall back to the underscore variant on a 404.
+    """
+    try:
+        raw = fetch_bytes(_CONSTITUENTS.format(index=index))
+    except Exception:                                   # noqa: BLE001 — retry the underscore variant
+        raw = fetch_bytes(_CONSTITUENTS.format(index=f"{index}_"))
     return pd.read_csv(io.BytesIO(raw))
 
 

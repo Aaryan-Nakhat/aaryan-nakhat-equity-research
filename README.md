@@ -44,10 +44,15 @@ Personal use. Not a hosted product.
   listed holding companies whose disclosed listed-stake NAV exceeds their own market cap, ranked by
   discount. **Email `screen: investors`** / **`investor: <name>`** → track ~25 **marquee investors**
   (Jhunjhunwala, Mukul Agrawal, Kedia, …) across the shareholding data — each one's disclosed book
-  and what they entered / added / trimmed / exited last quarter. Every list is a real table; a
-  **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas across all three.
-  `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `screen_digest.py`; seed
-  once with `scripts/backfill_universe.py`.
+  and what they entered / added / trimmed / exited last quarter. **Email `screen: smallcap`** → the
+  **capex-led small-cap hunt**: names in ₹1,000–10,000 cr ranked on a capex-cycle-first composite
+  (capex vs its 3y base · capex ÷ depreciation · self-funded · ROCE & trend · cash quality · smart-money),
+  with near-distress / manipulation / heavy-pledge / shrinking-revenue traps **gated out** — built to
+  catch a structural capex boom *before* the P&L re-rates. Every list is a real table; a
+  **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas.
+  `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `analysis/smallcap.py`,
+  `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the
+  Nifty Smallcap 250 + Microcap 250 universe that gives `screen: smallcap` its edge).
 - **Report** — LLM reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
