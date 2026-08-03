@@ -6,6 +6,7 @@ on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 
@@ -27,6 +28,25 @@ from equity_research.reports.synthesize import (business_overview, extract_guida
 from equity_research.scrapers import ipo, nse_api
 
 CR = 1e7
+log = logging.getLogger("equity-research")
+
+
+def _detect_share_action(con: duckdb.DuckDBPyConnection, symbol: str,
+                         consolidated: bool) -> dict | None:
+    """Best-effort: has ``symbol`` done a **bonus/split with an ex-date after the FY-end
+    of the share count** used for market cap? If so the P/E, P/B, market cap and DCF are
+    computed on the pre-action count and read slightly off — the deep report flags it (but
+    still shows the numbers as-is). Returns the action dict or ``None``. Never raises — a
+    live-feed hiccup must not break the report."""
+    try:
+        fy_end = valuation.snapshot(con, symbol, consolidated).get("shares_fy_end")
+        if not fy_end:
+            return None
+        rows = nse_api.corporate_actions_symbol(symbol)
+        return valuation.detect_share_action(rows, fy_end)
+    except Exception:  # noqa: BLE001 — degrade to no-flag, never break the report
+        log.exception("share-action detection failed for %s", symbol)
+        return None
 
 
 def _last_fy_end() -> date:
@@ -287,9 +307,10 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
             _ensure_peer_financials(con, symbol)   # populate peers so §10's table is real
         basis = consolidated if consolidated is not None else _prefer_consolidated(con, symbol)
         if deep:
+            share_action = _detect_share_action(con, symbol, basis) if have else None
             brief = build_deep_brief(con, symbol, consolidated=basis,
                                      target_shares=target_shares, guidance=guidance,
-                                     overview=overview)
+                                     overview=overview, share_action=share_action)
         else:
             brief = build_brief(con, symbol, consolidated=basis, target_shares=target_shares)
     finally:
