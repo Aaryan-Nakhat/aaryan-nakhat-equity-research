@@ -523,6 +523,22 @@ text that collapsed on phones.
   trimmed / exited, ≥0.5pp/0.5% floor); `investor: <name>` shows **one person's disclosed book +
   moves**. Only holders **named** in the SHP (≥~1%) are visible; an exit can be a full sale or a trim
   below the disclosure floor; coverage = SHP universe ingested.
+- **`screen: smallcap`** (aliases `screen: capex`, `small-cap`) → `analysis/smallcap.py` finds **strong
+  small-caps early, led by the capex cycle** — the thesis being that committed **capex leads revenue by
+  1-2 years**, so a capex boom is the earliest structural tell before the P&L re-rates. Universe = every
+  symbol with financials whose **market cap sits in ₹1,000–10,000 cr** and that discloses ≥2y of capex
+  (the band, not an index tag, defines eligibility, so backfilled small-caps auto-appear). It **hard-gates
+  the traps out first** (Altman near-distress · Beneish manipulator · promoter pledge >25% · revenue
+  shrinking vs 2y ago), then ranks a composite: **30% capex cycle** (capex vs its own 3y base · capex ÷
+  depreciation · rising capex/sales · self-funded = CFO covers capex) · **25% capital efficiency** (ROCE
+  level *and* trend · EBITDA-margin expansion) · **20% cash & balance sheet** (CFO/PAT · low D/E · interest
+  cover) · **15% forensic** (reuses `screener._forensic_raw`) · **10% smart money** (promoter holding · net
+  institutional accumulation from the QoQ ownership diff). Each metric is rank-normalised within the cohort;
+  **valuation is deliberately *not* weighted** (shown for context only — forcing "cheap" filters out the
+  quality compounders this screen exists to catch early). Reply a number → that name's deep report.
+  **Coverage note:** the real edge needs a small-cap universe — `backfill_universe.py --seed-smallcaps`
+  lands **Nifty Smallcap 250 + Microcap 250** into `sector_map` and backfills them; until then the band
+  is only the small end of the Nifty-500.
 
 **Weekly digest** (`src/equity_research/screen_digest.py`, `email_bot.maybe_screen_digest`): once per
 ISO week (Saturday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
@@ -532,11 +548,17 @@ entering the top-15 or climbing ≥10 ranks, a tracked investor's fresh moves. F
 re-surfaces the deltas); if nothing crossed a threshold, **no email**. The fundamental screen sorts
 `(-composite, symbol)` so ranks are deterministic and the deltas don't jitter on ties.
 
-**Seeding** (`scripts/backfill_universe.py`, one-time, idempotent/resumable): for the Nifty-500 +
-a curated holdco list it lands **financials** (`ingest_financials`/`_annual` → shares for market cap
-+ forensic inputs) and **4 quarters of SHP** (`ingest_shp_history` → holder tables for the holdco
-reverse-index and the ownership diff). Run it once (bot **stopped** first — single-writer DuckDB):
-`uv run python scripts/backfill_universe.py` (`--holdcos-only` for a fast holdco-only seed).
+**Seeding** (`scripts/backfill_universe.py`, one-time, idempotent/resumable): for **every universe
+tagged in `sector_map`** + a curated holdco list it lands **financials** (`ingest_financials`/`_annual`
+→ shares for market cap + forensic inputs) and **4 quarters of SHP** (`ingest_shp_history` → holder
+tables for the holdco reverse-index and the ownership diff). Run it once (bot **stopped** first —
+single-writer DuckDB): `uv run python scripts/backfill_universe.py` (`--holdcos-only` for a fast
+holdco-only seed). **`--seed-smallcaps`** first lands **Nifty Smallcap 250 + Microcap 250** (via
+`ingest_sector_map`; NSE's microcap CSV uses an underscore filename, handled by a fallback in
+`nse_archives.fetch_constituents`) into `sector_map`, then backfills them — the genuine "before anyone
+else" universe for `screen: smallcap` (Nifty-500 is all large/mid). Pair with **`--only-missing`** to
+skip the already-ingested Nifty-500 and do just the ~500 new small-cap names. This is a multi-hour
+browser-tier run — launch it as a Windows scheduled task with the bot stopped, per the ingest note.
 
 ## Status / follow-ups
 
