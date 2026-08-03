@@ -106,6 +106,19 @@ of a bare "no financials" message.
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
 
+**Stale-share-count flag (auto-detected).** Rather than only warning generically that a
+corporate action *could* have happened, the deep report now **checks**: `pipeline._detect_share_action`
+pulls the symbol's NSE corporate-action feed (`nse_api.corporate_actions_symbol`) and
+`valuation.detect_share_action` finds the most recent **bonus/split whose ex-date falls *after* the
+FY-end of the share count** used for market cap (dividends/buybacks are ignored — they don't change
+the count). If one is found, §10 leads with a **⚠️ "share count may be stale"** banner naming the
+action, its ratio and ex-date, and §11 repeats a one-line DCF caveat — because the market cap, P/E,
+P/B and the per-share DCF are all computed on the pre-action count until the next annual XBRL is filed.
+**The numbers are still computed and shown unchanged** (the flag is an indicator, not a suppressor);
+resend with an explicit share count to correct them. Self-clearing: once the annual filing that
+reflects the action is ingested, the ex-date is no longer *after* the FY-end, so the banner disappears
+with no false positives (verified on BAJFINANCE: flagged against FY-2025, silent against FY-2026).
+
 ### Quant valuation & statistical forensics (`analysis/quant.py`)
 
 The deep brief also carries a quant layer (numpy-only, assumption-driven):

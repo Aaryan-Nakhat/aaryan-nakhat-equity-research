@@ -12,7 +12,7 @@ the output; pass ``shares_override`` to correct it.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import duckdb
 import numpy as np
@@ -100,12 +100,56 @@ def snapshot(con: duckdb.DuckDBPyConnection, symbol: str,
         "price": price,
         "price_date": price_date,
         "shares_cr": sh / CR,
+        "shares_fy_end": a.index[-1].date(),   # FY-end the share count is taken from
         "market_cap_cr": mcap / CR,
         "pe_ttm": mcap / ttm_net if ttm_net == ttm_net and ttm_net else np.nan,
         "pb": mcap / eq if eq and eq == eq else np.nan,
         "earnings_yield_%": 100 * ttm_net / mcap if ttm_net == ttm_net else np.nan,
         "note": note if shares_override is None else "",
     }
+
+
+# Bonus/split keywords in NSE corporate-action subjects (a buyback/dividend never
+# changes the share count the way these do, so only these two make the snapshot stale).
+_BONUS_KW = ("bonus",)
+_SPLIT_KW = ("split", "sub-division", "subdivision", "sub division", "face value split")
+
+
+def _parse_ca_date(s) -> date | None:
+    for fmt in ("%d-%b-%Y", "%d-%b-%y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(s).strip(), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def detect_share_action(actions, fy_end) -> dict | None:
+    """The most recent **bonus / split** whose ex-date falls *after* ``fy_end`` — the
+    FY-end of the share count used for market cap. Such an action isn't yet in the filed
+    share capital, so the stored share count (and the P/E, P/B, market cap and DCF derived
+    from it) reads slightly off until the next annual XBRL. Returns
+    ``{kind, subject, ex_date, fy_end}`` or ``None``. Pure — takes already-fetched NSE
+    corporate-action rows (``subject`` / ``exDate``), does no I/O, never raises.
+    """
+    if not actions or fy_end is None:
+        return None
+    if hasattr(fy_end, "date"):                    # pandas Timestamp / datetime → date
+        fy_end = fy_end.date()
+    best: dict | None = None
+    for r in actions if isinstance(actions, list) else []:
+        subj = str((r or {}).get("subject") or "")
+        low = subj.lower()
+        kind = ("Bonus issue" if any(k in low for k in _BONUS_KW)
+                else "Stock split" if any(k in low for k in _SPLIT_KW) else None)
+        if not kind:
+            continue
+        ex = _parse_ca_date((r or {}).get("exDate"))
+        if ex is None or ex <= fy_end:
+            continue
+        if best is None or ex > best["ex_date"]:
+            best = {"kind": kind, "subject": subj.strip(), "ex_date": ex, "fy_end": fy_end}
+    return best
 
 
 def market_cap(con: duckdb.DuckDBPyConnection, symbol: str,

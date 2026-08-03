@@ -305,7 +305,8 @@ def _cover(ebit, fin) -> str:
 
 def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      consolidated: bool = False, target_shares: float | None = None,
-                     guidance: dict | None = None, overview: str | None = None) -> str:
+                     guidance: dict | None = None, overview: str | None = None,
+                     share_action: dict | None = None) -> str:
     af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
     label = "consolidated" if consolidated else "standalone"
     L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
@@ -594,6 +595,15 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     lens = sector.valuation_lens(industry)
     evd = valuation.ev_ebitda(con, symbol, consolidated, shares_override=target_shares)
     L += ["## 10. Valuation"]
+    if share_action:
+        sa = share_action
+        L += ["", f"> ⚠️ **Heads-up — the share count may be stale.** This company had a "
+              f"**{sa['kind'].lower()}** (_{sa['subject']}_, ex-date {sa['ex_date']:%d-%b-%Y}) "
+              f"**after** the FY-{sa['fy_end'].year} annual filing the share count is taken from. "
+              "Until the next annual XBRL is filed, the **market cap, P/E, P/B and the DCF in §11 "
+              "are computed on the pre-action share count** and therefore read slightly off. The "
+              "numbers below are still shown as-is (unadjusted) — mentally apply the "
+              "bonus/split ratio, or resend with an explicit share count to correct them.", ""]
     if snap:
         pe, pb, ey = snap.get("pe_ttm"), snap.get("pb"), snap.get("earnings_yield_%")
         ev_val = evd.get("ev_ebitda")
@@ -642,7 +652,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      "(profit ÷ net worth). For a lender this is the number the P/B has to be earned "
                      "against: a rich P/B on a mediocre ROE is a warning; a fair P/B on a high, "
                      "stable ROE is the sweet spot.")
-        if snap.get("note"):
+        if snap.get("note") and not share_action:   # the §10 banner is the stronger, specific version
             L.append(f"- ⚠ _{snap['note']}_")
     # own-history percentile band on the lens's primary multiple (more intuitive than median)
     if not hist.empty:
@@ -691,6 +701,10 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     # =============== VALUATION — WHAT THE PRICE IMPLIES (reverse-DCF first) ===============
     inp = quant.dcf_inputs(con, symbol, consolidated, shares_override=target_shares)
     L += ["## 11. Valuation — what the price implies (reverse-DCF)"]
+    if share_action:
+        L += ["", f"> ⚠️ _Per §10, a {share_action['kind'].lower()} after the filed share count "
+              "means the per-share DCF figures below are on the pre-action count — read the "
+              "intrinsic-value-per-share relative to the pre-action price, not today's._", ""]
     if inp.is_financial:
         L.append("- Reverse/forward-DCF is not meaningful for a lender/financial; rely on the "
                  "P/B-on-ROE and the peer comparison in §10." + (f" {inp.note}" if inp.note else ""))

@@ -228,6 +228,16 @@ def corporate_actions(index: str = "equities") -> Any:
     return fetch_api(f"/api/corporates-corporateActions?index={index}")
 
 
+def corporate_actions_symbol(symbol: str) -> Any:
+    """Corporate actions (bonus / split / dividend / buyback) for ONE symbol.
+
+    Same feed as ``corporate_actions`` but scoped to a symbol, so a report can cheaply
+    ask "has this name done a bonus/split lately?" without pulling the whole market. Rows
+    carry ``subject`` (e.g. 'Bonus 1:1'), ``exDate`` and ``series``.
+    """
+    return fetch_api(f"/api/corporates-corporateActions?index=equities&symbol={q(symbol)}")
+
+
 def _parse_pledge(data: Any) -> dict | None:
     """Latest promoter-pledge snapshot from /api/corporate-pledgedata.
 
