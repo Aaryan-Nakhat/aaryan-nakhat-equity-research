@@ -185,6 +185,53 @@ def _repr_js(s: str) -> str:
     return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
+def _browser_pick_and_fetch(page_url: str, link_pattern: str, pick, wait_ms: int = 6000
+                            ) -> tuple[str, bytes]:
+    """ONE browser session: open ``page_url``, collect anchor hrefs matching ``link_pattern``
+    (a JS regex source), let ``pick(links)`` choose one Python-side, then download THAT file
+    *in-page* via ``fetch()`` — which carries the tab's anti-bot clearance + same-origin
+    cookies, so it beats file servers that 503 a plain HTTP client. Doing both in a single
+    session avoids a second page load (which some AMC servers rate-limit with a 503).
+    Returns ``(chosen_url, bytes)`` — bytes ``b''`` on any failure. The file must be
+    same-origin as ``page_url`` (else the in-page fetch is CORS-blocked)."""
+    import base64
+    import json
+    from scrapling.fetchers import StealthyFetcher
+    js_links = ("() => { const re=new RegExp(" + _repr_js(link_pattern) + ",'i'); "
+                "return JSON.stringify([...new Set([...document.querySelectorAll('a[href]')]"
+                ".map(a=>a.href).filter(h=>re.test(h)))]); }")
+    js_fetch = ("async (u) => { const r=await fetch(u); if(!r.ok) return 'ERR '+r.status; "
+                "const b=new Uint8Array(await r.arrayBuffer()); let s=''; "
+                "for (let i=0;i<b.length;i++) s+=String.fromCharCode(b[i]); return btoa(s); }")
+    cap: dict = {}
+
+    def act(page):
+        try:
+            page.wait_for_timeout(wait_ms)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            links = json.loads(page.evaluate(js_links))
+        except Exception:  # noqa: BLE001
+            links = []
+        url = pick(links) if links else None
+        cap["url"] = url or ""
+        cap["d"] = page.evaluate(js_fetch, url) if url else ""
+        return page
+
+    try:
+        StealthyFetcher.fetch(page_url, headless=True, network_idle=True, page_action=act)
+    except Exception:  # noqa: BLE001
+        return "", b""
+    url, d = cap.get("url") or "", cap.get("d") or ""
+    if not d or d.startswith("ERR"):
+        return url, b""
+    try:
+        return url, base64.b64decode(d)
+    except Exception:  # noqa: BLE001
+        return url, b""
+
+
 # ---------------- per-AMC URL builders ----------------
 _PPFAS_URL = ("https://amc.ppfas.com/downloads/portfolio-disclosure/"
               "{y}/PPFAS_Monthly_Portfolio_Report_{mon}_{d}_{y}.xls")
@@ -215,10 +262,44 @@ def fetch_hdfc(as_of: date) -> tuple[str, list[dict]]:
     return _HDFC_PAGE, rows
 
 
+# Nippon posts ONE consolidated month-end workbook (sheet per scheme) on its disclosures
+# page, but the file server 503s a plain client — so we capture the link and fetch it
+# from inside the browser. Filenames vary in month spelling (Jun vs June), so match by date.
+_NIPPON_PAGE = ("https://mf.nipponindiaim.com/investor-service/downloads/"
+                "factsheet-portfolio-and-other-disclosures")
+
+
+def _nippon_link_date(ln: str) -> date | None:
+    m = re.search(r"MONTHLY-PORTFOLIO-(\d{1,2})-([A-Za-z]+)-(\d{2})\.xlsx?", ln, re.I)
+    if not m:
+        return None
+    mon = {mn[:3].lower(): i for i, mn in enumerate(_MONTHS) if mn}.get(m.group(2)[:3].lower())
+    if not mon:
+        return None
+    try:
+        return date(2000 + int(m.group(3)), mon, int(m.group(1)))
+    except ValueError:
+        return None
+
+
+def fetch_nippon(as_of: date) -> tuple[str, list[dict]]:
+    """Nippon India month-end holdings (one consolidated workbook, sheet per scheme)."""
+    me = _month_end(as_of)
+
+    def pick(links: list[str]) -> str | None:
+        dated = [(_nippon_link_date(ln), ln) for ln in links if _nippon_link_date(ln)]
+        exact = [ln for d, ln in dated if d == me]
+        return exact[0] if exact else (max(dated)[1] if dated else None)
+
+    url, raw = _browser_pick_and_fetch(_NIPPON_PAGE, r"NIMF-MONTHLY-PORTFOLIO", pick, wait_ms=7000)
+    return (url, parse_generic(_load_xlsx(raw))) if raw else (url, [])
+
+
 # AMC display-name (as in ``mf_scheme.amc``) -> fetcher(as_of) -> (url, rows)
 REGISTRY = {
     "PPFAS Mutual Fund": fetch_ppfas,
     "HDFC Mutual Fund": fetch_hdfc,
+    "Nippon India Mutual Fund": fetch_nippon,
 }
 
 

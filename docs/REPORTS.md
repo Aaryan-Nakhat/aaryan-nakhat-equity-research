@@ -432,7 +432,7 @@ in the subject → the bot resolves the name to an AMFI Direct-Growth scheme
   NSE `ind_close_all` archive, 404 = holiday, idempotent `only_missing`), so alpha/beta is a
   multi-cycle read; the daily scan keeps it current.
 - **Category percentile** — rank vs same-category Direct-Growth peers (best-effort).
-- **Portfolio** (where `mf_holdings` coverage exists — PPFAS + HDFC live): # holdings, top-10
+- **Portfolio** (where `mf_holdings` coverage exists — PPFAS · HDFC · Nippon India live): # holdings, top-10
   concentration, biggest sector, top holdings, **watchlist overlap**, and **month-over-month
   churn** (`funds.holdings_churn`) — what the manager **bought / exited / added / trimmed**
   between the two latest SEBI monthly disclosures, **equity-only** (CDs / T-bills / TREPS that
