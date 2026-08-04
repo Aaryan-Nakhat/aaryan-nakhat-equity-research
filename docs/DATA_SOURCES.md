@@ -141,7 +141,7 @@ mutual-fund module (`scrapers/amfi.py`).
 | Historical NAV (`DownloadNAVHistoryReport_Po.aspx?frmdt=&todt=&mf=`) | 🟢 | Per-AMC over a date range; **caps the range** (wide ranges return empty) → fetch in ~180-day windows. `mf` = AMFI numeric AMC code. |
 | AMC name → numeric code map | 🟢 | 55 active AMCs from the disclosure page's `RssNAV.aspx?mf=N` links; resolved to names via the history report header. Needed to backfill a fund by name (`mf_amc`). |
 | Scheme TER / expense ratio | 🟢 | Monthly AMFI disclosure (for fund-report enrichment — later). |
-| Monthly scheme portfolio holdings | 🟡 | **Not** consolidated on AMFI — SEBI-mandated but published **per-AMC** as XLSX. A **generic SEBI-format parser** (header-detecting) + a per-AMC fetcher registry (`scrapers/mf_holdings.py`); coverage grows one AMC at a time. Live: **PPFAS** (one workbook, sheet/scheme) + **HDFC** (direct-CDN file per scheme, listed on a JS page). |
+| Monthly scheme portfolio holdings | 🟡 | **Not** consolidated on AMFI — SEBI-mandated but published **per-AMC** as XLSX. A **generic SEBI-format parser** (header-detecting) + a per-AMC fetcher registry (`scrapers/mf_holdings.py`); coverage grows one AMC at a time. Live: **PPFAS** (one workbook, sheet/scheme) · **HDFC** (direct-CDN file per scheme, listed on a JS page) · **Nippon India** (one consolidated workbook; its file server 503s a plain client, so the link is captured and the file is fetched **in-browser** — `_browser_pick_and_fetch` — which carries the tab's anti-bot clearance). Scheme sheets map to AMFI Direct-Growth `scheme_code` via `ingest._match_scheme`. |
 
 *MF-holding-per-stock note:* NSE's SHP **summary**
 (`/api/NextApi/apiClient/GetQuoteApi?functionName=getShareholdingPattern&symbol=X`) only

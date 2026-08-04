@@ -27,7 +27,7 @@ Personal use. Not a hosted product.
   **benchmark-relative alpha/beta/up-down-capture/tracking-error** vs the category's index
   (~5y history backfilled from NSE archives) · category percentile · and a **LLM verdict**
   (Buy/Accumulate/Hold/Switch/Avoid). Where the AMC's SEBI monthly **holdings** are covered
-  (`mf_holdings`, a generic SEBI-format parser over a per-AMC fetch registry — **PPFAS + HDFC**):
+  (`mf_holdings`, a generic SEBI-format parser over a per-AMC fetch registry — **PPFAS, HDFC, Nippon India**):
   portfolio concentration · **watchlist overlap** · and **month-over-month churn** (what the
   manager actually bought/exited). Broader AMC coverage + forensic look-through are next
   (see [`docs/PLAN.md`](docs/PLAN.md)).
