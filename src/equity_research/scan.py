@@ -528,6 +528,28 @@ def _pos_label(pos: float | None) -> str:
     return f"{pos:.0f}% of 52w range"
 
 
+def _annotate_types(items: list[dict], tmap: dict[str, str]) -> list[dict]:
+    """Tag each mover/upcoming dict with its watchlist bucket ('holding'|'tracking')."""
+    for it in items or []:
+        it["list_type"] = tmap.get(it.get("symbol"), "holding")
+    return items or []
+
+
+def _grouped_by_type(items: list[dict]) -> list[tuple[str | None, list[dict]]]:
+    """Split into (label, sublist) groups — *Your Holdings* then *Your Tracking List* —
+    preserving each item's order. If nothing is tracked, one unlabelled group (a flat list),
+    so a pure-holdings watchlist reads exactly as before."""
+    hold = [x for x in items if x.get("list_type", "holding") != "tracking"]
+    track = [x for x in items if x.get("list_type", "holding") == "tracking"]
+    if not track:
+        return [(None, items)]
+    groups: list[tuple[str | None, list[dict]]] = []
+    if hold:
+        groups.append(("📁 Your Holdings", hold))
+    groups.append(("👀 Your Tracking List", track))
+    return groups
+
+
 def format_digest(date_str: str, sr: ScanResult) -> str:
     """Build the digest markdown — Upcoming events, a per-stock Movers snapshot,
     and Events (with any inline filing analysis), all by company name (ticker in
@@ -540,14 +562,16 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
 
     if upcoming:
         rows = ["## 📅 Upcoming"]
-        for u in upcoming:
-            nm = names.get(u["symbol"]) or u["symbol"]
-            rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
+        for label, grp in _grouped_by_type(upcoming):
+            if label:
+                rows += ["", f"### {label}", ""]
+            for u in grp:
+                nm = names.get(u["symbol"]) or u["symbol"]
+                rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
         parts.append("\n".join(rows))
 
     if movers:
-        rows = ["## Movers (today)"]
-        for m in movers:
+        def _mline(m):
             pc = m["chg_pct"]
             emo = "🟢" if pc and pc > 0 else "🔴" if pc and pc < 0 else "⚪"
             chg = f"{pc:+.1f}%" if pc is not None else "n/a"
@@ -562,8 +586,13 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
                     val += f" ({rel} 5y-med {med:.0f})"
             elif m.get("pe_note"):                      # explain why there's no P/E
                 val = f" · P/E n/a ({m['pe_note']})"
-            rows.append(f"- {emo} **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
-                        f"{chg} · {deliv}{tail}{val}")
+            return (f"- {emo} **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
+                    f"{chg} · {deliv}{tail}{val}")
+        rows = ["## Movers (today)"]
+        for label, grp in _grouped_by_type(movers):
+            if label:
+                rows += ["", f"### {label}", ""]
+            rows += [_mline(m) for m in grp]
         parts.append("\n".join(rows))
 
     if results:
@@ -735,12 +764,14 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
             _safe(lambda: _fii_futures_line(positioning.fii_index_futures(con)), ""),
             _safe(lambda: _money_lines(usd, comm), ""),   # USD/INR + live commodities
         ) if x)
+        tmap = watchlist.type_map(con)
         return IntradayResult(
-            movers=_safe(lambda: _intraday_movers(syms, quotes), []),
+            movers=_annotate_types(_safe(lambda: _intraday_movers(syms, quotes), []), tmap),
             filings=_safe(lambda: _intraday_filings(anns, names), []),
             insider=_safe(lambda: _intraday_insider(insider), []),
             market=market,
-            upcoming=_safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
+            upcoming=_annotate_types(
+                _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
             asof=datetime.now(_IST),
         )
     finally:
@@ -757,21 +788,28 @@ def format_intraday_digest(sr: IntradayResult) -> str:
         parts.append(sr.market)
     if sr.upcoming:
         rows = ["## 📅 Upcoming"]
-        for u in sr.upcoming:
-            nm = names.get(u["symbol"]) or u["symbol"]
-            rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
+        for label, grp in _grouped_by_type(sr.upcoming):
+            if label:
+                rows += ["", f"### {label}", ""]
+            for u in grp:
+                nm = names.get(u["symbol"]) or u["symbol"]
+                rows.append(f"- **{nm}** ({u['symbol']}) — {u['date']:%d-%b}: {u['what']}")
         parts.append("\n".join(rows))
     if sr.movers:
-        rows = ["## Movers (live)"]
-        for m in sr.movers:
+        def _mline(m):
             pc = m.get("pchange")
             emo = "🟢" if pc and pc > 0 else "🔴" if pc and pc < 0 else "⚪"
             rng = (f" · day {_fmt_price(m['low'])}–{_fmt_price(m['high'])}"
                    if m.get("low") and m.get("high") else "")
             deliv = f" · deliv {m['deliv_pct']:.0f}%" if m.get("deliv_pct") is not None else ""
             pct = f"{pc:+.1f}%" if pc is not None else "n/a"
-            rows.append(f"- {emo} **{m['company']}** ({m['symbol']}) — "
-                        f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}")
+            return (f"- {emo} **{m['company']}** ({m['symbol']}) — "
+                    f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}")
+        rows = ["## Movers (live)"]
+        for label, grp in _grouped_by_type(sr.movers):
+            if label:
+                rows += ["", f"### {label}", ""]
+            rows += [_mline(m) for m in grp]
         parts.append("\n".join(rows))
     if sr.filings:
         rows = ["## Events (filed today)"]
@@ -865,10 +903,11 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             _safe(lambda: _fii_futures_line(positioning.fii_index_futures(con)), ""),
             _safe(lambda: _money_lines(usd, comm), ""),
         ) if x)
+        tmap = watchlist.type_map(con)
         return ScanResult(
             results,
-            _safe(lambda: watchlist_movers(con), []),
-            _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []),
+            _annotate_types(_safe(lambda: watchlist_movers(con), []), tmap),
+            _annotate_types(_safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
             market,
             insider=_safe(lambda: _insider_alerts(con, insider_by_sym), []),
             pending_state=pending,
