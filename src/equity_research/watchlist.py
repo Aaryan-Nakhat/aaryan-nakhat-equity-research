@@ -38,6 +38,12 @@ def entries_by_type(con: duckdb.DuckDBPyConnection, list_type: str) -> list[tupl
         f"SELECT symbol, company FROM watchlist WHERE {where} ORDER BY symbol", params).fetchall()]
 
 
+def type_map(con: duckdb.DuckDBPyConnection) -> dict[str, str]:
+    """symbol -> 'holding' | 'tracking' (legacy NULL rows read as 'holding')."""
+    return {r[0]: (r[1] or "holding") for r in
+            con.execute("SELECT symbol, list_type FROM watchlist").fetchall()}
+
+
 def ensure_data(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
     """Ingest financials for a watchlist symbol (price history is market-wide)."""
     return ensure_ingested(symbol, con)

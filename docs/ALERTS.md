@@ -25,8 +25,12 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 **Holdings vs Tracking.** Every watchlist row carries a `list_type` — **`holding`** (a stock the user
 owns → shown as *Your Holdings*) or **`tracking`** (watching but not owned → *Your Tracking List*).
 `watchlist.add(sym, company, list_type=…)` sets it; `watchlist.entries_by_type(con, kind)` reads a
-bucket (legacy NULL rows read as holdings). The split is **presentation only** — the daily/midday scan
-walks *both* buckets identically, so tracked names get the same alert coverage as owned ones.
+bucket, `watchlist.type_map(con)` returns `{symbol: list_type}` (legacy NULL rows read as holdings).
+Both the **6 PM** and **midday** digests **render Movers and Upcoming split into `### 📁 Your Holdings`
+and `### 👀 Your Tracking List`** sub-sections (`scan._grouped_by_type`; movers/upcoming are tagged at
+scan time via `scan._annotate_types`). The split is presentation only — the scan still walks *both*
+buckets identically, so tracked names get the same alert coverage as owned ones. A pure-holdings
+watchlist renders as a single flat list exactly as before.
 
 ## Bot commands
 
