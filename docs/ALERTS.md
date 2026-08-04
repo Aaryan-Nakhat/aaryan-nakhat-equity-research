@@ -16,10 +16,17 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 |---|---|
 | Tables `watchlist`, `alert_state`, `shareholding` | `common/db.py` |
 | Watchlist CRUD + ensure-data | `watchlist.py` |
+| Two buckets: **Your Holdings** (owned) vs **Your Tracking List** (watching) — `watchlist.list_type` | `watchlist.py` |
 | Per-symbol detectors (incl. promoter-pledge) | `analysis/alerts.py` |
 | Orchestrator (refresh EOD → announcements + pledge → detect) | `scan.py` |
 | Bot commands + self-healing schedule + push | `scripts/telegram_bot.py`, `scripts/email_bot.py` |
 | Bulk-add the initial list | `scripts/populate_watchlist.py` |
+
+**Holdings vs Tracking.** Every watchlist row carries a `list_type` — **`holding`** (a stock the user
+owns → shown as *Your Holdings*) or **`tracking`** (watching but not owned → *Your Tracking List*).
+`watchlist.add(sym, company, list_type=…)` sets it; `watchlist.entries_by_type(con, kind)` reads a
+bucket (legacy NULL rows read as holdings). The split is **presentation only** — the daily/midday scan
+walks *both* buckets identically, so tracked names get the same alert coverage as owned ones.
 
 ## Bot commands
 
