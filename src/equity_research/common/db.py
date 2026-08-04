@@ -101,9 +101,10 @@ _SCHEMA = [
     """,
     """
     CREATE TABLE IF NOT EXISTS watchlist (
-        symbol    VARCHAR PRIMARY KEY,
-        company   VARCHAR,
-        added_at  TIMESTAMP DEFAULT now()
+        symbol     VARCHAR PRIMARY KEY,
+        company    VARCHAR,
+        added_at   TIMESTAMP DEFAULT now(),
+        list_type  VARCHAR DEFAULT 'holding'   -- 'holding' (owned) | 'tracking' (watching, not owned)
     )
     """,
     """
