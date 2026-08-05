@@ -246,7 +246,11 @@ one-time/idempotent); the valuation **lens** (P/E vs P/B vs EV/EBITDA) still key
 
 **Trading levels & setup (computed, no LLM).** After the LLM Analysis, the deep report appends
 a **Trading levels & setup** section (`technical.levels` → `deep_brief.render_levels`) — the
-actionable "where", derived entirely from the daily OHLCV:
+actionable "where", derived entirely from the daily OHLCV. It **leads with an "In plain English"
+narrative** (`deep_brief._levels_narrative`) that reads the structure, where price sits vs its
+floor/ceiling, and the setup in rupee terms ("risk ₹X to make ₹Y"), so a non-technical reader
+gets the story before the reference tables; the confluence "built from" column uses plain words
+(`the 20-day average`, `a heavy-volume price band`), not jargon. Then the detail:
 - **Support/resistance zones** built from the **confluence** of several methods — swing pivots,
   the 20/50/200-DMA, 52-week extremes, **volume-by-price** nodes, and round numbers — clustered
   (center-bounded, so a dense chain never drifts into one giant band) and scored by how many
@@ -515,8 +519,9 @@ issues (name · price band · dates · live subscription); reply with a number (
 `synthesize.ipo_analysis` (LLM reads the RHP + price-band ad + anchor doc, grounded on the
 verified issue facts) produces a **thorough, section-by-section, teach-as-you-go note** (same
 depth/readability as the deep stock report, uncapped): what the company does & how it makes money ·
-**offer structure — fresh-issue vs OFS and what it signals** (fresh → company funded = positive;
-heavy OFS → insiders exiting = caution) · restated financials *with the trajectory read* ·
+**offer structure — a fresh-issue vs OFS split table** (₹ cr + % of offer, summing to 100%) then
+what it signals (fresh → company funded = positive; heavy OFS → insiders exiting = caution) ·
+restated financials *with the trajectory read* ·
 **valuation at the band vs listed peers** (P/E · P/B · RoNW each explained) · use of proceeds ·
 key risks · demand (subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. For every
 metric it says what it measures and a healthy/normal range so a first-time applicant can follow. Delivered as **email body +
