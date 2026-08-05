@@ -65,10 +65,13 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   Every record is parsed best-effort and each digest section is built
   independently, so one malformed filing can never abort the whole scan.
 - **Movers (always present):** a per-stock daily snapshot for the whole watchlist
-  — a 🟢/🔴 up/down marker, close, day %change, delivery%, 52-week position, and
-  **P/E vs the stock's own 5-yr median** (cheap/rich lens) — sorted biggest-move first
-  (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
-  the digest substantive even on quiet event days.
+  — a 🟢/🔴 up/down marker, close, day %change, delivery%, 52-week position,
+  **P/E vs the stock's own 5-yr median** (cheap/rich lens), and the **nearest support /
+  resistance in brackets** `(S ₹.. / R ₹..)` from `technical.levels` (`_annotate_mover_levels`
+  → `_levels_bracket`) — so every line shows where the name sits vs its levels, not only when a
+  transition alert fires — sorted biggest-move first (`scan.watchlist_movers`). Levels are
+  computed once per symbol (`_levels_map`) and shared with the level-alerts. The only data that
+  changes *every* day, so it keeps the digest substantive even on quiet event days.
 - **🎯 Level alerts (when a technical event fires):** computed support/resistance **transition**
   events for watchlist names (`scan._level_alerts` over `technical.levels`), grouped into
   *Your Holdings* vs *Your Tracking List* — because the two want opposite signals. **Tracking**
