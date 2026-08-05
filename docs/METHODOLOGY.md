@@ -31,6 +31,7 @@ Scraping uses `scrapling`, in two tiers:
 | **BSE** | scrip header/quote (mirror) | 🟢 plain HTTP | `bse.py` |
 | **AMFI** | daily NAVs for ~14k MF schemes; per-AMC NAV history | 🟢 plain HTTP | `amfi.py` |
 | **AMC sites** | monthly MF portfolio holdings (per-AMC XLSX) | 🟡 mixed | `mf_holdings.py` |
+| **PIB** (pib.gov.in) | government press releases — schemes/policies/reforms (the policy radar) | 🟢 RSS + HTML | `pib.py` |
 | **FBIL** | USD/INR reference rate | 🟢 JSON | `fbil.py` |
 | **MCX** | gold / silver / crude futures | 🟡 header-gated | `mcx.py` |
 
@@ -349,6 +350,15 @@ with zero).
   0.10**, rank-normalised. Capex metrics: capex vs its 3-yr base, capex ÷ depreciation, capex-
   intensity delta, self-funded (CFO/capex). **Hard gates** exclude traps (revenue shrinking vs 2y
   ago, Altman Z<1.81, Beneish M>−1.78, pledge>25%). **Model:** none for all four.
+- **`screen: policy` / `policy:` — government policy radar (`analysis/policy.py`, `scrapers/pib.py`)** —
+  **source:** the latest **PIB press releases** (English RSS → per-release body, plain HTTP; primary &
+  official — *no* news/social rumor). **Transform:** fetch ~20 recent releases, keyword-gate the bodies
+  to economic ones. **Model — 🤖 LLM (`synthesize.policy_impact`, JSON):** classifies each into
+  {scheme, ministry, stage (announced/cabinet-approved/**draft**/consultation/budget/reform),
+  affected sectors, transmission mechanism, likely listed beneficiaries}, grounded only in the release.
+  **Map:** beneficiary names → NSE symbols via `equity_master`/`sector_map` (norm-name match); watchlist
+  names flagged; sorted watchlist-hits then #listed-beneficiaries first. **Standalone screen — no effect
+  on reports, the watchlist or the digests.** Catches policy at the pre-launch official stage.
 - **Weekly "Screener movements"** (`screen_digest.py`) — Saturday email with **trigger-based deltas
   only** across the three screens (fingerprints in `alert_state`).
 
@@ -367,6 +377,7 @@ The LLM (**Gemini 2.5 Pro / Vertex AI**) is used **only** here — everything el
 | IPO note | `synthesize.ipo_analysis` | RHP + band ad + anchor + facts | APPLY/AVOID note |
 | Digest event analysis | `synthesize.analyze_filing` | one filing PDF | inline point-wise read |
 | Board-meeting labels | `synthesize.label_events` | event subjects | clean purpose text |
+| Policy radar | `synthesize.policy_impact` | PIB releases | scheme → sector → beneficiaries (JSON) |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
 
 **Simulation:** Monte-Carlo DCF (§B.11). **Solvers:** reverse-DCF & XIRR (bisection).

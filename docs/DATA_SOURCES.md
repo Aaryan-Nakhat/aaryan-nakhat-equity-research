@@ -151,6 +151,22 @@ per-stock MF ownership is derived from the Phase-3 monthly holdings, not the SHP
 
 ---
 
+## 9. PIB — Press Information Bureau (pib.gov.in)
+
+The government's **official press-release channel** — where ministries announce schemes / policies /
+reforms / allocations, often at the cabinet-approved / **draft** / consultation stage *before* formal
+launch. Primary and government-backed (fits the primary-only rule), plain HTTP (`scrapers/pib.py`).
+
+| Data | Access | Notes |
+|---|---|---|
+| Recent releases (English) | 🟢 | RSS `RssMain.aspx?ModId=6&Lang=1&Regid=3&reg=3` — ~20 latest, title + `PRID` link. |
+| Full release text | 🟢 | `PressReleaseIframePage.aspx?PRID=<id>` — ministry, headline, date, body. |
+
+Powers the **policy radar** screen (`analysis/policy.py`, email `screen: policy`): keyword-gate the
+bodies → LLM classifies the economic ones into sector + mechanism + likely listed beneficiaries →
+resolved to NSE symbols against `equity_master`/`sector_map`, watchlist names flagged. **No
+news-portal / social-media rumor** — that would break the primary-only rule.
+
 ## Practical takeaways for the scraping plan
 
 1. **BSE is the friendlier primary** for fundamentals/filings/actions; **NSE for
