@@ -420,8 +420,9 @@ headline of the issue (size, price band, dates) — use the verified facts suppl
 so a reader new to the name understands it before the numbers start.
 
 ### 2. The offer — structure & what it signals
-Break the issue into **Fresh Issue vs Offer for Sale (OFS)** with the ₹ amounts and %s, and \
-interpret it plainly:
+**Start with a small markdown table** splitting the total offer into Fresh Issue vs OFS — one \
+row each plus a **Total** row, columns: `Component | ₹ cr (upper band) | % of offer`. The two \
+percentages must sum to 100%. Then interpret it plainly below the table:
 - **Fresh issue** — new shares; the money goes **to the company** (capex / debt repayment / \
 working capital). Generally a **positive** — the business is being funded.
 - **Offer for Sale (OFS)** — existing holders (promoters / PE-VC investors) selling their \

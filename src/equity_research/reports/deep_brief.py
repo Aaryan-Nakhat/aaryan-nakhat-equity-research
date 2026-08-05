@@ -326,9 +326,105 @@ def _dots(score: float) -> str:
     return "●" * n + "○" * (5 - n)
 
 
+# jargon → plain English for the "built from" column and the narrative
+_SRC_PLAIN = {"20-DMA": "the 20-day average", "50-DMA": "the 50-day average",
+              "200-DMA": "the 200-day average", "swing": "a prior turning point",
+              "volume-node": "a heavy-volume price band", "52w": "the 52-week extreme",
+              "round": "a round number"}
+
+
+def _sources_phrase(sources: list[str]) -> str:
+    """Confluence sources → a readable clause, e.g. 'the 20- and 50-day averages, a
+    heavy-volume price band and a round number'."""
+    seen: list[str] = []
+    for s in sources:
+        p = _SRC_PLAIN.get(s, s)
+        if p not in seen:
+            seen.append(p)
+    if not seen:
+        return ""
+    if len(seen) == 1:
+        return seen[0]
+    return ", ".join(seen[:-1]) + " and " + seen[-1]
+
+
 def _zone_rows(zones: list[dict]) -> list[list[str]]:
     return [[f"{z['lo']:,.0f}–{z['hi']:,.0f}" if z["hi"] - z["lo"] >= 0.5 else f"{z['mid']:,.0f}",
-             _dots(z["score"]), ", ".join(z["sources"])] for z in zones]
+             _dots(z["score"]), _sources_phrase(z["sources"])] for z in zones]
+
+
+def _levels_narrative(symbol: str, lv: dict) -> str:
+    """A plain-English reading of the levels for a non-technical reader — what the trend is,
+    where price sits vs its floor and ceiling, and what the setup means in rupee terms. Built
+    entirely from the ``levels`` dict (deterministic)."""
+    price = lv["close"]
+    atr = lv.get("atr") or 0.0
+    st = lv["structure"]
+    sups, ress = lv.get("supports", []), lv.get("resistances", [])
+    setup = lv.get("setup", {})
+    out: list[str] = []
+
+    out.append({
+        "up": f"**{symbol} is in an up-trend** — a rising staircase of higher highs and higher "
+              "lows, which is the healthiest backdrop for buying dips.",
+        "down": f"**{symbol} is in a down-trend** — lower highs and lower lows, so rallies tend "
+                "to get sold; treat bounces with caution.",
+        "range": f"**{symbol} is range-bound** — drifting sideways rather than trending, so it "
+                 "tends to swing between a floor (support) and a ceiling (resistance) until it "
+                 "breaks decisively out of that band.",
+    }.get(st.get("trend"), f"{symbol}'s trend is unclear."))
+
+    if sups:
+        ns = sups[0]
+        strong = max(sups, key=lambda z: z["score"])
+        in_zone = ns["lo"] - 0.5 * atr <= price <= ns["hi"] + 0.5 * atr
+        verb = "sitting right on" if in_zone else "holding above"
+        src = _sources_phrase(ns["sources"])
+        out.append(f"At ₹{price:,.0f} it's {verb} its nearest floor, ₹{ns['lo']:,.0f}–₹{ns['hi']:,.0f}"
+                   + (f" — a spot where {src} all coincide, and the more of those that line up the "
+                      "more likely buyers defend it." if src else "."))
+        if strong is not ns and strong["mid"] < ns["mid"]:
+            out.append(f"The firmest support lower down is ₹{strong['lo']:,.0f}–₹{strong['hi']:,.0f} "
+                       f"({_sources_phrase(strong['sources'])}) — the level to watch on a deeper pullback.")
+    else:
+        out.append(f"At ₹{price:,.0f} there's no clear support mapped just below — it's near the "
+                   "lower end of its recent range, so a floor isn't well defined yet.")
+
+    if ress:
+        nr = ress[0]
+        gap = 100 * (nr["mid"] - price) / price if price else 0
+        near = ("almost immediately overhead" if gap < 3
+                else f"about {gap:.0f}% above" if gap < 25 else f"far above (~{gap:.0f}%)")
+        out.append(f"The first ceiling above is ₹{nr['lo']:,.0f}–₹{nr['hi']:,.0f}, {near}; a break "
+                   "and a daily *close* above it is what would signal the next leg up.")
+    else:
+        out.append("There's no resistance mapped overhead — it's at or near its highs (blue-sky), so "
+                   "momentum rather than a level is the guide here; trail a stop rather than aim at a target.")
+
+    kind = setup.get("kind")
+    if kind == "reference-only":
+        out.append("Because the **fundamental verdict above is negative**, these levels are **for "
+                   "reference only** — a way to gauge risk if you already hold, not a reason to buy.")
+    else:
+        rr, stop = setup.get("rr"), setup.get("stop")
+        tgts, elo, ehi = setup.get("targets") or [], setup.get("entry_lo"), setup.get("entry_hi")
+        if rr and stop and tgts and elo is not None:
+            emid = (elo + ehi) / 2
+            risk, reward = emid - stop, tgts[0] - emid
+            if kind == "accumulate":
+                out.append(f"**The risk/reward is attractive:** buying near ₹{elo:,.0f}–₹{ehi:,.0f} "
+                           f"risks about ₹{risk:,.0f} a share (down to the ₹{stop:,.0f} stop) to aim "
+                           f"at roughly ₹{reward:,.0f} of upside (the ₹{tgts[0]:,.0f} target) — a "
+                           f"reward:risk of {rr:.1f}:1, comfortably past the ~1.5:1 bar worth taking.")
+            else:
+                out.append(f"**The risk/reward is poor right now:** from here you'd risk about "
+                           f"₹{risk:,.0f} a share (to the ₹{stop:,.0f} stop) to chase only ~₹{reward:,.0f} "
+                           f"of upside (the ₹{tgts[0]:,.0f} target) — just {rr:.1f}:1. Better to wait for "
+                           "a cheaper entry deeper into support, or a confirmed breakout above the "
+                           "ceiling, before committing.")
+        elif setup.get("note"):
+            out.append(setup["note"])
+    return " ".join(out)
 
 
 def render_levels(con: duckdb.DuckDBPyConnection, symbol: str, lv: dict | None) -> list[str]:
@@ -358,6 +454,9 @@ def render_levels(con: duckdb.DuckDBPyConnection, symbol: str, lv: dict | None) 
         struct_line += f" · last swing low ₹{st['last_swing_low']:,.0f}"
     struct_line += f" · close ₹{lv['close']:,.2f} · ATR {lv['atr_pct']}%"
     L += [struct_line, ""]
+
+    # plain-English reading first — the story, before the reference tables
+    L += ["**In plain English.** " + _levels_narrative(symbol, lv), ""]
 
     hdr = ["Zone (₹)", "Confluence", "Built from"]
     if lv["supports"]:
@@ -654,11 +753,13 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  "total shares encumbered.")
     else:
         L.append("- **Promoter pledge:** n/a (no shareholding snapshot).")
-    L.append("- **Contingent liabilities / related-party transactions:** these live in the "
-             "notes-to-accounts of the results and annual report, not in the structured XBRL this "
-             "brief is built from — so the **Analysis section below extracts them from the filing "
-             "PDFs** where the company discloses them (quarterly notes give the headline figure; "
-             "the full schedule is in the annual report).")
+    L.append("- **Contingent liabilities & related-party transactions:** these aren't in the "
+             "structured XBRL that builds the tables above — they're disclosed only in the **notes "
+             "to accounts**. They are **not skipped**: the **Analysis section below reads them "
+             "directly from the filing PDFs** and calls out anything material (large or opaque "
+             "related-party dealings, sizeable contingent claims). See its forensic assessment for "
+             "this company's specifics — a blank there means nothing material was disclosed, not "
+             "that it wasn't checked.")
     L.append("")
     L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
     L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
