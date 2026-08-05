@@ -21,7 +21,7 @@ import pandas as pd  # noqa: E402
 
 import duckdb  # noqa: E402
 
-from equity_research.analysis import quant  # noqa: E402
+from equity_research.analysis import quant, technical  # noqa: E402
 from equity_research.analysis.fundamentals import load_annual  # noqa: E402
 
 CR = 1e7
@@ -77,6 +77,65 @@ def fund_charts(con: duckdb.DuckDBPyConnection, scheme_code: int) -> list[tuple[
         ax.legend(fontsize=8)
         out.append(("Rolling 1-year returns — every 1-yr holding period in the history", _png(fig)))
     return out
+
+
+def levels_chart(con: duckdb.DuckDBPyConnection, symbol: str,
+                 lv: dict, *, bars: int = 180, draw_setup: bool = True) -> tuple[str, bytes] | None:
+    """Annotated price chart: last ~``bars`` daily candles with the computed support
+    (green) and resistance (red) zones shaded, the 50/200-DMA, and the setup's entry
+    zone / stop / targets drawn on. ``lv`` is ``technical.levels(...)``. None when the
+    history is too thin (the caller then just omits the chart)."""
+    if not lv or not lv.get("history_ok"):
+        return None
+    ind = technical.indicators(con, symbol)
+    if ind.empty:
+        return None
+    d = ind.iloc[-bars:]
+    x = np.arange(len(d))
+    o, h, low_, c = d["open"].to_numpy(), d["high"].to_numpy(), d["low"].to_numpy(), d["close"].to_numpy()
+    up = c >= o
+
+    fig, ax = plt.subplots(figsize=(7.2, 3.8))
+    # candlesticks — thin wick (high-low) + thick body (open-close)
+    ax.vlines(x[up], low_[up], h[up], color=_GREEN, linewidth=0.6)
+    ax.vlines(x[~up], low_[~up], h[~up], color=_RED, linewidth=0.6)
+    ax.vlines(x[up], o[up], c[up], color=_GREEN, linewidth=2.4)
+    ax.vlines(x[~up], o[~up], c[~up], color=_RED, linewidth=2.4)
+    # moving averages for context
+    for col, cl, lw in (("sma50", _BLUE, 0.9), ("sma200", "#c07f1f", 0.9)):
+        if col in d and d[col].notna().any():
+            ax.plot(x, d[col].to_numpy(), color=cl, lw=lw, label=col.upper().replace("SMA", "SMA "))
+
+    xr = (x[0] - 1, x[-1] + 1)
+    # zones: support green, resistance red — shaded bands across the panel
+    for z in lv.get("supports", []):
+        ax.axhspan(z["lo"], z["hi"], color=_GREEN, alpha=0.10)
+        ax.hlines(z["mid"], *xr, color=_GREEN, lw=0.7, alpha=0.5)
+    for z in lv.get("resistances", []):
+        ax.axhspan(z["lo"], z["hi"], color=_RED, alpha=0.10)
+        ax.hlines(z["mid"], *xr, color=_RED, lw=0.7, alpha=0.5)
+
+    # setup overlay — entry zone / stop / targets (only for an actionable long setup)
+    s = lv.get("setup", {})
+    if draw_setup and s.get("kind") in ("accumulate", "watch", "hold-trail") and s.get("stop"):
+        if s.get("entry_lo") and s.get("entry_hi"):
+            ax.axhspan(s["entry_lo"], s["entry_hi"], color=_BLUE, alpha=0.10)
+        ax.axhline(s["stop"], color=_RED, lw=1.1, ls="--", label=f"stop ₹{s['stop']:,.0f}")
+        for i, t in enumerate(s.get("targets", [])):
+            ax.axhline(t, color=_GREEN, lw=1.0, ls=":",
+                       label=f"target ₹{t:,.0f}" if i == 0 else None)
+
+    ax.set_xlim(*xr)
+    ax.set_ylabel("₹")
+    ax.set_xticks([])
+    kind = s.get("kind", "")
+    ax.set_title(f"{symbol} — price with support/resistance zones & setup"
+                 + (f"  ({kind})" if kind else ""))
+    ax.legend(loc="upper left", fontsize=7, framealpha=0.85)
+    ax.grid(True, axis="y", alpha=0.25)
+    cap = (f"{symbol}: last {len(d)} sessions — support (green) / resistance (red) zones, "
+           "50 & 200-DMA, and the entry/stop/target setup. Levels are computed, not advice.")
+    return cap, _png(fig)
 
 
 def _series(af: pd.DataFrame, el: str) -> pd.Series:
@@ -216,5 +275,15 @@ def report_charts(con: duckdb.DuckDBPyConnection, symbol: str,
             ax.legend(loc="best", fontsize=8)
             out.append(("Monte-Carlo DCF fair-value distribution", _png(fig)))
     except Exception:  # noqa: BLE001 — a chart should never break the report
+        pass
+
+    # 7) Price with support/resistance zones (verdict-neutral facts; the verdict-aware
+    # entry/stop/target lives in the report's "Trading levels & setup" text section).
+    try:
+        lv = technical.levels(con, symbol)
+        pc = levels_chart(con, symbol, lv, draw_setup=False)
+        if pc:
+            out.append(pc)
+    except Exception:  # noqa: BLE001
         pass
     return out

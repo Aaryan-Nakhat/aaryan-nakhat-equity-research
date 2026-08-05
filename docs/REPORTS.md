@@ -244,6 +244,35 @@ z-scores were all diluted by unrelated names. The `basic_industry` column is enr
 one-time/idempotent); the valuation **lens** (P/E vs P/B vs EV/EBITDA) still keys off the macro
 `industry` (`sector.industry_of`), whose keyword lists are macro-level.
 
+**Trading levels & setup (computed, no LLM).** After the LLM Analysis, the deep report appends
+a **Trading levels & setup** section (`technical.levels` → `deep_brief.render_levels`) — the
+actionable "where", derived entirely from the daily OHLCV:
+- **Support/resistance zones** built from the **confluence** of several methods — swing pivots,
+  the 20/50/200-DMA, 52-week extremes, **volume-by-price** nodes, and round numbers — clustered
+  (center-bounded, so a dense chain never drifts into one giant band) and scored by how many
+  methods agree (shown as ●○ confluence dots). A zone many methods share is a stronger level
+  than any single line.
+- **Market structure** (higher-highs/lows vs lower-highs/lows, last swing points), **trendlines**,
+  and best-effort **patterns** (range, double top/bottom, head-&-shoulders, triangles) — heuristic
+  context, each with a confidence, never a standalone signal.
+- A **reward:risk-framed setup** — accumulation zone (the *strongest* support, not merely the
+  nearest) · **stop** (invalidation, ~1×ATR below the zone) · **first target** (nearest resistance)
+  · **RR**; called "accumulate" only when RR ≥ ~1.5, else "watch". It is **verdict-aware**: the
+  section is placed *after* the Analysis and reads the thesis verdict
+  (`deep_brief.verdict_from_text`), so for an **Avoid/Reduce/Sell** call it shows the levels
+  **for reference only** — never a buy setup that contradicts the fundamentals. Thin/volatile or
+  freshly-listed names degrade to an honest "limited history" note.
+- The PDF carries an **annotated candlestick chart** (`charts.levels_chart`, the 7th chart in
+  `report_charts`) — last ~180 sessions with the zones shaded (green support / red resistance) and
+  the 50/200-DMA. The chart draws **zones only** (verdict-neutral facts); the verdict-aware
+  entry/stop/target lives in the text section.
+
+**`levels: <name>` command (on-demand, no LLM).** A quick technical read outside a full report:
+`email_bot._send_levels` resolves the name, computes the same levels, and replies with the section
++ an annotated chart (here the chart *does* draw the entry/stop/target overlay, since no
+fundamental verdict is being claimed). Aliases: `technical:`, `setup:`, `chart:`. Also surfaced as
+watchlist **level alerts** in the digests (see `docs/ALERTS.md`).
+
 **Consolidated vs standalone:** `generate_report(consolidated=None)` **defaults to
 consolidated whenever it exists** — the whole group (parent + subs + JVs) is the
 economically complete, industry-standard primary lens. It falls back to standalone only

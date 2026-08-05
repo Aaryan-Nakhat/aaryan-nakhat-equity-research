@@ -12,6 +12,7 @@ balance sheet and cash flow are present FY2023+ (older result XBRLs omit them).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 
 import duckdb
@@ -301,6 +302,82 @@ def _cover(ebit, fin) -> str:
         return "n/a"
     v = ebit / fin
     return ">500x" if v > 500 else f"{v:,.1f}x"
+
+
+_VERDICT_WORDS = ("BUY", "ACCUMULATE", "HOLD", "REDUCE", "SELL", "AVOID", "SWITCH")
+
+
+def verdict_from_text(text: str | None) -> str | None:
+    """Pull the headline call (Buy/Accumulate/…/Avoid) out of an LLM analysis so the
+    levels setup can defer to it. Looks near the word 'verdict' first, then falls back to
+    the first standalone verdict keyword. None when nothing matches."""
+    if not text:
+        return None
+    head = text[:1500]
+    m = re.search(r"verdict[^A-Za-z]{0,12}(" + "|".join(_VERDICT_WORDS) + r")", head, re.I)
+    if not m:
+        m = re.search(r"\b(" + "|".join(_VERDICT_WORDS) + r")\b", head, re.I)
+    return m.group(1).upper() if m else None
+
+
+def _dots(score: float) -> str:
+    """Confluence score → 1–5 filled dots, a compact at-a-glance strength read."""
+    n = int(min(5, max(1, round(score))))
+    return "●" * n + "○" * (5 - n)
+
+
+def _zone_rows(zones: list[dict]) -> list[list[str]]:
+    return [[f"{z['lo']:,.0f}–{z['hi']:,.0f}" if z["hi"] - z["lo"] >= 0.5 else f"{z['mid']:,.0f}",
+             _dots(z["score"]), ", ".join(z["sources"])] for z in zones]
+
+
+def render_levels(con: duckdb.DuckDBPyConnection, symbol: str, lv: dict | None) -> list[str]:
+    """Markdown for the 'Trading levels & setup' section from a ``technical.levels`` dict.
+    [] when the history is too thin (the report then simply omits the section)."""
+    if not lv or not lv.get("history_ok"):
+        if lv and lv.get("n_days"):
+            return ["", "## Trading levels & setup",
+                    f"_Only {lv['n_days']} sessions of price history on file — too thin for "
+                    "reliable support/resistance levels. Skipped._"]
+        return []
+    st = lv["structure"]
+    trend_lbl = {"up": "up-trend (higher highs & lows)", "down": "down-trend (lower highs & lows)",
+                 "range": "range-bound (no clear trend)"}.get(st["trend"], st["trend"])
+    L = ["", "## Trading levels & setup",
+         "_Computed from the daily price history — support/resistance **zones** (confluence of "
+         "swing pivots, moving averages, 52-week extremes, volume-by-price and round numbers), "
+         "market structure, and a reward:risk-framed entry/stop/target. These are **timing levels, "
+         "not a call** — they defer to the fundamental verdict above._", ""]
+    if not lv.get("reliable"):
+        L.append(f"⚠ Limited history ({lv['n_days']} sessions) — treat these zones as indicative.")
+        L.append("")
+    struct_line = f"**Structure:** {trend_lbl}"
+    if st.get("last_swing_high"):
+        struct_line += f" · last swing high ₹{st['last_swing_high']:,.0f}"
+    if st.get("last_swing_low"):
+        struct_line += f" · last swing low ₹{st['last_swing_low']:,.0f}"
+    struct_line += f" · close ₹{lv['close']:,.2f} · ATR {lv['atr_pct']}%"
+    L += [struct_line, ""]
+
+    hdr = ["Zone (₹)", "Confluence", "Built from"]
+    if lv["supports"]:
+        L += ["**Support zones (nearest first)**", "", _table(hdr, _zone_rows(lv["supports"])), ""]
+    if lv["resistances"]:
+        L += ["**Resistance zones (nearest first)**", "",
+              _table(hdr, _zone_rows(lv["resistances"])), ""]
+    if lv["patterns"]:
+        pats = "; ".join(f"**{p['name']}** ({p['direction']}) — {p['note']}" for p in lv["patterns"])
+        L += [f"**Patterns:** {pats}", ""]
+    s = lv["setup"]
+    L += [f"**Setup — {s.get('bias', s.get('kind'))}:** {s['note']}", ""]
+    L += ["_How to read. Support is where buyers have repeatedly stepped in (a floor); resistance "
+          "where sellers have capped it (a ceiling). A zone backed by more methods — higher "
+          "confluence (more dots) — and by more volume is a stronger level than any single line. "
+          "The **stop** is your invalidation: if price closes below it, the setup was wrong, so you "
+          "exit small rather than hope. **Reward:risk** weighs the distance to the first target "
+          "against the distance to the stop — below ~1.5:1 the trade isn't worth the risk. Levels "
+          "are probabilities, not promises, and they never override the fundamental verdict above._"]
+    return L
 
 
 def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,

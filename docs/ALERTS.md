@@ -69,6 +69,15 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   **P/E vs the stock's own 5-yr median** (cheap/rich lens) — sorted biggest-move first
   (`scan.watchlist_movers`). The only data that changes *every* day, so it keeps
   the digest substantive even on quiet event days.
+- **🎯 Level alerts (when a technical event fires):** computed support/resistance **transition**
+  events for watchlist names (`scan._level_alerts` over `technical.levels`), grouped into
+  *Your Holdings* vs *Your Tracking List* — because the two want opposite signals. **Tracking**
+  (watching for an entry): 🚀 a fresh break above the nearest resistance, or 🎯 a fresh pullback
+  into the strongest support zone (each nudges `reply levels: <SYM>` for the full setup).
+  **Holdings** (watching the exit): ⚠️ a fresh loss of the 50/200-DMA, or 🔻 a break below the
+  strongest support (invalidation). They're **transition-based** — the 6 PM digest compares
+  yesterday's close → today's close, the midday digest the prior close → the live price — so each
+  fires **once on the event**, not every day a condition holds. Most days, nothing.
 - **Events (when they happen):** the alerts below, grouped under each company. For
   notable **document-bearing** events (results / concall / scheme / rights / QIP),
   the attached filing PDF is **auto-downloaded and read by the LLM** — a concise

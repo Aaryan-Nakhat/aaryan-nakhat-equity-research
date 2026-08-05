@@ -53,6 +53,14 @@ Personal use. Not a hosted product.
   `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `analysis/smallcap.py`,
   `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the
   Nifty Smallcap 250 + Microcap 250 universe that gives `screen: smallcap` its edge).
+- **Trading levels** *(new track)* — a **computed** (no-LLM) technical layer: support/resistance
+  **zones** from the confluence of swing pivots + moving averages + 52-week extremes + volume-by-price
+  + round numbers, market structure, chart patterns, and a **reward:risk-framed entry / stop / target**
+  that **defers to the fundamental verdict** (Avoid names show levels for reference, not a buy). In the
+  deep report (a "Trading levels & setup" section + an **annotated candlestick chart**), on demand via
+  **email `levels: <name>`** (aliases `technical:` / `setup:` / `chart:`), and as watchlist **level
+  alerts** in the digests — 🚀 breakouts / 🎯 pullbacks-to-support for the tracking list, ⚠️ 50/200-DMA
+  losses / 🔻 support breaks for holdings. `analysis/technical.py`, `reports/charts.py`.
 - **Report** — LLM reads the quant brief (+ filing PDFs) and writes a forensic thesis,
   delivered via an **email bot** (or Telegram, by the `CHANNELS` flag): **interactive**
   (name a stock → styled PDF + inline thesis). The deep report now **leads with a
