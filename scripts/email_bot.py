@@ -682,7 +682,7 @@ def _send_policy_screen(req: EmailRequest) -> None:
                      "listed companies it affects. ~1 min; the list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: policy.policy_scan(con, limit_releases=25))
+        rows = _screen_run(lambda: policy.policy_scan(con, limit_releases=120), timeout=300)
     finally:
         con.close()
     if rows is None:
@@ -692,30 +692,46 @@ def _send_policy_screen(req: EmailRequest) -> None:
         _reply_text(req, "No market-relevant government schemes in the latest PIB releases right "
                          "now — try again later (the feed refreshes through the day).")
         return
-    parts = ["**🏛️ Government policy radar — latest official releases (PIB)**", "",
-             "Schemes/policies from **primary government press releases** that affect a listed "
-             "sector — often at the announced / cabinet-approved / **draft** / consultation stage, "
-             "before formal launch. Most watchlist-relevant first; ⭐ = a name on your watchlist. "
-             "_This is a discovery screen — it defers to each stock's own fundamentals; reply with "
-             "any symbol for its full deep report._", ""]
+    parts = ["## 🏛️ Government policy radar",
+             "_Schemes & policies from **primary government press releases (PIB)** that move a "
+             "**listed sector** — often at the **announced / cabinet-approved / draft / "
+             "consultation** stage, before formal launch. Most **watchlist-relevant first**; "
+             "⭐ = a name you hold/track. A discovery screen — it defers to each stock's own "
+             "fundamentals, so reply with any symbol for its full deep report._"]
     for i, s in enumerate(rows, 1):
-        tags = " · ".join(x for x in (s.get("ministry"), s.get("stage"),
-                                      (f"conf {s['confidence']}" if s.get("confidence") else None)) if x)
-        parts.append(f"**{i}. {s['scheme']}**" + (f"  _( {tags} )_" if tags else ""))
-        meta = " · ".join(x for x in (
-            ("Sectors: " + ", ".join(s["sectors"])) if s.get("sectors") else None,
-            (f"Mechanism: {s['mechanism']}" if s.get("mechanism") else None)) if x)
-        if meta:
-            parts.append(meta)
-        if s.get("rationale"):
-            parts.append(s["rationale"])
+        parts.append("---")
+        tag_bits = []
+        if s.get("ministry"):
+            tag_bits.append(f"🏛️ **{s['ministry']}**")
+        if s.get("stage"):
+            tag_bits.append(f"📅 _{s['stage']}_")
+        if s.get("confidence"):
+            tag_bits.append(f"🎯 _{s['confidence']} confidence_")
+        parts.append(f"### {i}. {s['scheme']}")
+        if tag_bits:
+            parts.append(" · ".join(tag_bits))
+        if s.get("sectors"):
+            parts.append("🧭 **Sectors:** " + ", ".join(f"**{x}**" for x in s["sectors"])
+                         + (f"  ·  ⚙️ **Mechanism:** {s['mechanism']}" if s.get("mechanism") else ""))
+        if s.get("what_it_is"):
+            parts.append(f"📄 **What it is:** {s['what_it_is']}")
+        if s.get("benefit"):
+            parts.append(f"💡 **Why it matters:** {s['benefit']}")
         bens = s.get("beneficiaries") or []
-        if bens:
-            shown = ", ".join((b["symbol"] or b["name"]) + (" ⭐" if b["on_watchlist"] else "")
-                              for b in bens[:10])
-            parts.append(f"**Likely beneficiaries:** {shown}")
-        parts.append(f"_Source: PIB — {s['link']}_")
-        parts.append("")
+        listed = [b for b in bens if b["symbol"]]
+        others = [b for b in bens if not b["symbol"]]
+        if listed:
+            parts.append("🎯 **Likely beneficiaries (NSE-listed):**")
+            lines = []
+            for b in listed[:12]:
+                star = " ⭐" if b["on_watchlist"] else ""
+                why = f" — {b['why']}" if b.get("why") else ""
+                lines.append(f"- **{b['name']}** ({b['symbol']}){star}{why}")
+            parts.append("\n".join(lines))
+        if others:
+            parts.append("_Also flagged (not matched to an NSE symbol): _"
+                         + ", ".join(b["name"] for b in others[:8]))
+        parts.append(f"🔗 _Source: PIB — {s['link']}_")
     md = "\n\n".join(parts)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
                         html=emailer.body_html(md, "Policy radar"),
