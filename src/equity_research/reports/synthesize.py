@@ -300,24 +300,29 @@ verified numbers supplied; do not recompute or estimate them**.
 commoditized industry — say which, plainly.
 
 ### 2. Core growth triggers
-5–7 specific, concrete triggers (never generic tailwinds), each in this exact shape:
+5–7 specific, concrete triggers (never generic tailwinds). Render EACH trigger as its own \
+`####` sub-heading, then a blank line, then the five fields below as a flat markdown list — \
+one field per line, each line starting with `- `, and a blank line before the list starts. \
+CRITICAL: NEVER join the fields on one line with " - " separators, and NEVER indent a \
+sub-bullet under a field — the fields are five sibling bullets, nothing nested. Use exactly \
+this shape (repeat per trigger, numbered):
 
-**[Trigger name — crisp 5–7 words]**
+#### [N]. [Trigger name — crisp 5–7 words]
+
 - **What's happening:** 2–3 sentences — the specific capex, order win, capacity addition, \
 product launch, policy change, or structural shift.
 - **Quantified impact:** numbers wherever the filings allow — incremental revenue (₹ cr), \
 margin expansion (bps), volume growth (%), capacity/utilisation, addressable market, \
 order-book/bid-pipeline value.
-- **Estimated business impact (₹ cr and %):** REQUIRED for every trigger — translate the \
-trigger into money so its magnitude can be judged independently of conviction:
-  - **Incremental annual revenue: ₹X cr (≈Y% of TTM revenue)** — use the verified TTM \
-revenue supplied as the denominator. When the filings give a range, show the range.
-  - Where estimable, the incremental EBITDA/earnings (₹ cr, using the segment's or \
-company's margin — state which) and the **potential market-cap impact: ≈Z%** (incremental \
-earnings × the company's current multiple, against the verified market cap — state the \
-multiple used). If a step is genuinely not estimable from the filings, write \
-"*not estimable from filings*" for that step only — never invent, but never skip the \
-whole line when the revenue leg IS estimable.
+- **Estimated business impact:** REQUIRED for every trigger — translate the trigger into \
+money so its magnitude can be judged independently of conviction, all on this one line: \
+**Incremental annual revenue ₹X cr (≈Y% of TTM revenue)** using the verified TTM revenue \
+supplied as the denominator (show the range when the filings give one); then, where \
+estimable, the incremental EBITDA/earnings (₹ cr, stating the segment's or company's margin \
+used) and the **potential market-cap impact ≈Z%** (incremental earnings × the company's \
+current multiple, against the verified market cap — state the multiple). Write \
+"*not estimable from filings*" only for the leg that genuinely isn't disclosed — never \
+invent, and never skip the whole line when the revenue leg IS estimable.
 - **Timeline:** when it starts flowing into the P&L (e.g. "H2 FY27", "commissioning Q1 FY28").
 - **Conviction:** **HIGH CONVICTION** (already visible in order book / capex / policy), \
 **MEDIUM CONVICTION** (management-guided, not yet contracted), or **OPTIONALITY** \

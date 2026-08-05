@@ -233,6 +233,17 @@ bands shown inline), up to 5 peers per tier ranked by market cap plus a **M-cap 
 lists each peer by **readable company name** (from `sector_map`/`equity_master`), not ticker —
 the target marked ◄ in its own tier.
 
+**Peers are granular, not macro-sector.** Peers come from `sector.peers`, which groups on
+NSE's **`basic_industry`** (e.g. `Gems Jewellery And Watches`, `Private Sector Bank`,
+`Refineries & Marketing`) — the fine tier — falling back to the coarse macro `industry` only
+where the granular tag isn't yet enriched. Without this, a jeweller was compared against all of
+`Consumer Durables` (paints, ACs, footwear, ceramics) and a bank against all `Financial
+Services` (NBFCs, insurers, AMCs) — so the peer table, the §10 sector-percentile, and the §12
+z-scores were all diluted by unrelated names. The `basic_industry` column is enriched from NSE's
+`getSymbolData.secInfo` via `ingest_basic_industries` (`scripts/backfill_basic_industry.py`,
+one-time/idempotent); the valuation **lens** (P/E vs P/B vs EV/EBITDA) still keys off the macro
+`industry` (`sector.industry_of`), whose keyword lists are macro-level.
+
 **Consolidated vs standalone:** `generate_report(consolidated=None)` **defaults to
 consolidated whenever it exists** — the whole group (parent + subs + JVs) is the
 economically complete, industry-standard primary lens. It falls back to standalone only

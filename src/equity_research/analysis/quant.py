@@ -428,5 +428,5 @@ def sector_zscores(con: duckdb.DuckDBPyConnection, symbol: str,
             rows[k] = {"value": tv, "peer_mean": float(np.mean(vals)),
                        "peer_std": float(np.std(vals)), "n": int(len(vals)),
                        "z": float((tv - np.mean(vals)) / np.std(vals))}
-    return {"industry": sector.industry_of(con, symbol), "ratios": rows} if rows else \
-        {"industry": sector.industry_of(con, symbol), "note": "not enough peers with data"}
+    return {"industry": sector.peer_industry_of(con, symbol), "ratios": rows} if rows else \
+        {"industry": sector.peer_industry_of(con, symbol), "note": "not enough peers with data"}

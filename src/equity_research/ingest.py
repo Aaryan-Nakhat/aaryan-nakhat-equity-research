@@ -6,6 +6,7 @@ Each function fetches via ``scrapers``, renames columns to the schema in
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 
 import duckdb
@@ -14,6 +15,8 @@ import pandas as pd
 from equity_research.common.db import replace_for_date
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.scrapers import amfi, nse_api, nse_archives, nse_financials
+
+log = logging.getLogger("equity-research")
 
 # Source-column -> schema-column maps (schema order preserved on write).
 _EOD_MAP = {
@@ -607,18 +610,57 @@ def ingest_mf_holdings_all(con: duckdb.DuckDBPyConnection, as_of: date | None = 
 
 
 def ingest_sector_map(con: duckdb.DuckDBPyConnection, index: str = "nifty500") -> int:
-    """Land the symbol -> industry map from an NSE index constituent list."""
+    """Land the symbol -> industry map from an NSE index constituent list.
+
+    Upserts the CSV columns (company / macro industry / universe) but **preserves** any
+    ``basic_industry`` already enriched via ``ingest_basic_industries`` — the granular tag
+    is expensive to fetch and must survive the daily universe refresh."""
     df = nse_archives.fetch_constituents(index)
     out = df.rename(columns={"Company Name": "company", "Industry": "industry",
                              "Symbol": "symbol"})[["symbol", "company", "industry"]].copy()
     out["universe"] = index.upper()
     con.register("_sec", out)
     try:
-        con.execute("INSERT OR REPLACE INTO sector_map SELECT symbol, company, "
-                    "industry, universe FROM _sec")
+        con.execute(
+            "INSERT INTO sector_map (symbol, company, industry, universe) "
+            "SELECT symbol, company, industry, universe FROM _sec "
+            "ON CONFLICT (symbol) DO UPDATE SET company = excluded.company, "
+            "industry = excluded.industry, universe = excluded.universe")
     finally:
         con.unregister("_sec")
     return len(out)
+
+
+def ingest_basic_industries(con: duckdb.DuckDBPyConnection, symbols: list[str] | None = None,
+                            *, batch: int = 40, only_missing: bool = True,
+                            cooldown_s: float = 0.0) -> dict[str, int]:
+    """Enrich ``sector_map`` with NSE's granular ``basic_industry`` (e.g. 'Gems Jewellery And
+    Watches') — the finer tier the index-constituent CSVs omit, so peer grouping compares a
+    jeweller to jewellers, not to all of 'Consumer Durables'. Static data; run once, re-run
+    only picks up symbols still missing a tag. Browser-tier — batched to warm the session once
+    per ``batch`` symbols. Returns {'updated', 'missing', 'symbols'}."""
+    if symbols is None:
+        q = "SELECT symbol FROM sector_map"
+        if only_missing:
+            q += " WHERE basic_industry IS NULL OR basic_industry = ''"
+        symbols = [r[0] for r in con.execute(q + " ORDER BY symbol").fetchall()]
+    updated = 0
+    for i in range(0, len(symbols), batch):
+        chunk = symbols[i:i + batch]
+        info = nse_api.sec_info_batch(chunk)
+        for sym, d in info.items():
+            bi = (d or {}).get("basic_industry")
+            if bi:
+                con.execute("UPDATE sector_map SET basic_industry = ? WHERE symbol = ?",
+                            [bi, sym])
+                updated += 1
+        log.info("basic_industry: %d/%d done (+%d tagged)",
+                 min(i + batch, len(symbols)), len(symbols), updated)
+        if cooldown_s and i + batch < len(symbols):
+            import time
+            time.sleep(cooldown_s)
+    return {"updated": updated, "symbols": len(symbols),
+            "missing": len(symbols) - updated}
 
 
 def ingest_eod_range(start: date, end: date, con: duckdb.DuckDBPyConnection, *,

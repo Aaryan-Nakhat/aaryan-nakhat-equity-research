@@ -462,6 +462,45 @@ def live_quotes_batch(symbols: list[str]) -> dict[str, dict]:
     return out
 
 
+def _parse_sec_info(data: Any) -> dict:
+    """Static classification from getSymbolData's ``equityResponse[0].secInfo`` ({} on bad
+    shape) — the granular NSE industry taxonomy (basicIndustry / industry / sector / macro)
+    that the index-constituent CSVs don't carry. basicIndustry is the finest tier, e.g.
+    'Gems Jewellery And Watches' vs the CSV's macro 'Consumer Durables'."""
+    try:
+        r = (data.get("equityResponse") or [None])[0]
+    except (AttributeError, TypeError):
+        return {}
+    si = (r or {}).get("secInfo") or {}
+
+    def s(k):
+        return (si.get(k) or "").strip() or None
+
+    return {"basic_industry": s("basicIndustry"), "industry": s("industryInfo"),
+            "sector": s("sector"), "macro": s("macro")}
+
+
+def sec_info_batch(symbols: list[str]) -> dict[str, dict]:
+    """NSE granular classification for many symbols in ONE Camoufox session.
+    {symbol: {basic_industry, industry, sector, macro}} ({} for a symbol that failed).
+    Static data (industries rarely change) — a one-time/occasional backfill, not per-report."""
+    paths = {s: _QUOTE + q(s) for s in symbols}
+    captured: dict[str, Any] = {}
+
+    def _action(page):
+        captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
+        return page
+
+    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    out: dict[str, dict] = {}
+    for sym, body in captured.items():
+        try:
+            out[sym] = _parse_sec_info(json.loads(body)) if body else {}
+        except (json.JSONDecodeError, TypeError):
+            out[sym] = {}
+    return out
+
+
 def trading_holidays() -> set:
     """NSE equity (CM segment) trading holidays as a set of ``date`` objects."""
     from datetime import datetime as _dt
