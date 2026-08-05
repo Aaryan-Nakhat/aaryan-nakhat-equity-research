@@ -552,8 +552,41 @@ def _grouped_by_type(items: list[dict]) -> list[tuple[str | None, list[dict]]]:
     return groups
 
 
+def _levels_map(con: duckdb.DuckDBPyConnection, syms: list[str]) -> dict[str, dict]:
+    """Compute ``technical.levels`` once per watchlist symbol so the movers annotation and
+    the level-alerts share it (no double compute). Best-effort per symbol."""
+    out: dict[str, dict] = {}
+    for s in syms or []:
+        try:
+            out[s] = technical.levels(con, s)
+        except Exception:  # noqa: BLE001
+            log.exception("levels failed for %s", s)
+    return out
+
+
+def _annotate_mover_levels(movers: list[dict], lmap: dict[str, dict]) -> list[dict]:
+    """Tag each mover with its nearest support (``sup``) and resistance (``res``) mid-price so
+    every watchlist line can show where it sits vs its levels — not only when an alert fires."""
+    for m in movers or []:
+        lv = (lmap or {}).get(m.get("symbol"))
+        if lv and lv.get("history_ok"):
+            m["sup"] = lv["supports"][0]["mid"] if lv.get("supports") else None
+            m["res"] = lv["resistances"][0]["mid"] if lv.get("resistances") else None
+    return movers or []
+
+
+def _levels_bracket(m: dict) -> str:
+    """`· (S ₹1,250 / R ₹1,333)` for a mover line — nearest support / resistance. '' if neither.
+    Uses ``_fmt_price`` so low-priced names keep decimals (₹0.24, not a degenerate ₹0)."""
+    if m.get("sup") is None and m.get("res") is None:
+        return ""
+    s = f"S ₹{_fmt_price(m['sup'])}" if m.get("sup") is not None else "S —"
+    r = f"R ₹{_fmt_price(m['res'])}" if m.get("res") is not None else "R —"
+    return f" · ({s} / {r})"
+
+
 def _level_alerts(con: duckdb.DuckDBPyConnection, syms: list[str], names: dict, tmap: dict,
-                  *, live_prices: dict | None = None) -> list[dict]:
+                  *, live_prices: dict | None = None, lmap: dict | None = None) -> list[dict]:
     """Technical **level events** for the watchlist — transition-based so each fires once, not
     every day a condition holds. Compares a previous reference price with the current one:
     for the 6 PM digest, yesterday's close → today's close; for the midday digest, the prior
@@ -569,7 +602,7 @@ def _level_alerts(con: duckdb.DuckDBPyConnection, syms: list[str], names: dict, 
     out: list[dict] = []
     for sym in syms or []:
         try:
-            lv = technical.levels(con, sym)
+            lv = (lmap or {}).get(sym) or technical.levels(con, sym)
             if not lv.get("history_ok"):
                 continue
             ind = technical.indicators(con, sym)
@@ -669,7 +702,7 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
             elif m.get("pe_note"):                      # explain why there's no P/E
                 val = f" · P/E n/a ({m['pe_note']})"
             return (f"- {emo} **{m['company']}** ({m['symbol']}) — ₹{_fmt_price(m['close'])} · "
-                    f"{chg} · {deliv}{tail}{val}")
+                    f"{chg} · {deliv}{tail}{val}{_levels_bracket(m)}")
         rows = ["## Movers (today)"]
         for label, grp in _grouped_by_type(movers):
             if label:
@@ -853,14 +886,18 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
         tmap = watchlist.type_map(con)
         live_px = {s: (quotes.get(s) or {}).get("last") for s in syms
                    if (quotes.get(s) or {}).get("last") is not None}
+        lmap = _safe(lambda: _levels_map(con, syms), {})
+        movers = _annotate_mover_levels(
+            _annotate_types(_safe(lambda: _intraday_movers(syms, quotes), []), tmap), lmap)
         return IntradayResult(
-            movers=_annotate_types(_safe(lambda: _intraday_movers(syms, quotes), []), tmap),
+            movers=movers,
             filings=_safe(lambda: _intraday_filings(anns, names), []),
             insider=_safe(lambda: _intraday_insider(insider), []),
             market=market,
             upcoming=_annotate_types(
                 _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
-            level_alerts=_safe(lambda: _level_alerts(con, syms, names, tmap, live_prices=live_px), []),
+            level_alerts=_safe(
+                lambda: _level_alerts(con, syms, names, tmap, live_prices=live_px, lmap=lmap), []),
             asof=datetime.now(_IST),
         )
     finally:
@@ -893,7 +930,7 @@ def format_intraday_digest(sr: IntradayResult) -> str:
             deliv = f" · deliv {m['deliv_pct']:.0f}%" if m.get("deliv_pct") is not None else ""
             pct = f"{pc:+.1f}%" if pc is not None else "n/a"
             return (f"- {emo} **{m['company']}** ({m['symbol']}) — "
-                    f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}")
+                    f"₹{_fmt_price(m['last'])} · {pct}{rng}{deliv}{_levels_bracket(m)}")
         rows = ["## Movers (live)"]
         for label, grp in _grouped_by_type(sr.movers):
             if label:
@@ -997,13 +1034,16 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
         ) if x)
         tmap = watchlist.type_map(con)
         names_all = {s: (c or s) for s, c in watchlist.entries(con)}
+        lmap = _safe(lambda: _levels_map(con, syms), {})
+        movers = _annotate_mover_levels(
+            _annotate_types(_safe(lambda: watchlist_movers(con), []), tmap), lmap)
         return ScanResult(
             results,
-            _annotate_types(_safe(lambda: watchlist_movers(con), []), tmap),
+            movers,
             _annotate_types(_safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
             market,
             insider=_safe(lambda: _insider_alerts(con, insider_by_sym), []),
-            level_alerts=_safe(lambda: _level_alerts(con, syms, names_all, tmap), []),
+            level_alerts=_safe(lambda: _level_alerts(con, syms, names_all, tmap, lmap=lmap), []),
             pending_state=pending,
             pending_insider=insider_by_sym,
         )
