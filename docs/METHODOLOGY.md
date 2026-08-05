@@ -351,14 +351,17 @@ with zero).
   intensity delta, self-funded (CFO/capex). **Hard gates** exclude traps (revenue shrinking vs 2y
   ago, Altman Z<1.81, Beneish M>−1.78, pledge>25%). **Model:** none for all four.
 - **`screen: policy` / `policy:` — government policy radar (`analysis/policy.py`, `scrapers/pib.py`)** —
-  **source:** the latest **PIB press releases** (English RSS → per-release body, plain HTTP; primary &
-  official — *no* news/social rumor). **Transform:** fetch ~20 recent releases, keyword-gate the bodies
-  to economic ones. **Model — 🤖 LLM (`synthesize.policy_impact`, JSON):** classifies each into
-  {scheme, ministry, stage (announced/cabinet-approved/**draft**/consultation/budget/reform),
-  affected sectors, transmission mechanism, likely listed beneficiaries}, grounded only in the release.
-  **Map:** beneficiary names → NSE symbols via `equity_master`/`sector_map` (norm-name match); watchlist
-  names flagged; sorted watchlist-hits then #listed-beneficiaries first. **Standalone screen — no effect
-  on reports, the watchlist or the digests.** Catches policy at the pre-launch official stage.
+  **source:** the latest **PIB press releases** (the all-releases *listing* → the latest ~100+ releases,
+  each with **title + ministry**, plain HTTP; primary & official — *no* news/social rumor). *(PIB's
+  public listing exposes only the latest ~100 releases; its date filter is a server-side control that
+  doesn't page reliably, so this is "recent", not a fixed N-day archive.)* **Transform:** title-gate to
+  plausibly-economic releases (cap ~55), fetch each body. **Model — 🤖 LLM (`synthesize.policy_impact`,
+  JSON):** classifies each into {scheme, ministry, stage (announced/cabinet-approved/**draft**/
+  consultation/budget/reform), affected sectors, transmission mechanism, `what_it_is`, `benefit`, and
+  **beneficiaries with a per-company `why`**}, grounded only in the release. **Map:** beneficiary names →
+  NSE symbols + **readable company names** via `equity_master`/`sector_map` (norm-name match); watchlist
+  names flagged; sorted watchlist-hits then #listed first. **Standalone screen — no effect on reports,
+  the watchlist or the digests.** Catches policy at the pre-launch official stage.
 - **Weekly "Screener movements"** (`screen_digest.py`) — Saturday email with **trigger-based deltas
   only** across the three screens (fingerprints in `alert_state`).
 

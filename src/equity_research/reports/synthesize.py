@@ -699,15 +699,20 @@ Reply with ONLY a JSON array (no markdown, no prose). One object per QUALIFYING 
   "stage":"announced|cabinet-approved|draft|consultation|budget|reform",
   "sectors":["<plain sector names the release affects>"],
   "mechanism":"capex/order-flow|import-substitution/PLI|subsidy/incentive|demand-creation|deregulation/reform|funding/allocation",
-  "rationale":"<1-2 lines: what the policy does and why it helps those sectors — grounded ONLY in the release>",
-  "beneficiaries":["<specific Indian LISTED companies likely to benefit>"],
+  "what_it_is":"<2-3 sentences, plain English: what the scheme/policy actually is, the ₹ size / \
+targets / timeline if the release gives them — grounded ONLY in the release>",
+  "benefit":"<2-3 sentences: HOW this flows to the affected sectors — order flow / capex / demand \
+pull / margin / import-substitution — i.e. the transmission mechanism spelt out>",
+  "beneficiaries":[{"company":"<FULL Indian LISTED company name, e.g. 'Titagarh Rail Systems Ltd', \
+not a ticker>","why":"<one crisp line: why THIS company specifically benefits — its product / \
+capacity / position in the value chain>"}],
   "confidence":"high|medium|low"}]
 
-Rules: ground everything in the release text — never invent a scheme or a number the text doesn't \
-support. For beneficiaries, name the real NSE-listed companies a sector analyst would flag \
-(e.g. a solar push -> "Waaree Energies", "Premier Energies"; a railway capex -> "Titagarh Rail", \
-"RVNL"); if you genuinely can't name any, use an empty list. If NO release qualifies, reply \
-exactly []."""
+Rules: ground everything in the release text — never invent a scheme or a number it doesn't \
+support. For beneficiaries, name real NSE-listed companies a sector analyst would flag with the \
+**full company name** (e.g. a solar push -> "Waaree Energies Ltd", "Premier Energies Ltd"; a \
+railway capex -> "Titagarh Rail Systems Ltd", "Rail Vikas Nigam Ltd") and a specific reason each; \
+if you genuinely can't name any, use an empty list. If NO release qualifies, reply exactly []."""
 
 
 def policy_impact(releases: list[dict], *, model: str = MODEL) -> list[dict]:
