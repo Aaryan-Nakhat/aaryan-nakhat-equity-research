@@ -87,6 +87,7 @@ valuation + signals → LLM report → email **or** Telegram bot, always-on). On
 reports + a midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
 Telegram one for when Telegram is ISP-blocked. Docs:
 
+- [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) / [`docs/SCRAPING.md`](docs/SCRAPING.md) — sources + scrapability findings.
