@@ -25,7 +25,7 @@ from equity_research.ingest import (
     ingest_mf_navall,
     store_pledge,
 )
-from equity_research.scrapers import fbil, mcx, nse_api
+from equity_research.scrapers import fbil, mcx, nse_api, nse_shp
 from equity_research import watchlist
 
 
@@ -324,23 +324,95 @@ def _fmt_qty(q: float | None) -> str:
     return f"{q:,.0f}"
 
 
-def _deal_alert(dl: dict) -> alerts.Alert:
-    """A bulk/block-deal Alert (green BUY / red SELL) for a watchlist stock."""
+_FOREIGN_RE = re.compile(
+    r"\b(fpi|fii|foreign|offshore|mauritius|cayman|luxembourg|singapore|cyprus|vcc|"
+    r"ireland|netherlands|global|overseas)\b", re.I)
+
+
+def _listed_name_map(con: duckdb.DuckDBPyConnection) -> dict[str, str]:
+    """``norm_name(company) → NSE symbol`` for the listed master — lets a deal counterparty
+    that is itself a listed company be flagged (the Elcid pattern). {} if the master is empty."""
+    try:
+        return {nse_shp.norm_name(n): s for s, n in con.execute(
+            "SELECT symbol, company_name FROM equity_master "
+            "WHERE company_name IS NOT NULL").fetchall()}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _classify_client(name: str, listed: dict[str, str] | None) -> str | None:
+    """Best-effort **what-is-this-counterparty** from the deal client name alone: a listed
+    company (with its symbol), mutual fund, insurer, FPI/foreign, other fund, LLP, trust,
+    HUF, unlisted pvt / unlisted company, or an individual. Name-only heuristic (deals carry
+    no structured category), so it's a hint, not a guarantee."""
+    n = (name or "").strip()
+    if not n:
+        return None
+    low = n.lower()
+    sym = (listed or {}).get(nse_shp.norm_name(n))
+    if sym:
+        return f"listed co · {sym}"
+    if re.search(r"mutual fund|asset management|\bamc\b|\bmf\b", low):
+        return "mutual fund"
+    if re.search(r"\blic\b|insurance|assurance", low):
+        return "insurer"
+    if _FOREIGN_RE.search(low):
+        return "FPI / foreign"
+    if re.search(r"\bfund\b|investment trust|\breit\b|\binvit\b", low):
+        return "fund / investment vehicle"
+    if "llp" in low:
+        return "LLP"
+    if re.search(r"\btrust\b", low):
+        return "trust"
+    if re.search(r"\bhuf\b", low):
+        return "HUF"
+    if re.search(r"private limited|\bpvt\b", low):
+        return "unlisted pvt company"
+    if re.search(r"\b(limited|ltd|plc|corp|corporation|industries|holdings?|ventures?|"
+                 r"enterprises?|capital|securities|broking|trading|infra)\b", low):
+        return "unlisted company"
+    return "individual"
+
+
+def _deal_alert(dl: dict, listed: dict[str, str] | None = None) -> alerts.Alert:
+    """A bulk/block-deal Alert (green BUY / red SELL) for a watchlist stock. ``deal_type`` may
+    be 'bulk & block' when the same trade was reported in both feeds. The counterparty is
+    classified (listed co / MF / FPI / individual …) in brackets after its name."""
     sev = "green" if dl.get("buy_sell") == "BUY" else "red"
     price = f"₹{dl['price']:,.0f}" if dl.get("price") else "?"
-    title = f"{dl['deal_type'].title()} deal — {dl.get('buy_sell', '').title()}"
-    body = f"{dl.get('client', '?')} {dl.get('buy_sell', '').lower()} {_fmt_qty(dl.get('qty'))} sh @ {price}"
+    title = f"{dl.get('deal_type', '').title()} deal — {dl.get('buy_sell', '').title()}"
+    client = dl.get("client", "?")
+    cls = _classify_client(client, listed)
+    who = f"{client} ({cls})" if cls else client
+    body = f"{who} {dl.get('buy_sell', '').lower()} {_fmt_qty(dl.get('qty'))} sh @ {price}"
     return alerts.Alert(dl["symbol"], sev, title, body)
 
 
-def watchlist_deals(syms: list[str], deals: dict) -> dict[str, list[alerts.Alert]]:
-    """Bulk/block deals (pre-fetched, market-wide) filtered to ``syms``."""
+def watchlist_deals(syms: list[str], deals: dict,
+                    listed: dict[str, str] | None = None) -> dict[str, list[alerts.Alert]]:
+    """Bulk/block deals (pre-fetched, market-wide) filtered to ``syms``, **deduped across the
+    bulk and block feeds** — NSE reports one large trade in *both*, which otherwise showed the
+    same buy/sell four times. A trade seen in both is labelled 'bulk & block'; buy and sell
+    (distinct counterparties) stay as separate lines. ``listed`` classifies each counterparty."""
     symset = set(syms)
+    merged: dict[tuple, dict] = {}
+    for src in ("bulk", "block"):
+        for dl in deals.get(src) or []:
+            sym = dl.get("symbol")
+            if sym not in symset or not dl.get("client"):
+                continue
+            key = (sym, dl.get("buy_sell"), (dl.get("client") or "").strip().lower(),
+                   dl.get("qty"), dl.get("price"))
+            if key in merged:
+                merged[key]["_sources"].add(src)
+            else:
+                d = dict(dl)
+                d["_sources"] = {src}
+                merged[key] = d
     out: dict[str, list[alerts.Alert]] = {}
-    for dl in (deals.get("bulk") or []) + (deals.get("block") or []):
-        sym = dl.get("symbol")
-        if sym in symset and dl.get("client"):
-            out.setdefault(sym, []).append(_deal_alert(dl))
+    for d in merged.values():
+        d["deal_type"] = "bulk & block" if len(d["_sources"]) == 2 else next(iter(d["_sources"]))
+        out.setdefault(d["symbol"], []).append(_deal_alert(d, listed))
     return out
 
 
@@ -1004,8 +1076,10 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
                 pending[sym] = updates
             if fired:
                 results[sym] = fired
-        # per-stock bulk/block deals (institutional buy/sell) — merge in
-        for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}).items():
+        # per-stock bulk/block deals (institutional buy/sell) — deduped across the bulk &
+        # block feeds, counterparty classified (listed co / MF / FPI / individual …)
+        listed = _listed_name_map(con)
+        for sym, deal_alerts in watchlist_deals(syms, feeds.get("deals") or {}, listed).items():
             results.setdefault(sym, []).extend(deal_alerts)
         _enrich_event_docs(results)                         # inline LLM read of filings
 
