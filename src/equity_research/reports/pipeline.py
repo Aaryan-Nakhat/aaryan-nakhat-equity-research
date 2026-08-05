@@ -12,7 +12,8 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
-from equity_research.analysis import forensic, fundamentals, quant, sector, valuation
+from equity_research.analysis import (forensic, fundamentals, quant, sector, technical,
+                                      valuation)
 from equity_research.analysis.alerts import _categorise
 from equity_research.common.db import connect
 from equity_research.common.http import fetch_bytes
@@ -20,6 +21,7 @@ from equity_research.reports import glossary
 from equity_research.ingest import (ingest_annual_financials, ingest_financials,
                                     ingest_insider_trades, ingest_shareholding,
                                     ingest_shp_holders, ingest_shp_history)
+from equity_research.reports import deep_brief as deep_brief_mod
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import (business_overview, extract_guidance,
@@ -328,7 +330,25 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
         thesis = synthesize_thesis(brief, symbol,
                                    pdfs=pdfs if pdfs is not None else _filings_for_analysis(symbol),
                                    deep=deep)
-    return f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
+    out = f"{brief}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
+    if deep:                                   # verdict-aware trading levels, after the call
+        out += _levels_section(symbol, verdict=deep_brief_mod.verdict_from_text(thesis))
+    return out
+
+
+def _levels_section(symbol: str, *, verdict: str | None) -> str:
+    """The 'Trading levels & setup' markdown, computed with the thesis verdict so the setup
+    defers to it. Own read-only connection; never breaks the report."""
+    try:
+        con = connect()
+        try:
+            lv = technical.levels(con, symbol, verdict=verdict)
+            lines = deep_brief_mod.render_levels(con, symbol, lv)
+        finally:
+            con.close()
+        return ("\n\n" + "\n".join(lines)) if lines else ""
+    except Exception:  # noqa: BLE001 — a missing chart/level must never break the report
+        return ""
 
 
 def _ok(v) -> bool:

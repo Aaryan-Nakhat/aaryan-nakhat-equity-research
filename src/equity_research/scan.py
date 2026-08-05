@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 
-from equity_research.analysis import alerts, fundamentals, positioning, valuation
+from equity_research.analysis import alerts, fundamentals, positioning, technical, valuation
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import (
@@ -48,6 +48,7 @@ class ScanResult:
     upcoming: list[dict] = field(default_factory=list)
     market: str = ""
     insider: list[str] = field(default_factory=list)        # formatted insider/promoter alert lines
+    level_alerts: list[dict] = field(default_factory=list)  # technical level events (tracking/holdings)
     # per-symbol dedup-state advances, persisted ONLY after the digest is delivered
     # (see commit_scan_state) so a crash before delivery can't silently eat events.
     pending_state: dict[str, dict] = field(default_factory=dict)
@@ -85,6 +86,7 @@ class IntradayResult:
     insider: list[str] = field(default_factory=list)
     market: str = ""
     upcoming: list[dict] = field(default_factory=list)
+    level_alerts: list[dict] = field(default_factory=list)
     asof: "datetime | None" = None
 
 
@@ -550,6 +552,86 @@ def _grouped_by_type(items: list[dict]) -> list[tuple[str | None, list[dict]]]:
     return groups
 
 
+def _level_alerts(con: duckdb.DuckDBPyConnection, syms: list[str], names: dict, tmap: dict,
+                  *, live_prices: dict | None = None) -> list[dict]:
+    """Technical **level events** for the watchlist — transition-based so each fires once, not
+    every day a condition holds. Compares a previous reference price with the current one:
+    for the 6 PM digest, yesterday's close → today's close; for the midday digest, the prior
+    close → the live price. Bucketed by list_type:
+
+    - **Tracking** (watching for an entry): 🚀 a fresh break above the nearest resistance, or
+      🎯 a fresh pullback into the strongest support zone.
+    - **Holdings** (watching the exit): ⚠️ a fresh loss of the 50/200-DMA, or 🔻 a break below
+      the strongest support (invalidation).
+
+    Returns dicts carrying ``symbol``/``company``/``list_type``/``text`` (list_type lets the
+    digest group them into Holdings vs Tracking). Best-effort per symbol."""
+    out: list[dict] = []
+    for sym in syms or []:
+        try:
+            lv = technical.levels(con, sym)
+            if not lv.get("history_ok"):
+                continue
+            ind = technical.indicators(con, sym)
+            if ind.empty or len(ind) < 2:
+                continue
+            last, prevrow = ind.iloc[-1], ind.iloc[-2]
+            atr = lv.get("atr") or 0.0
+            if live_prices is not None:
+                cur = live_prices.get(sym)
+                prev = float(last["close"])
+                if cur is None:
+                    continue
+                cur = float(cur)
+            else:
+                cur, prev = float(last["close"]), float(prevrow["close"])
+            ltype = tmap.get(sym, "holding")
+            sups, ress = lv.get("supports", []), lv.get("resistances", [])
+            txt = None
+            if ltype == "tracking":
+                if ress:                                      # fresh breakout over nearest resistance
+                    r = ress[0]
+                    if prev <= r["hi"] and cur > r["hi"]:
+                        txt = (f"🚀 broke resistance ₹{r['mid']:,.0f} — potential breakout "
+                               f"(reply `levels: {sym}` for the setup)")
+                if txt is None and sups:                      # fresh pullback into strong support
+                    s = max(sups, key=lambda z: z["score"])
+                    if prev > s["hi"] and s["lo"] - 0.5 * atr <= cur <= s["hi"] + 0.5 * atr:
+                        txt = (f"🎯 pulled into support ₹{s['lo']:,.0f}–₹{s['hi']:,.0f} — watch "
+                               f"for an entry (reply `levels: {sym}`)")
+            else:                                             # holding — stop / trim watch
+                for dma, label in (("sma50", "50-DMA"), ("sma200", "200-DMA")):
+                    v = last.get(dma)
+                    vp = prevrow.get(dma) if live_prices is None else v
+                    if v == v and vp == vp and v and prev >= vp and cur < v:
+                        txt = f"⚠️ lost the {label} (₹{v:,.0f}) — stop / trim watch"
+                        break
+                if txt is None and sups:
+                    s = max(sups, key=lambda z: z["score"])
+                    if prev >= s["lo"] and cur < s["lo"]:
+                        txt = f"🔻 broke support ₹{s['lo']:,.0f} — invalidation, review the position"
+            if txt:
+                out.append({"symbol": sym, "company": names.get(sym, sym),
+                            "list_type": ltype, "text": txt})
+        except Exception:  # noqa: BLE001 — a level read must never break the scan
+            log.exception("level alert failed for %s", sym)
+    return out
+
+
+def _level_alert_section(alerts_list: list[dict], names: dict) -> str | None:
+    """Render the '🎯 Level alerts' section grouped into Holdings / Tracking, or None if empty."""
+    if not alerts_list:
+        return None
+    rows = ["## 🎯 Level alerts"]
+    for label, grp in _grouped_by_type(alerts_list):
+        if label:
+            rows += ["", f"### {label}", ""]
+        for a in grp:
+            nm = names.get(a["symbol"]) or a.get("company") or a["symbol"]
+            rows.append(f"- **{nm}** ({a['symbol']}) — {a['text']}")
+    return "\n".join(rows)
+
+
 def format_digest(date_str: str, sr: ScanResult) -> str:
     """Build the digest markdown — Upcoming events, a per-stock Movers snapshot,
     and Events (with any inline filing analysis), all by company name (ticker in
@@ -594,6 +676,10 @@ def format_digest(date_str: str, sr: ScanResult) -> str:
                 rows += ["", f"### {label}", ""]
             rows += [_mline(m) for m in grp]
         parts.append("\n".join(rows))
+
+    lvl = _level_alert_section(sr.level_alerts, names)
+    if lvl:
+        parts.append(lvl)
 
     if results:
         ev = ["## Events (today)"]
@@ -765,6 +851,8 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
             _safe(lambda: _money_lines(usd, comm), ""),   # USD/INR + live commodities
         ) if x)
         tmap = watchlist.type_map(con)
+        live_px = {s: (quotes.get(s) or {}).get("last") for s in syms
+                   if (quotes.get(s) or {}).get("last") is not None}
         return IntradayResult(
             movers=_annotate_types(_safe(lambda: _intraday_movers(syms, quotes), []), tmap),
             filings=_safe(lambda: _intraday_filings(anns, names), []),
@@ -772,6 +860,7 @@ def run_intraday_scan(con: duckdb.DuckDBPyConnection | None = None) -> IntradayR
             market=market,
             upcoming=_annotate_types(
                 _safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
+            level_alerts=_safe(lambda: _level_alerts(con, syms, names, tmap, live_prices=live_px), []),
             asof=datetime.now(_IST),
         )
     finally:
@@ -811,6 +900,9 @@ def format_intraday_digest(sr: IntradayResult) -> str:
                 rows += ["", f"### {label}", ""]
             rows += [_mline(m) for m in grp]
         parts.append("\n".join(rows))
+    lvl = _level_alert_section(sr.level_alerts, names)
+    if lvl:
+        parts.append(lvl)
     if sr.filings:
         rows = ["## Events (filed today)"]
         for f in sr.filings:
@@ -904,12 +996,14 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
             _safe(lambda: _money_lines(usd, comm), ""),
         ) if x)
         tmap = watchlist.type_map(con)
+        names_all = {s: (c or s) for s, c in watchlist.entries(con)}
         return ScanResult(
             results,
             _annotate_types(_safe(lambda: watchlist_movers(con), []), tmap),
             _annotate_types(_safe(lambda: watchlist_upcoming(syms, feeds, labeler=_labeler), []), tmap),
             market,
             insider=_safe(lambda: _insider_alerts(con, insider_by_sym), []),
+            level_alerts=_safe(lambda: _level_alerts(con, syms, names_all, tmap), []),
             pending_state=pending,
             pending_insider=insider_by_sym,
         )

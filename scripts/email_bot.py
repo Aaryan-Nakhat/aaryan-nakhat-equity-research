@@ -34,9 +34,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import holdco, investors, screener, smallcap  # noqa: E402
+from equity_research.analysis import holdco, investors, screener, smallcap, technical  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
+from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import md  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
@@ -498,6 +499,73 @@ def _investor_query(subject: str) -> str | None:
     return m.group(1).strip() if m and m.group(1).strip() else None
 
 
+def _levels_query(subject: str) -> str | None:
+    """Parse 'levels: <name>' / 'technical: <name>' / 'setup: <name>' / 'chart: <name>' →
+    the free-text company name, or None. A quick, no-LLM technical read (support/resistance
+    zones, structure, patterns, entry/stop/target) with an annotated chart."""
+    m = re.match(r"^\s*(?:re:\s*)?(?:levels?|technicals?|setup|chart)\s*[:\-]\s*(.+)$",
+                 subject, flags=re.I)
+    return m.group(1).strip() if m and m.group(1).strip() else None
+
+
+def _levels_pdf(report_md: str, symbol: str, images: list) -> bytes | None:
+    """Small PDF for a levels reply — the section tables + the annotated chart. Best-effort
+    under a hard timeout (the body already carries the text)."""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return ex.submit(report_to_pdf, report_md, f"{symbol} — Trading levels",
+                         images).result(timeout=90)
+    except Exception:  # noqa: BLE001
+        log.exception("levels PDF failed for %s", symbol)
+        return None
+    finally:
+        ex.shutdown(wait=False)
+
+
+def _send_levels(query: str, req: EmailRequest) -> None:
+    """On-demand technical levels for a named stock — computed, no LLM. Resolves the name,
+    maps support/resistance zones + structure + a reward:risk setup, and sends the text plus
+    an annotated candlestick chart (zones + entry/stop/target). Auto-uses the best resolve
+    match (this is a quick look-up); the reply says which symbol it used."""
+    _reply_text(req, f"📈 Reading the price structure for **{query}** — support/resistance "
+                     "levels, patterns & setup (~30s, no wait for the LLM).")
+    try:
+        cands = resolve(query)
+    except Exception:  # noqa: BLE001
+        log.exception("resolve failed for levels %r", query)
+        _reply_text(req, f"Couldn't look up '{query}' right now — please try again.")
+        return
+    if not cands:
+        _reply_text(req, f"Couldn't resolve '{query}' to an NSE symbol. Try the exact name.")
+        return
+    symbol, name = cands[0].symbol, cands[0].name
+    con = connect()
+    try:
+        lv = technical.levels(con, symbol)
+        lines = deep_brief.render_levels(con, symbol, lv)
+        chart = (charts.levels_chart(con, symbol, lv, draw_setup=True)
+                 if lv.get("history_ok") else None)
+    finally:
+        con.close()
+    if not lines:
+        _reply_text(req, f"No price history on file for {symbol} yet — can't map levels.")
+        return
+    head = f"📈 Trading levels — **{symbol}**" + (f" — {name}" if name else "")
+    if len(cands) > 1:
+        head += (f"\n\n_Resolved '{query}' → {symbol}. Reply with the exact name if you "
+                 "meant a different company._")
+    body = head + "\n\n" + "\n".join(lines)
+    images = [chart] if chart else []
+    pdf = _levels_pdf(body, symbol, images) if images else None
+    attachments = [(f"{symbol}_levels.pdf", pdf)] if pdf else []
+    emailer.send_report(
+        _re_subject(req.subject), body, to=req.sender,
+        html=emailer.body_html(body, symbol), attachments=attachments,
+        in_reply_to=req.message_id, references=req.references or req.message_id,
+    )
+    log.info("sent levels for %s to %s", symbol, req.sender)
+
+
 def _screen_run(fn, *, timeout: int = 300):
     """Run a screener under a HARD timeout (they loop the universe with per-symbol analysis).
     Returns None on timeout/error so the caller replies honestly instead of hanging."""
@@ -883,6 +951,12 @@ def handle_request(req: EmailRequest) -> None:
             _send_smallcap_screen(req)
         else:
             _send_fundamental_screen(req)
+        return
+
+    # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
+    lq = _levels_query(req.subject)
+    if lq:
+        _send_levels(lq, req)
         return
 
     # 2) fresh query from the subject. Ack IMMEDIATELY at pickup — symbol resolution can
