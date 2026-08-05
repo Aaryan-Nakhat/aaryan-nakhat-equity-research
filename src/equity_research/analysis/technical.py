@@ -13,12 +13,19 @@ import pandas as pd
 
 
 def load_prices(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
-    """Daily OHLCV + delivery% for ``symbol`` (EQ series), indexed by date asc."""
+    """Daily OHLCV + delivery% for ``symbol``, indexed by date asc.
+
+    Includes the **trade-for-trade** series (``BE`` / ``BZ``) alongside normal ``EQ`` — those
+    are still real delivery-settled daily prices, and many small / surveillance names trade
+    there, so EQ-only left them with almost no history (no technicals / no levels). A stock is
+    in one series per day, but if a date ever carries two rows we keep ``EQ`` (``QUALIFY``)."""
     df = con.execute(
-        """SELECT trade_date, open, high, low, close, ttl_trd_qnty AS volume,
-                  deliv_per
+        """SELECT trade_date, open, high, low, close, ttl_trd_qnty AS volume, deliv_per
            FROM equity_eod
-           WHERE symbol = ? AND series = 'EQ'
+           WHERE symbol = ? AND series IN ('EQ', 'BE', 'BZ')
+           QUALIFY row_number() OVER (
+               PARTITION BY trade_date
+               ORDER BY CASE series WHEN 'EQ' THEN 0 WHEN 'BE' THEN 1 ELSE 2 END) = 1
            ORDER BY trade_date""",
         [symbol],
     ).df()

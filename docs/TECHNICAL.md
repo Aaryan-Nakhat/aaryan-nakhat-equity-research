@@ -4,6 +4,13 @@ Indicators computed from the daily EOD series in `equity_eod` (NSE bhavcopy,
 incl. delivery %). All in `analysis/technical.py`; pure functions over the price
 history.
 
+`load_prices` reads the **`EQ` + trade-for-trade (`BE`/`BZ`) series** (one row per date,
+`EQ` preferred) — small / surveillance names trade in `BE`, so an `EQ`-only read left them
+with almost no history and no technicals/levels. The levels engine still needs **≥60 trading
+days** in the store before it maps support/resistance (below that it shows nothing rather than
+draw lines on too little data); genuinely thin/suspended names (e.g. a distressed stock with
+only a few stale rows) therefore carry no levels until enough history accumulates.
+
 ## Data dependency — continuous daily history
 
 Indicators like the 200-DMA need a *continuous* daily series, but normal use
