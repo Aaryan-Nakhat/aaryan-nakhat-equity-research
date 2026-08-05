@@ -48,10 +48,15 @@ Personal use. Not a hosted product.
   **capex-led small-cap hunt**: names in ₹1,000–10,000 cr ranked on a capex-cycle-first composite
   (capex vs its 3y base · capex ÷ depreciation · self-funded · ROCE & trend · cash quality · smart-money),
   with near-distress / manipulation / heavy-pledge / shrinking-revenue traps **gated out** — built to
-  catch a structural capex boom *before* the P&L re-rates. Every list is a real table; a
+  catch a structural capex boom *before* the P&L re-rates. **Email `screen: policy`** (or `policy:`) →
+  the **government policy radar**: scans the latest **PIB press releases** (primary, official) for new
+  schemes / policies / reforms — often at the announced / cabinet-approved / **draft** / consultation
+  stage, *before* formal launch — and an LLM maps each to the **sector(s)** it hits and the **listed
+  companies** likely to benefit (resolved to NSE symbols, watchlist names flagged). Primary sources
+  only — **no news/social-media rumor**. Every list is a real table; a
   **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas.
   `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `analysis/smallcap.py`,
-  `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the
+  `analysis/policy.py` (+ `scrapers/pib.py`), `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the
   Nifty Smallcap 250 + Microcap 250 universe that gives `screen: smallcap` its edge).
 - **Trading levels** *(new track)* — a **computed** (no-LLM) technical layer: support/resistance
   **zones** from the confluence of swing pivots + moving averages + 52-week extremes + volume-by-price

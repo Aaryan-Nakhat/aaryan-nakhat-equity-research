@@ -683,6 +683,64 @@ def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
     return out
 
 
+_POLICY_SYS = """You are an Indian macro / policy analyst. You are given a numbered list of \
+raw **PIB (Press Information Bureau) government press releases**. Your job: find the ones that are \
+**economic schemes / policies / reforms / allocations that will affect a listed SECTOR and the \
+companies in it**, and classify each. IGNORE everything else — awards, appointments, cultural \
+events, condolences, sports, pure science/health research, foreign-visit readouts, and generic \
+"minister addresses / inaugurates" items with no concrete policy or money.
+
+Include an item ONLY if it contains a concrete, market-relevant policy signal: a new/expanded \
+scheme, PLI, subsidy or incentive, capex/allocation (₹), a sectoral reform or deregulation, a \
+mission, a procurement/tender push, a duty/tariff change, or a cabinet/draft/consultation policy.
+
+Reply with ONLY a JSON array (no markdown, no prose). One object per QUALIFYING release:
+[{"prid":"<the PRID>","scheme":"<short name, <=10 words>","ministry":"<ministry>",
+  "stage":"announced|cabinet-approved|draft|consultation|budget|reform",
+  "sectors":["<plain sector names the release affects>"],
+  "mechanism":"capex/order-flow|import-substitution/PLI|subsidy/incentive|demand-creation|deregulation/reform|funding/allocation",
+  "rationale":"<1-2 lines: what the policy does and why it helps those sectors — grounded ONLY in the release>",
+  "beneficiaries":["<specific Indian LISTED companies likely to benefit>"],
+  "confidence":"high|medium|low"}]
+
+Rules: ground everything in the release text — never invent a scheme or a number the text doesn't \
+support. For beneficiaries, name the real NSE-listed companies a sector analyst would flag \
+(e.g. a solar push -> "Waaree Energies", "Premier Energies"; a railway capex -> "Titagarh Rail", \
+"RVNL"); if you genuinely can't name any, use an empty list. If NO release qualifies, reply \
+exactly []."""
+
+
+def policy_impact(releases: list[dict], *, model: str = MODEL) -> list[dict]:
+    """Classify a batch of PIB releases → the economic schemes among them, each with the sectors
+    it hits, the transmission mechanism, and likely listed beneficiaries. One LLM call. ``releases``
+    is ``[{prid, title, body}, …]``. Returns the parsed JSON list (``[]`` on nothing / any failure).
+    Never raises."""
+    items = [r for r in releases if r.get("body")]
+    if not items:
+        return []
+    numbered = "\n\n".join(
+        f"### Release {r['prid']}\nTitle: {r.get('title', '')}\n"
+        f"{' '.join((r.get('body') or '').split())[:1600]}" for r in items)
+    try:
+        resp = _client().models.generate_content(
+            model=model,
+            contents=[types.Part.from_text(text=numbered)],
+            config=types.GenerateContentConfig(
+                system_instruction=_POLICY_SYS, response_mime_type="application/json"),
+        )
+        text = (resp.text or "").strip()
+    except Exception:  # noqa: BLE001 — best-effort, never break the screen
+        return []
+    m = re.search(r"\[.*\]", text, re.S)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return []
+    return [d for d in data if isinstance(d, dict) and d.get("scheme")]
+
+
 _GUIDANCE_SYS = """You read Indian-listed companies' filings (concall transcripts, \
 investor presentations, results, outlook statements). Extract ONLY explicit FORWARD \
 guidance that MANAGEMENT itself gave for a FUTURE full fiscal year — e.g. "we expect \

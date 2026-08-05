@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import holdco, investors, screener, smallcap, technical  # noqa: E402
+from equity_research.analysis import holdco, investors, policy, screener, smallcap, technical  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -490,7 +490,17 @@ def _screen_query(subject: str) -> str | None:
         return "investors"
     if val in ("smallcap", "smallcaps", "small cap", "small-cap", "capex", "smallcap capex"):
         return "smallcap"
+    if val in ("policy", "policies", "scheme", "schemes", "govt", "government", "gov",
+               "policy radar", "scheme radar", "budget"):
+        return "policy"
     return "value"
+
+
+def _policy_query(subject: str) -> bool:
+    """True for a bare policy-radar request ('policy:', 'schemes', 'policy radar', 'govt schemes')
+    outside the `screen:` prefix."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:policy|policies|schemes?|policy radar|scheme radar|"
+                         r"govt schemes?|government schemes?)\s*[:\-]?\s*$", subject, flags=re.I))
 
 
 def _investor_query(subject: str) -> str | None:
@@ -660,6 +670,57 @@ def _send_smallcap_screen(req: EmailRequest) -> None:
                         html=emailer.body_html(md, "Screen — small-cap capex"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent small-cap screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_policy_screen(req: EmailRequest) -> None:
+    """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
+    sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
+    screen; no effect on reports/watchlist/digests."""
+    log.info("running policy radar (req from %s)", req.sender)
+    _reply_text(req, "🏛️ Got it — scanning the latest **government press releases (PIB, primary "
+                     "source)** for new schemes/policies and mapping each to the sectors and "
+                     "listed companies it affects. ~1 min; the list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: policy.policy_scan(con, limit_releases=25))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The policy radar timed out this time — please resend `screen: policy`.")
+        return
+    if not rows:
+        _reply_text(req, "No market-relevant government schemes in the latest PIB releases right "
+                         "now — try again later (the feed refreshes through the day).")
+        return
+    parts = ["**🏛️ Government policy radar — latest official releases (PIB)**", "",
+             "Schemes/policies from **primary government press releases** that affect a listed "
+             "sector — often at the announced / cabinet-approved / **draft** / consultation stage, "
+             "before formal launch. Most watchlist-relevant first; ⭐ = a name on your watchlist. "
+             "_This is a discovery screen — it defers to each stock's own fundamentals; reply with "
+             "any symbol for its full deep report._", ""]
+    for i, s in enumerate(rows, 1):
+        tags = " · ".join(x for x in (s.get("ministry"), s.get("stage"),
+                                      (f"conf {s['confidence']}" if s.get("confidence") else None)) if x)
+        parts.append(f"**{i}. {s['scheme']}**" + (f"  _( {tags} )_" if tags else ""))
+        meta = " · ".join(x for x in (
+            ("Sectors: " + ", ".join(s["sectors"])) if s.get("sectors") else None,
+            (f"Mechanism: {s['mechanism']}" if s.get("mechanism") else None)) if x)
+        if meta:
+            parts.append(meta)
+        if s.get("rationale"):
+            parts.append(s["rationale"])
+        bens = s.get("beneficiaries") or []
+        if bens:
+            shown = ", ".join((b["symbol"] or b["name"]) + (" ⭐" if b["on_watchlist"] else "")
+                              for b in bens[:10])
+            parts.append(f"**Likely beneficiaries:** {shown}")
+        parts.append(f"_Source: PIB — {s['link']}_")
+        parts.append("")
+    md = "\n\n".join(parts)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Policy radar"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent policy radar (%d schemes) to %s", len(rows), req.sender)
 
 
 def _send_holdco_screen(req: EmailRequest) -> None:
@@ -949,8 +1010,15 @@ def handle_request(req: EmailRequest) -> None:
             _send_investor_screen(req)
         elif sq == "smallcap":
             _send_smallcap_screen(req)
+        elif sq == "policy":
+            _send_policy_screen(req)
         else:
             _send_fundamental_screen(req)
+        return
+
+    # 1e-bis) bare government policy / scheme radar ('policy:', 'schemes', 'policy radar')
+    if _policy_query(req.subject):
+        _send_policy_screen(req)
         return
 
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
