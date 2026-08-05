@@ -72,10 +72,11 @@ _SCHEMA = [
     """,
     """
     CREATE TABLE IF NOT EXISTS sector_map (
-        symbol     VARCHAR PRIMARY KEY,
-        company    VARCHAR,
-        industry   VARCHAR,
-        universe   VARCHAR        -- source index, e.g. 'NIFTY500'
+        symbol         VARCHAR PRIMARY KEY,
+        company        VARCHAR,
+        industry       VARCHAR,        -- NSE macro-sector, e.g. 'Consumer Durables'
+        basic_industry VARCHAR,        -- NSE granular basic-industry, e.g. 'Gems Jewellery And Watches'
+        universe       VARCHAR         -- source index, e.g. 'NIFTY500'
     )
     """,
     """

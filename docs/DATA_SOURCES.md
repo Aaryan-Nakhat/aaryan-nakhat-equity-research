@@ -47,7 +47,8 @@
 | FII / DII daily cash activity | 🟡 | NSE-published. |
 | F&O: OI, PCR, option chain, FII deriv stats | 🟡 | **Hardest** — heavily rate-limited / bot-protected. |
 | ASM / GSM / surveillance, circuit limits | 🟡 | |
-| Index constituents (Nifty 50/500, sector) | 🟡 | CSV. |
+| Index constituents (Nifty 50/500, sector) | 🟡 | CSV. Carries only the **macro-sector** (e.g. 'Consumer Durables'). |
+| Granular industry (basic_industry) | 🟡 | `getSymbolData.secInfo.basicIndustry` (e.g. 'Gems Jewellery And Watches') — the fine tier the constituent CSVs omit. Enriched onto `sector_map` via `ingest_basic_industries` so peers group jeweller-with-jewellers, not all of 'Consumer Durables'. |
 | **IPOs** — live / upcoming issues + subscription | 🟡 | `/api/ipo-current-issue`, `/api/all-upcoming-issues?category=ipo`, `/api/ipo-detail` (category-wise). Browser tier. |
 | **IPO offer documents** — RHP / price-band KPIs / anchor | 🟢 | Archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`, predictable per symbol. Plain HTTP. The **primary source** for pre-listing financials, fresh/OFS, risks. |
 

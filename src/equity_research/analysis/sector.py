@@ -15,7 +15,21 @@ from equity_research.analysis import valuation
 
 
 def industry_of(con: duckdb.DuckDBPyConnection, symbol: str) -> str | None:
+    """The NSE **macro-sector** tag (e.g. 'Consumer Durables') — the coarse bucket used for
+    the valuation *lens* (P/E vs P/B vs EV/EBITDA), whose keyword lists are macro-level."""
     row = con.execute("SELECT industry FROM sector_map WHERE symbol = ?", [symbol]).fetchone()
+    return row[0] if row else None
+
+
+def peer_industry_of(con: duckdb.DuckDBPyConnection, symbol: str) -> str | None:
+    """The tag used to pick **peers**: the granular ``basic_industry`` (e.g. 'Gems Jewellery
+    And Watches') when enriched, else the macro ``industry`` as fallback. Grouping on this
+    compares a jeweller to jewellers, not to every 'Consumer Durables' name (paints, ACs,
+    footwear). A symbol whose basic tag isn't yet backfilled falls back to macro, so it only
+    ever matches other un-enriched macro peers — never a spurious cross-industry match."""
+    row = con.execute(
+        "SELECT COALESCE(NULLIF(TRIM(basic_industry), ''), industry) "
+        "FROM sector_map WHERE symbol = ?", [symbol]).fetchone()
     return row[0] if row else None
 
 
@@ -56,13 +70,16 @@ def valuation_lens(industry: str | None) -> str:
 
 
 def peers(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
-    """Symbols sharing the target's industry (excluding the target)."""
-    ind = industry_of(con, symbol)
+    """Symbols sharing the target's **peer industry** (granular basic_industry when enriched,
+    else macro) — excluding the target. Compared on the same COALESCE expression so a peer's
+    granular tag is matched against the target's granular tag."""
+    ind = peer_industry_of(con, symbol)
     if ind is None:
         return []
     return [r[0] for r in con.execute(
-        "SELECT symbol FROM sector_map WHERE industry = ? AND symbol <> ? ORDER BY symbol",
-        [ind, symbol]).fetchall()]
+        "SELECT symbol FROM sector_map "
+        "WHERE COALESCE(NULLIF(TRIM(basic_industry), ''), industry) = ? AND symbol <> ? "
+        "ORDER BY symbol", [ind, symbol]).fetchall()]
 
 
 def _pctile(values: list[float], x: float) -> float:
@@ -86,7 +103,7 @@ def sector_valuation(con: duckdb.DuckDBPyConnection, symbol: str,
     ``target_shares_override`` corrects the target's current shares for a
     bonus/split since its last annual filing (peers assume no such action).
     """
-    ind = industry_of(con, symbol)
+    ind = peer_industry_of(con, symbol)
     if ind is None:
         return {"note": f"{symbol} not in sector_map (ingest_sector_map first)"}
 
