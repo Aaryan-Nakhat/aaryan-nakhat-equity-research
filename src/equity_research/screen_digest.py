@@ -193,7 +193,7 @@ def format_screen_digest(delta: dict) -> str | None:
 
     if fu:
         rows = [[("🆕 entered top-15" if r["kind"] == "entrant"
-                  else f"📈 up from #{r['prev_rank']}"),
+                  else (f"📈 up from #{r['prev_rank']}" if r.get("prev_rank") else "📈 climbed")),
                  r["rank"], r["symbol"], r["name"][:24],
                  f"{r['composite']:.1f}", r.get("why", "")] for r in fu]
         parts += [
