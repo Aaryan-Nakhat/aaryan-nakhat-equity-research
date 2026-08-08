@@ -146,42 +146,89 @@ def _crore(v) -> str:
     return f"₹{v/1e5:,.2f}L cr" if v >= 1e5 else f"₹{v:,.0f} cr"
 
 
+def _holdco_reading(r: dict) -> str:
+    """Plain-English, row-specific gloss on the discount sign."""
+    d = r["discount_pct"]
+    if d >= 0:
+        return f"trades ~{d:.0f}% **below** its listed stakes"
+    return f"trades ~{abs(d):.0f}% **above** its listed stakes"
+
+
 def format_screen_digest(delta: dict) -> str | None:
     """One markdown email covering the three screens' deltas. None if nothing triggered."""
     hc, fu, inv = delta["holdco"], delta["fundamental"], delta["investors"]
     if not (hc or fu or inv):
         return None
     today = datetime.now(_IST).date()
-    parts = [f"# 📡 Screener movements — week of {today:%d-%b-%Y}",
-             "_Only what **changed** since the last digest. Reply `screen: holdco`, "
-             "`screen: value` or `screen: investors` for the full live lists._"]
+    parts = [
+        f"# 📡 Screener movements — week of {today:%d-%b-%Y}",
+        "_Only what **changed** since the last digest — each name shows up **once**, when it "
+        "first moves, not every week. Reply `screen: holdco`, `screen: value` or "
+        "`screen: investors` for the full live lists._",
+        "**⏱️ What 'changed' is measured against:** Holdco discounts and the fundamental screen "
+        "are compared **week-over-week** (this Saturday's run vs the previous digest). "
+        "Marquee-investor moves come from **quarterly** SEBI shareholding filings, so they compare "
+        "the latest filed quarter with the one before and only refresh when a new quarter is "
+        "filed (~every 3 months) — not weekly.",
+    ]
 
     if hc:
-        rows = [[("🆕 new" if r["kind"] == "new" else "📉 wider"),
-                 r["holder"], f"{r['discount_pct']:+.0f}%",
+        rows = [[("🆕 new" if r["kind"] == "new" else "📈 wider"),
+                 r["holder"], (r.get("holder_name") or r["holder"])[:24],
+                 f"{r['discount_pct']:+.0f}%",
                  ("—" if r["prev"] is None else f"{r['prev']:+.0f}%"),
-                 _crore(r["stake_nav_cr"])] for r in hc]
-        parts += ["## 🏦 Holdco discounts",
-                  md.table(["Change", "Holdco", "Discount", "Was", "Stake NAV"], rows, "llrrr")]
+                 _crore(r["stake_nav_cr"]), _holdco_reading(r)] for r in hc]
+        parts += [
+            "## 🏦 Holdco discounts",
+            md.table(["Change", "Holdco", "Company", "Discount", "Was", "Stake NAV",
+                      "What it means"], rows, "lllrrrl"),
+            "_**Discount** = how far the holding company's own market value sits **below** the "
+            "market value of the listed stakes it owns. **Positive %** = it trades *below* those "
+            "stakes — a genuine **holdco discount** (potentially cheap, the Elcid situation). "
+            "**Negative %** = it trades *above* them — a **premium**, usually because big "
+            "**unlisted / operating** businesses aren't counted here (only disclosed listed stakes "
+            "are valued). **Was** = the reading in the previous digest; **'—' = newly surfaced** "
+            "(no prior reading). **🆕 new** = first time it cleared the screen · **📈 wider** = "
+            "discount deepened ≥5pp since last week._"]
 
     if fu:
-        rows = [[("🆕 top-15" if r["kind"] == "entrant" else "📈 climbed"),
-                 r["rank"], r["symbol"], f"{r['composite']:.1f}", r["name"][:30]] for r in fu]
-        parts += ["## 🔎 Fundamental screen (Nifty-500)",
-                  md.table(["Change", "Rank", "Symbol", "Score", "Company"], rows, "lrlrl")]
+        rows = [[("🆕 entered top-15" if r["kind"] == "entrant"
+                  else f"📈 up from #{r['prev_rank']}"),
+                 r["rank"], r["symbol"], r["name"][:24],
+                 f"{r['composite']:.1f}", r.get("why", "")] for r in fu]
+        parts += [
+            "## 🔎 Fundamental screen (Nifty-500)",
+            md.table(["Change", "Rank", "Symbol", "Company", "Score", "Why (breakdown)"],
+                     rows, "lrllrl"),
+            "_**Rank** = position in the **full Nifty-500 ranking**; only names that **changed** "
+            "appear, so the numbers skip (a rank you don't see just means that name held its "
+            "place). **Score** (0–100) is a weighted blend — **40% Quality** (Piotroski F, 0–9) + "
+            "**35% Forensic** (Altman-Z solvency, Beneish-M earnings quality, low accruals, no "
+            "promoter pledge; 0–4) + **25% Cheapness** (how low today's P/E — P/B for financials — "
+            "sits vs the stock's own history). Higher = stronger on all three; the last column is "
+            "the raw per-pillar breakdown behind the score._"]
 
     if inv:
         arrow = {"entered": "🟢 new", "added": "➕ add", "trimmed": "➖ trim", "exited": "🔴 exit"}
         rows = []
         for r in inv:
-            delta_txt = (f"{r['delta']:+.2f}pp" if "delta" in r
-                         else (f"{r['pct']:.2f}%" if r["kind"] == "entered"
-                               else f"was {r['prev_pct']:.2f}%"))
-            rows.append([r["investor"], arrow[r["kind"]], r["symbol"], delta_txt, r["name"][:26]])
-        parts += ["## 👤 Marquee-investor moves",
-                  md.table(["Investor", "Move", "Symbol", "Δ / stake", "Company"], rows, "lllrl"),
-                  "_Only holders disclosed by name (≥~1%) are visible; an exit can be a full sale "
-                  "or a trim below the disclosure floor. Coverage grows with SHP ingested._"]
+            if r["kind"] == "entered":
+                change = f"new → {r['pct']:.2f}%"
+            elif r["kind"] == "exited":
+                change = f"{r['prev_pct']:.2f}% → out"
+            else:
+                change = f"{r['prev_pct']:.2f}% → {r['pct']:.2f}%"
+            rows.append([r["investor"], arrow[r["kind"]], r["symbol"],
+                         r["name"][:22], change])
+        parts += [
+            "## 👤 Marquee-investor moves",
+            md.table(["Investor", "Move", "Symbol", "Company", "Stake (prev → now)"],
+                     rows, "lllll"),
+            "_**Stake** = the investor's **% of the company's shares**, previous filed quarter → "
+            "latest (so **+0.8** points of stake reads as e.g. `1.2% → 2.0%`). Only holders "
+            "**disclosed by name** (≥~1%) are visible, so an **exit** can be a full sale *or* a "
+            "trim below the ~1% disclosure floor. From quarterly SEBI filings; coverage grows with "
+            "shareholding data ingested._"]
 
     return "\n\n".join(parts)
 

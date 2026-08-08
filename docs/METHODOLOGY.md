@@ -363,7 +363,14 @@ with zero).
   names flagged; sorted watchlist-hits then #listed first. **Standalone screen — no effect on reports,
   the watchlist or the digests.** Catches policy at the pre-launch official stage.
 - **Weekly "Screener movements"** (`screen_digest.py`) — Saturday email with **trigger-based deltas
-  only** across the three screens (fingerprints in `alert_state`).
+  only** across the three screens (fingerprints in `alert_state`). Each section is **self-explaining**:
+  holdco rows carry company name + a plain-English discount reading (**positive % = trades below its
+  listed stakes / a real holdco discount; negative % = a premium, unlisted assets uncounted**) and mark
+  `—` "Was" as *newly surfaced*; the fundamental table shows company name, the composite **Score** and
+  its **raw per-pillar breakdown** (Rank is the full-Nifty-500 position, so shown numbers skip); investor
+  moves render the stake as **prev-quarter → latest %** (no bare `pp`). A header note states the
+  comparison window — **holdco & fundamental are week-over-week; investor moves are quarterly** (SEBI SHP,
+  refresh ~every 3 months).
 
 ---
 
