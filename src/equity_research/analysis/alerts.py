@@ -27,13 +27,14 @@ DELIV_SPIKE = 1.5        # today deliv% / 20d avg
 BIG_MOVE = 0.06          # |1-day return|
 PLEDGE_RISE_PP = 1.0     # promoter-pledge rise (percentage points of promoter holding) to alert on
 
-EMOJI = {"red": "🔴", "green": "🟢", "warn": "⚠️", "info": "🔔", "filing": "📄"}
+EMOJI = {"red": "🔴", "green": "🟢", "warn": "⚠️", "info": "🔔", "filing": "📄",
+         "neutral": "⚪"}
 
 
 @dataclass
 class Alert:
     symbol: str
-    severity: str         # red | green | warn | info | filing
+    severity: str         # red | green | warn | info | filing | neutral
     title: str
     body: str = ""
     attach_report: bool = False     # True => orchestrator generates & attaches deep report

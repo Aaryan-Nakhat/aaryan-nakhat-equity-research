@@ -388,12 +388,28 @@ def _deal_alert(dl: dict, listed: dict[str, str] | None = None) -> alerts.Alert:
     return alerts.Alert(dl["symbol"], sev, title, body)
 
 
+def _facilitation_alert(dl: dict, listed: dict[str, str] | None = None) -> alerts.Alert:
+    """A collapsed **offsetting** buy+sell (same counterparty, same qty, same price) — a crossed
+    / facilitation block that leaves **no net position change**. Shown as one neutral line so it
+    doesn't read as a contradictory buy-and-sell pair."""
+    price = f"₹{dl['price']:,.0f}" if dl.get("price") else "?"
+    title = f"{dl.get('deal_type', '').title()} deal — Facilitation (net-zero)"
+    client = dl.get("client", "?")
+    cls = _classify_client(client, listed)
+    who = f"{client} ({cls})" if cls else client
+    body = (f"{who} **bought & sold** {_fmt_qty(dl.get('qty'))} sh @ {price} — "
+            f"crossed block, no net position change")
+    return alerts.Alert(dl["symbol"], "neutral", title, body)
+
+
 def watchlist_deals(syms: list[str], deals: dict,
                     listed: dict[str, str] | None = None) -> dict[str, list[alerts.Alert]]:
     """Bulk/block deals (pre-fetched, market-wide) filtered to ``syms``, **deduped across the
     bulk and block feeds** — NSE reports one large trade in *both*, which otherwise showed the
-    same buy/sell four times. A trade seen in both is labelled 'bulk & block'; buy and sell
-    (distinct counterparties) stay as separate lines. ``listed`` classifies each counterparty."""
+    same buy/sell four times. A trade seen in both is labelled 'bulk & block'. A counterparty
+    that appears on **both sides at the same qty and price** is a crossed / facilitation block
+    (no net position change) and is collapsed into one neutral line; genuinely one-sided buys
+    and sells stay separate. ``listed`` classifies each counterparty."""
     symset = set(syms)
     merged: dict[tuple, dict] = {}
     for src in ("bulk", "block"):
@@ -409,10 +425,23 @@ def watchlist_deals(syms: list[str], deals: dict,
                 d = dict(dl)
                 d["_sources"] = {src}
                 merged[key] = d
+    # group the deduped legs by (symbol, client, qty, price): if the same counterparty is on
+    # BOTH buy and sell of an identical qty/price, it's an offsetting cross → one neutral line.
+    by_trade: dict[tuple, dict] = {}
+    for (sym, buy_sell, client, qty, price), d in merged.items():
+        by_trade.setdefault((sym, client, qty, price), {})[buy_sell] = d
     out: dict[str, list[alerts.Alert]] = {}
-    for d in merged.values():
-        d["deal_type"] = "bulk & block" if len(d["_sources"]) == 2 else next(iter(d["_sources"]))
-        out.setdefault(d["symbol"], []).append(_deal_alert(d, listed))
+    for (sym, _client, _qty, _price), sides in by_trade.items():
+        buy, sell = sides.get("BUY"), sides.get("SELL")
+        if buy and sell:                                    # offsetting cross → collapse
+            srcs = buy["_sources"] | sell["_sources"]
+            d = {**buy, "_sources": srcs,
+                 "deal_type": "bulk & block" if len(srcs) == 2 else next(iter(srcs))}
+            out.setdefault(sym, []).append(_facilitation_alert(d, listed))
+            continue
+        for d in sides.values():
+            d["deal_type"] = "bulk & block" if len(d["_sources"]) == 2 else next(iter(d["_sources"]))
+            out.setdefault(sym, []).append(_deal_alert(d, listed))
     return out
 
 
