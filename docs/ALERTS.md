@@ -135,11 +135,15 @@ fundamental/forensic rather than trading-oriented.
 NSE's large-deal snapshot (`nse_api.large_deals` → one market-wide fetch, filtered
 to the watchlist) — names the counterparty with BUY/SELL, qty and VWAP. Green for
 BUY, red for SELL. (No daily *per-stock* FII/DII cash figure exists anywhere —
-bulk/block deals are the real daily signal.) Two refinements (`scan.watchlist_deals`):
+bulk/block deals are the real daily signal.) Three refinements (`scan.watchlist_deals`):
 **deduped across the bulk and block feeds** — NSE reports one large trade in *both*,
 which otherwise printed the same buy/sell **four times**; a trade seen in both is
 labelled **"bulk & block"**, and buy vs sell (genuinely different counterparties) stay
-as separate lines. And the **counterparty is classified in brackets** (`_classify_client`)
+as separate lines. **Offsetting crosses collapsed** — when the *same* counterparty appears
+on **both** sides at an identical qty and price, it's a crossed / facilitation block with
+**no net position change**, so it's shown as **one neutral ⚪ "Facilitation (net-zero)" line**
+(`_facilitation_alert`) instead of a contradictory buy-and-sell pair; genuinely one-sided
+deals are untouched. And the **counterparty is classified in brackets** (`_classify_client`)
 — *listed co · SYMBOL* (matched against the `equity_master`, the Elcid pattern), *mutual
 fund*, *insurer*, *FPI / foreign*, *fund / investment vehicle*, *LLP*, *trust*, *HUF*,
 *unlisted pvt / unlisted company*, or *individual* — a name-only heuristic (deals carry no
