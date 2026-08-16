@@ -683,6 +683,31 @@ def _send_smallcap_screen(req: EmailRequest) -> None:
     log.info("sent small-cap screen (%d names) to %s", len(rows), req.sender)
 
 
+_TA_LEGEND = (
+    "\n\n---\n\n**📖 What the terms mean** (plain English — this screen is chart-based, so here's the jargon)\n\n"
+    "- **Uptrend (>200-DMA):** price is above its average of the last 200 days — the long-term trend is up. "
+    "**50>200:** the 50-day average sits above the 200-day one (a 'golden cross') — momentum backs the trend.\n"
+    "- **RS vs Nifty (relative strength):** how much the stock beat or lagged the Nifty index over ~3 months. "
+    "'+40%' = it outran the market by 40%.\n"
+    "- **MACD+:** a popular momentum indicator that's turned positive — recent momentum is bullish.\n"
+    "- **RSI:** a 0–100 'how stretched' gauge. ~40–60 is healthy; **>70 = overbought** (stretched — risky to chase).\n"
+    "- **% below 52w high:** how far under its 1-year peak it is. Near 0% = knocking on a breakout.\n"
+    "- **Delivery spike:** an unusually high share of volume was actually *delivered* (bought to hold, not day-traded) "
+    "— a sign of real conviction.\n"
+    "- **Buy zone (support):** the price range to buy **on a small dip** — the nearest *support* (a level buyers have "
+    "defended before). Don't chase above it; wait for the pullback.\n"
+    "- **Stop:** where you sell if you're wrong (just below support) — it caps the loss. "
+    "**Target (resistance):** the next *resistance* (a level sellers have defended) — where to consider booking profit.\n"
+    "- **Reward:risk (R:R):** potential profit ÷ potential loss. '2.4:1' = aiming to make ₹2.40 for every ₹1 at risk. "
+    "Higher is better — we only label it **accumulate** at ≥1.5:1.\n"
+    "- **Setup type:** *accumulate* = clean buy-the-dip (R:R ≥ 1.5) · *breakout* = at new highs with no ceiling above, "
+    "so trail a stop instead of a fixed target · *watch* = the shape is there but reward:risk is thin, so wait for a "
+    "better entry.\n\n"
+    "_A **candidate finder with defined risk**, not a promise — it hands you an entry, a stop and a target so your "
+    "downside is always capped. Reply a number to get the full company report before you buy._"
+)
+
+
 def _send_technical_screen(req: EmailRequest) -> None:
     """Technical-setup discovery screen → the strongest chart setups to buy, market-wide, each
     with an entry zone / stop / target / reward:risk. Reply a number → that name's deep report."""
@@ -726,7 +751,8 @@ def _send_technical_screen(req: EmailRequest) -> None:
           + table + "\n\n"
           "_Candidate finder with **defined risk**, not a back-tested edge — short-term timing is the "
           "least-proven part of the tool. Bounded to symbols with financials ingested (so the safety "
-          f"gate is real); coverage grows with the backfill. (Reply within {PENDING_TTL_H}h.)_")
+          f"gate is real); coverage grows with the backfill. (Reply within {PENDING_TTL_H}h.)_"
+          + _TA_LEGEND)
     cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
     _set_pending(req, "screen:technical", cands)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
@@ -842,6 +868,24 @@ def _send_holdco_screen(req: EmailRequest) -> None:
     log.info("sent holdco screen (%d names) to %s", len(rows), req.sender)
 
 
+_SELL_LEGEND = (
+    "\n\n---\n\n**📖 What the terms mean** (plain English — skip if you know them)\n\n"
+    "- **Keep score (0-100):** how strong a *hold* each stock is — higher = keep, lower = sell first. "
+    "It blends the five things below, each judged **only against your own holdings** (so it ranks *your* book).\n"
+    "- **DCF upside / overvalued:** our estimate of what the business is worth vs its current price. "
+    "'~20% upside' = looks about 20% cheap; '~90% overvalued' = the price is far above what it seems worth.\n"
+    "- **Cheaper than X% of own history:** where today's valuation sits vs how expensive/cheap *this* stock "
+    "usually is. 'Cheaper than 75% of its own history' = unusually cheap for it.\n"
+    "- **Piotroski (quality):** a 0–9 financial-health score (profit, debt, efficiency). 8–9 strong, 0–2 weak.\n"
+    "- **Forensic (0–4):** accounting-safety score — higher = cleaner books (no distress / manipulation / pledge flags).\n"
+    "- **Momentum vs Nifty:** how the price did against the market over ~3 months. 'lags −15%' = 15% worse than the index.\n"
+    "- **Smart-money flow:** whether big institutions (mutual funds, insurers, foreign funds) added or trimmed last "
+    "quarter. 'trimming' = they're reducing their stake.\n"
+    "- **Verdict:** 🔴 sell candidate (weakest of your book) · 🟡 trim if needed · 🟢 keep (strongest) · "
+    "⚪ no data (not analysed yet — email the symbol once)."
+)
+
+
 def _send_sell_advisor(req: EmailRequest) -> None:
     """Sell-priority ranking of the user's holdings (Version A — merit only, no cost/tax yet):
     weakest hand first, so if you need cash you sell from the top down. Reply a number → that
@@ -877,7 +921,8 @@ def _send_sell_advisor(req: EmailRequest) -> None:
           "**Reply with a number for that holding's full deep report before you act.**\n\n"
           + table + "\n\n"
           "_Merit only — this doesn't yet know your cost, P&L or tax (that's the next version). "
-          f"Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_")
+          f"Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_"
+          + _SELL_LEGEND)
     cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
     _set_pending(req, "sell", cands)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
