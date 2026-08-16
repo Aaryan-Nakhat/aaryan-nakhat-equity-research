@@ -381,6 +381,7 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  other Subjects: `fund: <name>` · `ipo: ongoing|upcoming|<name>` ·
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
         │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
+        │  `screen: technical` (strongest chart setups to buy — entry/stop/target) ·
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
         │  to sell if you need cash) — each a numbered list; reply a number → deep report
@@ -585,6 +586,22 @@ text that collapsed on phones.
   **Coverage note:** the real edge needs a small-cap universe — `backfill_universe.py --seed-smallcaps`
   lands **Nifty Smallcap 250 + Microcap 250** into `sector_map` and backfills them; until then the band
   is only the small end of the Nifty-500.
+- **`screen: technical`** (aliases `setups`, `momentum`, `buys`, `chart`) → `analysis/technical_screen.py`
+  ranks on **price action** instead of fundamentals — the strongest chart setups to *buy*, market-wide.
+  Two stages so it fits the time budget: **(1)** score every **liquid** name (avg turnover ≥ ₹2 cr/day,
+  20-session window) that has financials on a technical composite — **30% trend** (>200-DMA · 50>200) ·
+  **25% relative strength vs Nifty** · **15% MACD** · **10% RSI-health** (rewards a constructive 55-60
+  zone, penalises overbought — don't chase) · **10% breakout proximity** (near the 52w high) · **10%
+  delivery** confirmation, each rank-normalised across the set; **(2)** walk the ranked list top-down,
+  apply the **same trap gate as the small-cap screen** (Altman near-distress · Beneish manipulator ·
+  pledge >25% — dropped) and build a **momentum-appropriate setup** from `technical.levels()`: entry at
+  the **nearest** support (a shallow pullback — *not* `_setup`'s deepest zone, which for names near their
+  highs reads as an impossible "buy 40% lower"), **stop** below it, **target** = next resistance, with
+  **reward:risk**. Kinds: `accumulate` (R:R ≥ 1.5) · `breakout` (near highs, no overhead — trail) ·
+  `watch` (thin R:R). **Universe is bounded to symbols with financials ingested** so the safety gate is
+  real for every row (spans micro→large incl. Microcap-250; the liquidity floor drops the un-tradeable
+  long tail anyway). Reply a number → deep report. **Honest caveat (in the email):** a candidate finder
+  with *defined risk*, **not** a back-tested edge — short-term timing is the tool's least-proven area.
 
 ### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
 
