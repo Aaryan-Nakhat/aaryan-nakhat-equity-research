@@ -34,7 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import holdco, investors, policy, screener, smallcap, technical  # noqa: E402
+from equity_research.analysis import (holdco, investors, policy, screener,  # noqa: E402
+                                      sell_advisor, smallcap, technical)
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -509,6 +510,13 @@ def _investor_query(subject: str) -> str | None:
     return m.group(1).strip() if m and m.group(1).strip() else None
 
 
+def _sell_query(subject: str) -> bool:
+    """True for a holdings sell-priority request — bare 'sell' / 'raise' / 'trim' (optionally
+    with trailing text, e.g. 'sell: need cash'). Ranks YOUR holdings weakest-hand first."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:sell|raise|trim)(?:\s*[:\-]\s*.*)?$",
+                         subject, flags=re.I))
+
+
 def _levels_query(subject: str) -> str | None:
     """Parse 'levels: <name>' / 'technical: <name>' / 'setup: <name>' / 'chart: <name>' →
     the free-text company name, or None. A quick, no-LLM technical read (support/resistance
@@ -779,6 +787,50 @@ def _send_holdco_screen(req: EmailRequest) -> None:
     log.info("sent holdco screen (%d names) to %s", len(rows), req.sender)
 
 
+def _send_sell_advisor(req: EmailRequest) -> None:
+    """Sell-priority ranking of the user's holdings (Version A — merit only, no cost/tax yet):
+    weakest hand first, so if you need cash you sell from the top down. Reply a number → that
+    holding's full deep report before acting."""
+    log.info("running sell advisor (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — ranking your holdings by **which to sell first** on merit "
+                     "(valuation headroom, quality, forensic, momentum, smart-money). "
+                     "~1–2 min; the ranked list lands in this thread.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: sell_advisor.sell_ranking(con))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The sell ranking timed out this time — please resend `sell` in a moment.")
+        return
+    if not rows:
+        _reply_text(req, "No holdings tagged yet — add stocks to your watchlist as 'holding' first, "
+                         "then resend `sell`.")
+        return
+    table = _md_table(
+        ["#", "Symbol", "Company", "Keep", "Verdict", "Why"],
+        [[i, r["symbol"], r["name"][:24],
+          (f"{r['keep_score']:.0f}" if r["keep_score"] is not None else "—"),
+          r["verdict"], r["why"]]
+         for i, r in enumerate(rows, 1)],
+        align="rlllll")
+    md = ("**💰 Which to sell first — your holdings, ranked**\n\n"
+          "If you need cash, sell from the **top** (weakest hand) down. **Keep score 0-100** "
+          "(higher = stronger hold): 35% valuation headroom (DCF upside + cheap-vs-own-history) · "
+          "25% quality (Piotroski) · 20% forensic · 10% momentum vs Nifty · 10% smart-money flow — "
+          "each ranked **within your own book**. "
+          "**Reply with a number for that holding's full deep report before you act.**\n\n"
+          + table + "\n\n"
+          "_Merit only — this doesn't yet know your cost, P&L or tax (that's the next version). "
+          f"Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
+    _set_pending(req, "sell", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Sell-priority — holdings"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent sell advisor (%d holdings) to %s", len(rows), req.sender)
+
+
 _INVESTOR_CAVEAT = ("_Tracks the SHP public/promoter tables — only holders **disclosed by "
                     "name** are visible (public stakes below ~1% aren't filed at all), and "
                     "coverage is bounded by the SHP universe ingested so far. A drop out of the "
@@ -1041,6 +1093,12 @@ def handle_request(req: EmailRequest) -> None:
     lq = _levels_query(req.subject)
     if lq:
         _send_levels(lq, req)
+        return
+
+    # 1g) holdings sell-priority ranking ('sell' / 'raise' / 'trim') — which to sell first if
+    #     you need cash. Bare word, so it must sit before the free-text stock-name fallback.
+    if _sell_query(req.subject):
+        _send_sell_advisor(req)
         return
 
     # 2) fresh query from the subject. Ack IMMEDIATELY at pickup — symbol resolution can

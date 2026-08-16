@@ -270,6 +270,16 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
   holders first. Multi-quarter history via `nse_shp.all_quarters` / `ingest_shp_history` (a
   4-quarter backfill makes the diff work on the first report). *Remaining nicety:* surface a
   material QoQ move as a digest alert (SHP is quarterly, so low-frequency).
+- **Sell-priority advisor (which of my holdings to sell first) — Version A ✅ shipped.**
+  `analysis/sell_advisor.sell_ranking` + email **`sell`** / `raise` / `trim`: ranks the
+  `holding`-tagged watchlist **weakest-hand-first** on a keep-score 0-100 (35% valuation headroom
+  [DCF upside + cheap-vs-own-history] · 25% quality · 20% forensic · 10% momentum vs Nifty · 10%
+  smart-money flow), each signal rank-normalised **within the user's own book**; buckets 🔴 sell /
+  🟡 trim / 🟢 keep, ⚪ no-data last; reply a number → that holding's deep report. Reuses
+  `screener`/`quant`/`technical`/`ownership` — nothing re-derives numbers. **Version A is merit
+  only.** *Version B (planned, after some days of A):* add **LTCG/STCG tax + "raise ₹X" sizing**,
+  which needs holdings to carry **quantity + average cost + buy date** (a small watchlist-schema
+  extension + one-time entry) — impossible today (the `watchlist` table stores only symbol/type).
 
 **Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
 `positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +
