@@ -312,6 +312,17 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   - *Table readability — ✅ shipped*: interactive screens now emit **real markdown tables**
     (`reports/md.table`) instead of code-fences (which collapsed on phones); `pdf._CSS` table styling
     refreshed; LLM prompts constrained to valid ≤5-column markdown tables.
+  - *Capex-led small-cap screen — ✅ shipped* (`analysis/smallcap.py`, email **`screen: smallcap`**).
+  - *Government policy radar — ✅ shipped* (`analysis/policy.py`, email **`screen: policy`**).
+  - *Technical-setup screen — ✅ shipped* (`analysis/technical_screen.py`, email **`screen: technical`**,
+    aliases `setups`/`momentum`/`buys`). The *price/technical* discovery the original weekly screen was
+    meant to be — but **on-demand** and **market-wide**, not a scheduled Nifty-500 cut. Ranks liquid
+    (≥₹2 cr/day) financials-ingested names on a technical composite (trend · RS vs Nifty · MACD ·
+    RSI-health · breakout · delivery), **trap-gates** the shortlist (Altman/Beneish/pledge — reuses the
+    small-cap gates), and builds a **nearest-support** entry/stop/target/R:R from `technical.levels()`
+    (deliberately *not* `_setup`'s deepest-zone entry, which reads as "buy 40% lower" for names near
+    highs). `accumulate` / `breakout` / `watch`. Honest caveat surfaced: candidate finder with defined
+    risk, **not** back-tested. *Next (if pursued): a backtest harness to actually prove the edge.*
 - **10-yr G-Sec yield** in the market header — the last deferred macro feed. FBIL's `gsec`
   endpoint returns only archive-file metadata (not inline yields); needs the archive download
   parsed, or a CCIL/RBI source. (USD/INR via FBIL and gold/silver/crude via MCX are **done**.)

@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (holdco, investors, policy, screener,  # noqa: E402
-                                      sell_advisor, smallcap, technical)
+                                      sell_advisor, smallcap, technical, technical_screen)
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -478,9 +478,9 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 # ----------------- screeners (idea generation) -----------------
 def _screen_query(subject: str) -> str | None:
-    """Parse a screener request → 'holdco' | 'investors' | 'smallcap' | 'value' (default), or None
-    if not a screen. Accepts 'screen: holdco', 'screen: investors', 'screen: smallcap',
-    'screen: value', bare 'screen'."""
+    """Parse a screener request → 'holdco' | 'investors' | 'smallcap' | 'policy' | 'technical' |
+    'value' (default), or None if not a screen. Accepts 'screen: holdco', 'screen: investors',
+    'screen: smallcap', 'screen: policy', 'screen: technical', 'screen: value', bare 'screen'."""
     m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
     if not m:
         return None
@@ -494,6 +494,9 @@ def _screen_query(subject: str) -> str | None:
     if val in ("policy", "policies", "scheme", "schemes", "govt", "government", "gov",
                "policy radar", "scheme radar", "budget"):
         return "policy"
+    if val in ("technical", "technicals", "ta", "setup", "setups", "momentum", "chart", "charts",
+               "buy", "buys"):
+        return "technical"
     return "value"
 
 
@@ -678,6 +681,58 @@ def _send_smallcap_screen(req: EmailRequest) -> None:
                         html=emailer.body_html(md, "Screen — small-cap capex"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent small-cap screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_technical_screen(req: EmailRequest) -> None:
+    """Technical-setup discovery screen → the strongest chart setups to buy, market-wide, each
+    with an entry zone / stop / target / reward:risk. Reply a number → that name's deep report."""
+    log.info("running technical screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning the liquid universe for the strongest **technical setups** "
+                     "(trend · relative strength · momentum), trap-gated, with entry/stop/target. "
+                     "~1 min; the ranked list lands in this thread.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: technical_screen.technical_screen(con, limit=15))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The technical screen timed out this time — please resend `screen: technical`.")
+        return
+    if not rows:
+        _reply_text(req, "No clean setups cleared the liquidity + safety gate today — the universe's "
+                         "financials may not be ingested yet (run `backfill_universe.py`), or the "
+                         "tape simply has no strong, un-extended setups right now.")
+        return
+
+    def _rng(lo, hi):
+        return f"₹{lo:,.0f}–₹{hi:,.0f}" if lo is not None else "—"
+    tbl = []
+    for i, r in enumerate(rows, 1):
+        tgt = f"₹{r['target']:,.0f}" if r["target"] else ("trail" if r["kind"] == "breakout" else "—")
+        rr = f"{r['rr']:.1f}:1" if r["rr"] else "—"
+        tbl.append([i, r["symbol"], r["name"][:18], r["kind"], f"₹{r['price']:,.0f}",
+                    _rng(r["entry_lo"], r["entry_hi"]), f"₹{r['stop']:,.0f}", tgt, rr, r["why"]])
+    table = _md_table(
+        ["#", "Symbol", "Company", "Setup", "Price", "Buy zone", "Stop", "Target", "R:R", "Why"],
+        tbl, align="rlllrrrrll")
+    md = ("**📈 Technical setups — strongest charts to buy (market-wide)**\n\n"
+          "Ranked on **price action**: 30% trend (>200-DMA · 50>200) · 25% relative strength vs "
+          "Nifty · 15% MACD · 10% RSI-health · 10% breakout proximity · 10% delivery. Only liquid "
+          "names (≥₹2 cr/day) that **clear a trap gate** (no Altman-distress / Beneish-manipulator / "
+          "heavy pledge) and sit near a **buyable** support surface. **Buy zone** = a pullback to the "
+          "nearest support; **stop** below it; **target** = next resistance (`trail` = breakout, no "
+          "overhead). `accumulate` R:R≥1.5 · `breakout` blue-sky · `watch` = thin R:R. "
+          "**Reply a number for that name's full deep report before you act.**\n\n"
+          + table + "\n\n"
+          "_Candidate finder with **defined risk**, not a back-tested edge — short-term timing is the "
+          "least-proven part of the tool. Bounded to symbols with financials ingested (so the safety "
+          f"gate is real); coverage grows with the backfill. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
+    _set_pending(req, "screen:technical", cands)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Screen — technical setups"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent technical screen (%d names) to %s", len(rows), req.sender)
 
 
 def _send_policy_screen(req: EmailRequest) -> None:
@@ -1080,6 +1135,8 @@ def handle_request(req: EmailRequest) -> None:
             _send_smallcap_screen(req)
         elif sq == "policy":
             _send_policy_screen(req)
+        elif sq == "technical":
+            _send_technical_screen(req)
         else:
             _send_fundamental_screen(req)
         return
