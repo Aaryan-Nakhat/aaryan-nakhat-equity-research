@@ -381,8 +381,9 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  other Subjects: `fund: <name>` · `ipo: ongoing|upcoming|<name>` ·
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
         │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
-        │  `investor: <name>` (one HNI's disclosed book + moves) — each a numbered
-        │  list; reply a number → that name's deep report
+        │  `investor: <name>` (one HNI's disclosed book + moves) ·
+        │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
+        │  to sell if you need cash) — each a numbered list; reply a number → deep report
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
@@ -584,6 +585,34 @@ text that collapsed on phones.
   **Coverage note:** the real edge needs a small-cap universe — `backfill_universe.py --seed-smallcaps`
   lands **Nifty Smallcap 250 + Microcap 250** into `sector_map` and backfills them; until then the band
   is only the small end of the Nifty-500.
+
+### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
+
+**`sell`** (aliases `raise`, `trim`) → `analysis/sell_advisor.sell_ranking` answers a different
+question from the discovery screens: *of the stocks **I own**, which should I sell first if I need
+cash?* It reads the `holding`-tagged watchlist entries and ranks them **weakest hand first** on a
+**keep score 0-100** (higher = stronger hold), each signal rank-normalised **within your own book**
+(so it's relative to your holdings, not the Nifty-500):
+
+- **35% valuation headroom** — `upside` (DCF margin to fair value, `quant.monte_carlo_dcf`, measured
+  vs *price* so it reads as a sane move-to-fair-value) **+** `cheapness` (current multiple as a low
+  percentile of the stock's own history, reused from `screener._cheapness_raw`). Little upside /
+  richly valued ⇒ sell first.
+- **25% quality** — Piotroski F (`screener._quality_raw`).
+- **20% forensic** — Altman Z · Beneish M · Sloan accruals · no pledge (`screener._forensic_raw`).
+- **10% momentum** — 3-month relative strength vs Nifty (`technical.relative_strength`, converted
+  from its ratio to an out/under-performance %). A laggard is easier to let go.
+- **10% smart-money flow** — net institutional (MF/insurer/FPI/bank) QoQ accumulation from
+  `ownership.ownership_changes`; institutions exiting ⇒ sell first.
+
+Names bucket into **🔴 Sell candidate / 🟡 Trim if needed / 🟢 Keep** (weakest / middle / top third
+of the scored book); holdings with **no ingested data** land last as **⚪ No data** (email the symbol
+once to build its report). Reply a number → that holding's **full deep report** before you act (same
+pending-menu UX). Reuses the deterministic analysis layer — nothing re-derives numbers.
+
+**Version A (shipped) is merit only** — it deliberately knows nothing about your cost, P&L or tax.
+**Version B (planned)** layers on **LTCG/STCG** and **"raise ₹X" sizing** once holdings carry
+quantity + average cost + buy date. Framed as decision *support*; the call is the user's.
 
 **Weekly digest** (`src/equity_research/screen_digest.py`, `email_bot.maybe_screen_digest`): once per
 ISO week (Saturday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
