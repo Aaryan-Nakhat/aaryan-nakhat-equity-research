@@ -286,6 +286,12 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
 deep-report section (`nse_api.insider_trades`, `insider_trades` table); **midday same-day
 digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email_bot.maybe_intraday`)
 — live movers + today's filings/insider via NSE's NextApi live quote (`live_quotes_batch`).
+- **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `email_bot.maybe_premarket`,
+  08:30–09:00 IST once/trading-day): GIFT Nifty implied Nifty open (vs Nifty-50 prev close) + overnight
+  US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS
+  headlines + an LLM "overnight read" (`synthesize.premarket_brief`). GIFT Nifty is plain-HTTP JSON from
+  NSE IX (`scrapers/nseix.py`) — no browser. A setup briefing, not a trade call. *Next:* F&O layer
+  (OI build-up / PCR); an on-demand `premarket` command (currently push-only).
 - Mutual-fund analytics — see the **Mutual-fund module** track above (Phase 1 shipped;
   holdings/overlap/reports/forensic-look-through are Phases 3–5). Personal MF portfolio
   tracking (overlap, XIRR, concentration) was scoped but deprioritised vs signal + research.

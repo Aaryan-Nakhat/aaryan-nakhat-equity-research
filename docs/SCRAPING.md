@@ -61,6 +61,23 @@ Install browsers once: `uv run scrapling install`.
   get bhavcopy+delivery from the archive host and live quotes from BSE, so we
   don't depend on `quote-equity`.
 
+### ✅ Pre-market sources (GIFT Nifty + overnight global + news) — plain HTTP works
+- **GIFT Nifty** — `www.nseix.com/api/derivatives-watch?inst_type1=IDX&inst_type2=STK&type=live`:
+  `200` clean JSON over **plain HTTP**. NSE IX (GIFT City / IFSC) is a React SPA, but — unlike
+  `www.nseindia.com` — its data API is **not** behind Akamai, so a simple GET works (no browser). The
+  nearest-expiry `NIFTY FUTIDX` row is the active GIFT Nifty. → `scrapers/nseix.py`.
+- **Nifty-50 spot prev close + India VIX** — `www.nseindia.com/api/allIndices`: this *specific* endpoint
+  answers `200` JSON over plain HTTP (it isn't on the `quote-equity` WAF rule); `nse_api.live_indices`
+  (Camoufox) is the fallback if it 403s on a given morning. → `scrapers/markets_global.py::nifty_reference`.
+- **Overnight US/Asia indices** — Yahoo `query1.finance.yahoo.com/v8/finance/chart/{sym}`: unauthenticated
+  `200` JSON (S&P/Nasdaq/Dow, Nikkei/Hang Seng). NB: Yahoo `v7/finance/quote` returns `401`, and Stooq CSV
+  `404`s — use the `v8/chart` meta (`regularMarketPrice` + `chartPreviousClose`).
+- **Market news** — Moneycontrol markets RSS (`moneycontrol.com/rss/marketreports.xml`): plain XML. The
+  feed is malformed — it emits numeric entities with the leading `&` stripped (`day#39;s`) — repaired by
+  `_clean_title` (`_BARE_ENTITY` regex) since `html.unescape` alone can't.
+- **Verdict:** all four are plain `Fetcher`. Together they power the **pre-market digest**
+  (`reports/premarket.py`) with no browser tier.
+
 ## Gotchas discovered
 
 1. **`Response.text` can be empty while `Response.body` has bytes.** Happens on
@@ -85,6 +102,9 @@ Install browsers once: `uv run scrapling install`.
 | Index closes | NSE archives | plain HTTP |
 | NSE `/api/` endpoints (FII derivs, OI, etc.) | NSE (in-page `fetch` via Camoufox) | browser |
 | Market status | NSE `/api/marketStatus` | browser (in-page) |
+| GIFT Nifty (implied Nifty open) | **NSE IX** (`nseix.com/api/derivatives-watch`) | plain HTTP |
+| Overnight US/Asia indices | **Yahoo** (`query1…/v8/finance/chart`) | plain HTTP |
+| Market news headlines | **Moneycontrol RSS** | plain HTTP |
 
 **Principle:** prefer the **archive-file + BSE plain-HTTP** paths (fast, robust);
 reserve the **Camoufox browser tier** only for NSE `/api/` endpoints that have no

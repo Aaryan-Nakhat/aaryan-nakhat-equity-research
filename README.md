@@ -79,7 +79,9 @@ Personal use. Not a hosted product.
   plain-English "how to read this"; it also offers an opt-in **growth-triggers 1-pager**
   (reply `1`) — forward-looking catalysts, each with an **estimated ₹ cr / % business
   impact** and an impact-sorted scoreboard so big medium-conviction triggers aren't buried.
-  And **push** — a **full daily digest at
+  And **push** — a **pre-market digest at 08:30 IST** (GIFT Nifty implied Nifty open vs
+  yesterday's close · overnight US/Asia · India VIX · FII futures stance · headlines · an LLM
+  "overnight read" — a setup briefing, not a trade call), a **full daily digest at
   18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
   **midday "same-day" digest at 12:30** with the same sections on **live** intraday data
@@ -89,7 +91,7 @@ Personal use. Not a hosted product.
 
 Working end-to-end (NSE/BSE/MCX/FBIL → DuckDB → fundamentals/forensics/technicals/
 valuation + signals → LLM report → email **or** Telegram bot, always-on). On-demand
-reports + a midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
+reports + a pre-market (08:30), midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
 Telegram one for when Telegram is ISP-blocked. Docs:
 
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).

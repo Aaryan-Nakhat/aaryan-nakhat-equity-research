@@ -3,8 +3,8 @@
 End to end: primary NSE/BSE/MCX/FBIL data → DuckDB → deterministic fundamental / forensic /
 technical / (sector-appropriate) valuation analysis + signals → LLM writes the thesis →
 delivered by email (or Telegram) either **on demand** (you name a stock) or **pushed** as a
-**midday (12:30)** and **full (18:00)** watchlist digest plus a **weekly (Sat 18:00)
-screener-movements** digest, with PDF reports and holiday-aware scheduling. Per-area detail lives
+**pre-market (08:30)**, **midday (12:30)** and **full (18:00)** watchlist digest plus a **weekly
+(Sat 18:00) screener-movements** digest, with PDF reports and holiday-aware scheduling. Per-area detail lives
 in [`SCRAPING.md`](SCRAPING.md),
 [`FUNDAMENTALS.md`](FUNDAMENTALS.md), [`TECHNICAL.md`](TECHNICAL.md),
 [`REPORTS.md`](REPORTS.md), [`ALERTS.md`](ALERTS.md).
@@ -128,14 +128,33 @@ heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (screen_digest.due_this_wee
            fingerprints advance only AFTER a successful send (commit_screen_state)
 ```
 
+## Flow E — Push: pre-market digest (08:30 IST)
+
+```
+heartbeat gate: once/trading-day in the 08:30–09:00 IST window (already_premarket_today),
+                holiday/weekend-skipped; cut off at 09:00 (open ~09:15)
+        │
+        ▼  premarket.build_premarket() — four INDEPENDENT best-effort inputs (all plain HTTP):
+              • nseix.gift_nifty() — GIFT Nifty, the overnight Nifty future (NSE IX)
+              • markets_global.nifty_reference() — Nifty-50 prev close (gap baseline) + India VIX
+              • markets_global.overnight_indices() — US (S&P/Nasdaq/Dow) + Asia (Nikkei/HSI), Yahoo
+              • markets_global.market_headlines() — Moneycontrol markets RSS
+              • positioning.fii_index_futures() — FII index-futures net-long stance
+        ▼  implied gap = GIFT Nifty − Nifty prev close → bias; structured brief →
+           synthesize.premarket_brief() (Gemini, uncapped) for the "overnight read"
+        ▼
+   🌅 ONE "Pre-market" email: implied open · gauges · global · headlines · plain-English legend
+        (any input can fail without sinking the email — a setup briefing, not a trade call)
+```
+
 ## Component → file map
 
 | Layer | Does | Files |
 |---|---|---|
-| **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
+| **Scrape** | pull primary data (anti-bot handled) | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,nseix,markets_global,fbil,mcx,amfi,mf_holdings,ipo}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff, holdco-discount + fundamental screeners, marquee-investor tracking) | `analysis/{fundamentals,forensic,valuation,sector,technical,quant,alerts,positioning,funds,ownership,holdco,screener,investors}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report** (returns/risk/holdings/overlap); shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **Vertex** (service account) |
-| **Deliver** | bot(s) + midday (12:30) & full (18:00) scans + weekly (Sat 18:00) screener-movements digest; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; `screen: value/holdco/investors`, `investor: <name>` → screeners; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/inbox.py`, `scan.py`, `screen_digest.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pre-market (08:30), midday (12:30) & full (18:00) scans + weekly (Sat 18:00) screener-movements digest; channel via `CHANNELS`; `fund: <name>` → fund report; `ipo: ongoing/upcoming` → IPO note; `screen: value/holdco/investors/technical`, `investor: <name>`, `sell`/`raise`/`trim` → screeners; opt-in deeper-cut menu (growth triggers) | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket}.py`, `scan.py`, `screen_digest.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
