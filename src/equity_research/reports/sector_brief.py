@@ -158,7 +158,11 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
             bullets.append(f"- 📦 **Mutual funds:** {mf['schemes']} schemes hold names here "
                            f"(~₹{_f(mf.get('exposure_cr'))} cr aggregate exposure).")
         if sm.get("add_detail"):
-            adds = ", ".join(f"{d['symbol']} ({d['holder']})" for d in sm["add_detail"][:4])
+            def _add(d):
+                g = d.get("zone_gain")
+                tag = f", now {g:+.0f}% vs add-zone" if g is not None else ""
+                return f"{d['symbol']} ({d['holder']}{tag})"
+            adds = ", ".join(_add(d) for d in sm["add_detail"][:4])
             bullets.append(f"- 🟢 **Notable adds:** {adds}")
         if sm.get("reduce_detail"):
             red = ", ".join(f"{d['symbol']} ({d['holder']})" for d in sm["reduce_detail"][:4])

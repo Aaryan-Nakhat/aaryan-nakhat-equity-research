@@ -274,11 +274,14 @@ def smart_money(con: duckdb.DuckDBPyConnection, members: list[dict]) -> dict:
             oc = None
         if not oc:
             continue
+        # gain of the add-quarter zone vs current price (booking-risk context for the adds)
+        z, cur = oc.get("action_zone"), oc.get("current_price")
+        zgain = (cur - z["avg"]) / z["avg"] * 100 if z and cur else None
         for r in oc["entered"] + oc["added"]:
             if r.get("category") in _INST_CATS or r.get("classification") == "LISTED company":
                 adds += 1
-                add_detail.append({"symbol": sym, "holder": r["name"],
-                                   "pct": r.get("pct"), "delta": r.get("delta")})
+                add_detail.append({"symbol": sym, "holder": r["name"], "pct": r.get("pct"),
+                                   "delta": r.get("delta"), "zone_gain": zgain})
         for r in oc["exited"] + oc["trimmed"]:
             if r.get("category") in _INST_CATS or r.get("classification") == "LISTED company":
                 reduces += 1

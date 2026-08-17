@@ -190,6 +190,12 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
     if not ch:
         return []
     L = [f"### Ownership changes ({ch['prev_as_of']:%b-%Y} → {ch['as_of']:%b-%Y})", ""]
+    z, cur = ch.get("action_zone"), ch.get("current_price")
+    if z and cur:
+        pos = ("above" if cur > z["hi"] else "below" if cur < z["lo"] else "within")
+        L += [f"_These moves happened while the stock traded **₹{z['lo']:,.0f}–{z['hi']:,.0f}** "
+              f"(~₹{z['avg']:,.0f} avg) that quarter — so that's roughly where they added / trimmed. "
+              f"Now **₹{cur:,.0f}** ({pos} that zone)._", ""]
     if not (ch["entered"] or ch["exited"] or ch["added"] or ch["trimmed"]):
         L += ["- _No material change in the disclosed holder base quarter-over-quarter._", ""]
         return L
@@ -214,6 +220,51 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
     L += ["", "_Diff of the two most recent SEBI Reg-31 shareholding filings. ⭐ = notable "
           "(promoter / mutual fund / FPI / insurer / listed-company holder) — real "
           "conviction or distribution, above retail churn._", ""]
+    return L
+
+
+def _zone_str(lo, hi, avg=None) -> str:
+    if lo is None:
+        return "n/a"
+    s = f"₹{lo:,.0f}–{hi:,.0f}"
+    return s + (f" (~₹{avg:,.0f})" if avg else "")
+
+
+def _smart_money_cost_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
+    """Price context on the institutional holders: their inferred **cost zone** vs the current
+    price → a profit-booking-risk read (the missing half of 'who holds how much'). [] if <2 SHP
+    quarters or no price."""
+    ic = ownership.institutional_cost(con, symbol)
+    if not ic:
+        return []
+    known = [h for h in ic["holders"] if h["gain_pct"] is not None]
+    unknown = [h for h in ic["holders"] if h["gain_pct"] is None]
+    if not known and not unknown:
+        return []
+    s = ic["summary"]
+    L = ["### 💰 Smart-money cost & profit-booking risk", ""]
+    if s["avg_gain_pct"] is not None:
+        L.append(f"At **₹{ic['current_price']:,.0f}**, the institutions whose cost we can estimate "
+                 f"(from the quarters they added, {ic['window']['from']:%b-%Y}→{ic['window']['to']:%b-%Y}) "
+                 f"are **{s['emoji']} {s['read']}** on a stake-weighted basis.")
+    else:
+        L.append(f"At **₹{ic['current_price']:,.0f}** — {s['emoji']} {s['read']}.")
+    L.append("")
+    if known:
+        known.sort(key=lambda h: -(h["gain_pct"]))       # highest booking-risk first
+        rows = [[h["name"], h["category"], f"{h['pct']:.2f}%",
+                 _zone_str(h["zone_lo"], h["zone_hi"], h["avg_cost"]),
+                 f"{h['emoji']} {h['read']}"] for h in known[:8]]
+        L.append(_table(["Holder", "Type", "Stake", "Est. cost zone", "Now vs cost"], rows))
+        L.append("")
+    if unknown:
+        L.append(f"_Plus {len(unknown)} large holder(s) (e.g. promoters / long-term funds) already "
+                 f"holding in our earliest snapshot — they **entered before our data, so their cost "
+                 f"is unknown** and isn't guessed._")
+    L += ["", "_Exact transaction prices aren't disclosed; a holder's cost is **inferred** from the "
+          "price range of the quarter(s) they added in (SEBI Reg-31 filings are quarterly). Near cost "
+          "= little selling pressure; large gains = watch for profit-booking unless the stock is still "
+          "in a strong uptrend. Coverage deepens as more shareholding history is ingested._", ""]
     return L
 
 
@@ -764,6 +815,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     L += _insider_block(con, symbol)                    # insider/promoter trades (PIT)
     L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
     L += _ownership_changes_block(con, symbol)          # QoQ diff — who entered / exited / moved
+    L += _smart_money_cost_block(con, symbol)           # their cost zone vs price → booking risk
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)

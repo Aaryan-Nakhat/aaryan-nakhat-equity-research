@@ -351,10 +351,12 @@ def ingest_shp_holders(symbol: str, con: duckdb.DuckDBPyConnection) -> int:
     return _write_shp_quarter(symbol, data, _listed_master(con), con)
 
 
-def ingest_shp_history(symbol: str, con: duckdb.DuckDBPyConnection, quarters: int = 4) -> int:
+def ingest_shp_history(symbol: str, con: duckdb.DuckDBPyConnection, quarters: int = 12) -> int:
     """Land the most recent ``quarters`` SHP filings for ``symbol`` (newest first) so
-    quarter-over-quarter ownership diffs work immediately. Idempotent — each quarter is a
-    distinct ``as_of`` snapshot. Returns total holder rows written. Best-effort."""
+    quarter-over-quarter ownership diffs and multi-year holder **cost zones** work. Idempotent —
+    each quarter is a distinct ``as_of`` snapshot (re-running just adds any newly-filed quarters).
+    Default 12 (~3 years) so ``ownership.institutional_cost`` can reach back to real entry prices;
+    the NSE share-holdings-master catalog carries many quarters. Returns holder rows written."""
     from equity_research.scrapers import nse_shp
     quarters_data = nse_shp.all_quarters(symbol, n=quarters)
     if not quarters_data:
