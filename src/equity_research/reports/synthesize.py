@@ -662,6 +662,10 @@ HARD RULES:
 - ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, well-established** \
 supplier/ancillary relationship. If you are not confident the company is listed AND the \
 relationship is real, OMIT it — a shorter, correct list is far better than a padded one.
+- **Never include a company just because its NAME contains a relevant-sounding word.** Verify what \
+the company ACTUALLY manufactures/does. (E.g. a media or entertainment firm whose name happens to \
+contain "Communications" is NOT a defence-communications supplier.) Match on the real business, not \
+the name or the ticker.
 - Prefer the **non-obvious ancillaries** (the small/mid suppliers), not the obvious large-caps or \
 the target itself. Do not invent tickers — leave "ticker" empty if unsure (the caller verifies).
 - 6-15 names. Return ONLY a JSON array of {name, ticker, role, why}. No prose, no markdown."""

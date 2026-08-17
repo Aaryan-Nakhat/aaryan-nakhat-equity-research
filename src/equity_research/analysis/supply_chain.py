@@ -26,6 +26,15 @@ log = logging.getLogger("equity_research.supply_chain")
 _STOP = {"ltd", "limited", "india", "indian", "the", "co", "company", "corporation", "corp",
          "industries", "technologies", "systems", "enterprises", "and", "&"}
 
+# Sectors where a consumer / media / finance "supplier" is implausible (hard-industrial chains).
+_INDUSTRIAL_SECTORS = {"defence", "auto", "capital-goods", "metal", "chemicals", "infra",
+                       "energy", "oil-gas", "consumer-durables"}
+# Macro-industries (sector_map) that can't be a real component supplier to an industrial name.
+_IMPLAUSIBLE_INDUSTRIES = {"Media Entertainment & Publication", "Fast Moving Consumer Goods",
+                           "Consumer Services", "Financial Services", "Realty", "Healthcare"}
+# Known bad AI picks the name-match can't catch (real company, wrong business). Extend as needed.
+_BLOCKLIST = {"PNC"}   # Pritish Nandy Communications — a media firm, not a defence-comms supplier.
+
 
 # ── curated seed (hand-verified listed ancillaries; symbols confirmed in equity_master) ──
 # Sector-level = cross-sector suppliers that are NOT already in the sector's own index (so they're
@@ -92,12 +101,25 @@ def _verify(con: duckdb.DuckDBPyConnection, name: str, ticker: str = "") -> dict
     return best
 
 
+def _implausible(con, symbol: str) -> bool:
+    """True if the symbol's macro-industry can't be a real industrial-component supplier (drops
+    e.g. a media/FMCG/finance name mis-suggested for a defence/auto sector)."""
+    r = con.execute("SELECT industry FROM sector_map WHERE symbol = ?", [symbol]).fetchone()
+    return bool(r and r[0] in _IMPLAUSIBLE_INDUSTRIES)
+
+
 def _dedup_verified(con, raw: list[dict], *, exclude: set[str], source: str,
-                    seen: dict[str, dict]) -> None:
-    """Verify each raw {symbol?|name, ticker?, role, why} and fold into ``seen`` (symbol-keyed)."""
+                    seen: dict[str, dict], industrial: bool = False) -> None:
+    """Verify each raw {symbol?|name, ticker?, role, why} and fold into ``seen`` (symbol-keyed).
+    For AI-sourced rows, drop blocklisted names and (for industrial sectors) implausible industries
+    — the guardrail against a confident semantic hallucination the name-match can't catch."""
     for r in raw:
         v = _verify(con, r.get("name", ""), r.get("ticker") or r.get("symbol", ""))
         if not v or v["symbol"] in exclude or v["symbol"] in seen:
+            continue
+        if source == "ai" and (v["symbol"] in _BLOCKLIST
+                               or (industrial and _implausible(con, v["symbol"]))):
+            log.info("supply-chain: dropped implausible AI pick %s", v["symbol"])
             continue
         seen[v["symbol"]] = {"symbol": v["symbol"], "name": v["name"],
                              "role": r.get("role", ""), "why": r.get("why", ""), "source": source}
@@ -116,7 +138,11 @@ def suppliers_for_company(con: duckdb.DuckDBPyConnection, symbol: str,
         company_name or symbol,
         context=f"{company_name} ({symbol}) — an Indian listed company; list its smaller listed "
                 f"suppliers / component-makers / subcontractors.")
-    _dedup_verified(con, ai, exclude=exclude, source="ai", seen=seen)
+    # if the target itself is an industrial/manufacturing name, apply the implausible-industry guard
+    ind = con.execute("SELECT industry FROM sector_map WHERE symbol = ?", [symbol]).fetchone()
+    industrial = bool(ind and ind[0] not in _IMPLAUSIBLE_INDUSTRIES
+                      and ind[0] not in ("Information Technology", "Telecommunication"))
+    _dedup_verified(con, ai, exclude=exclude, source="ai", seen=seen, industrial=industrial)
     return list(seen.values())
 
 
@@ -135,5 +161,6 @@ def sector_supply_chain(con: duckdb.DuckDBPyConnection, canonical: str, index_na
         context=f"Main listed players include: {prime_txt}. List the SMALLER listed suppliers / "
                 f"component-makers / ancillaries that feed into these — the indirect beneficiaries, "
                 f"not the marquee names themselves.")
-    _dedup_verified(con, ai, exclude=exclude, source="ai", seen=seen)
+    _dedup_verified(con, ai, exclude=exclude, source="ai", seen=seen,
+                    industrial=canonical in _INDUSTRIAL_SECTORS)
     return list(seen.values())

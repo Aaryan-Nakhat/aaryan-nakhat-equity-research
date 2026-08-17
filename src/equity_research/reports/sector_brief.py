@@ -21,6 +21,23 @@ def _signed(v, dec=1):
     return "n/a" if v is None else f"{v:+,.{dec}f}"
 
 
+def cheap_band(cheapness) -> str:
+    """Plain-English valuation-vs-own-history band from the 0-100 cheapness score (higher =
+    cheaper). Avoids the confusing 'cheaper than 0% of its own history' phrasing."""
+    if cheapness is None:
+        return ""
+    c = cheapness
+    if c >= 75:
+        return "very cheap vs its own 5-yr history"
+    if c >= 55:
+        return "cheap vs its own 5-yr history"
+    if c >= 40:
+        return "around its own 5-yr average"
+    if c >= 25:
+        return "a bit pricey vs its own 5-yr history"
+    return "expensive vs its own 5-yr history"
+
+
 _LEGEND = (
     "\n\n---\n"
     "**📖 How to read this (plain English)**\n\n"
@@ -71,12 +88,11 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
     tech, val, sm, rk = (data["technicals"], data["valuation"], data["smart_money"], data["ranking"])
     sector_name = index_name.replace("Nifty ", "").replace(" Index", "")
 
-    # ── ordered picks for the numbered reply-menu (top, then undervalued/cheapest not already in) ──
+    # ── ordered picks for the numbered reply-menu (top, then genuinely-undervalued not already in) ──
     top = rk.get("top", [])
-    uv_list = rk.get("undervalued") or rk.get("cheapest") or []
     picks: list[dict] = [{"symbol": r["symbol"], "name": r["name"]} for r in top]
     seen = {r["symbol"] for r in top}
-    for r in uv_list:
+    for r in rk.get("undervalued") or []:
         if r["symbol"] not in seen:
             picks.append({"symbol": r["symbol"], "name": r["name"]})
             seen.add(r["symbol"])
@@ -133,24 +149,29 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
         lines = [f"{net_emoji} **Institutions look {sm.get('net')}** across the sector last quarter "
                  f"— {sm.get('adds', 0)} stakes added/entered vs {sm.get('reduces', 0)} trimmed/exited "
                  f"(mutual funds, insurers, FPIs, banks)."]
+        bullets = []
         mf = sm.get("mf") or {}
         if mf.get("schemes"):
-            lines.append(f"- 📦 **Mutual funds:** {mf['schemes']} schemes hold names here "
-                         f"(~₹{_f(mf.get('exposure_cr'))} cr aggregate exposure).")
+            bullets.append(f"- 📦 **Mutual funds:** {mf['schemes']} schemes hold names here "
+                           f"(~₹{_f(mf.get('exposure_cr'))} cr aggregate exposure).")
         if sm.get("add_detail"):
-            adds = ", ".join(f"{d['symbol']} ({d['holder'][:20]})" for d in sm["add_detail"][:4])
-            lines.append(f"- 🟢 **Notable adds:** {adds}")
+            adds = ", ".join(f"{d['symbol']} ({d['holder']})" for d in sm["add_detail"][:4])
+            bullets.append(f"- 🟢 **Notable adds:** {adds}")
         if sm.get("reduce_detail"):
-            red = ", ".join(f"{d['symbol']} ({d['holder'][:20]})" for d in sm["reduce_detail"][:4])
-            lines.append(f"- 🔴 **Notable trims:** {red}")
+            red = ", ".join(f"{d['symbol']} ({d['holder']})" for d in sm["reduce_detail"][:4])
+            bullets.append(f"- 🔴 **Notable trims:** {red}")
         if sm.get("marquee"):
             mq = ", ".join(f"{m['investor']} {m['kind']} {m['symbol']}" for m in sm["marquee"][:4])
-            lines.append(f"- 👤 **Marquee investors:** {mq}")
+            bullets.append(f"- 👤 **Marquee investors:** {mq}")
         fd = data.get("fii_dii_backdrop") or {}
         if fd:
-            lines.append(f"- 🌐 _Market-wide backdrop (not sector-specific): FII cash "
-                         f"₹{_f(fd.get('fii_net_cr'))} cr · DII ₹{_f(fd.get('dii_net_cr'))} cr._")
-        parts += ["## 💰 Smart money in the sector (proxy)", "\n".join(lines)]
+            bullets.append(f"- 🌐 _Market-wide backdrop (not sector-specific): FII cash "
+                           f"₹{_f(fd.get('fii_net_cr'))} cr · DII ₹{_f(fd.get('dii_net_cr'))} cr._")
+        # intro sentence and the bullet list must be SEPARATE blocks (blank line between) or
+        # markdown lumps them onto one line.
+        parts += ["## 💰 Smart money in the sector (proxy)", lines[0]]
+        if bullets:
+            parts.append("\n".join(bullets))
 
     # news
     if data.get("news"):
@@ -159,24 +180,25 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
 
     # top companies
     if top:
-        rows = [[num_of[r["symbol"]], r["symbol"], (r["name"] or "")[:24], _f(r.get("composite"), 1),
+        rows = [[num_of[r["symbol"]], r["symbol"], r["name"] or "", _f(r.get("composite"), 1),
                  r.get("why", "")] for r in top]
         parts += ["## 🏆 Top companies in the sector",
                   md.table(["#", "Symbol", "Company", "Score", "Why"], rows, "rllrl")]
 
-    # undervalued / least-expensive
-    if uv_list:
-        label = ("## 💎 Undervalued names (cheap vs their own history)" if rk.get("genuinely_cheap")
-                 else "## 💎 Least-expensive names (the sector has re-rated — none are outright cheap)")
-        rows = [[num_of[r["symbol"]], r["symbol"], (r["name"] or "")[:24],
-                 f"cheaper than {_f(r.get('cheapness'))}% of own history", r.get("why", "")]
-                for r in uv_list]
-        parts += [label, md.table(["#", "Symbol", "Company", "Cheapness", "Why"], rows, "rllll")]
+    # undervalued — only genuinely-cheap names; else an honest one-liner (no confusing table)
+    if rk.get("undervalued"):
+        rows = [[num_of[r["symbol"]], r["symbol"], r["name"] or "",
+                 cheap_band(r.get("cheapness")), r.get("why", "")] for r in rk["undervalued"]]
+        parts += ["## 💎 Undervalued names (cheap vs their own history)",
+                  md.table(["#", "Symbol", "Company", "Valuation", "Why"], rows, "rllll")]
+    elif top:
+        parts.append("## 💎 Undervalued names\n\n_**None right now** — no constituent is cheap vs its "
+                     "own history; the sector has broadly re-rated. The **Top** list above is the "
+                     "best-quality entry set — wait for a pullback for better value._")
 
     # supply chain / indirect contributors
     if supply:
-        rows = [[num_of[r["symbol"]], r["symbol"], (r["name"] or "")[:24],
-                 (r.get("role") or "")[:40],
+        rows = [[num_of[r["symbol"]], r["symbol"], r["name"] or "", r.get("role") or "",
                  "🖐️ curated" if r["source"] == "curated" else "🤖 AI"] for r in supply]
         parts += ["## 🔗 Supply chain — smaller listed ancillaries",
                   "_The **indirect** beneficiaries: smaller listed companies that supply / make "
