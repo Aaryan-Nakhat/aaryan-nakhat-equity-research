@@ -299,11 +299,12 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
     Google-Search-grounded LLM; **every** name verified against `equity_master` (dropped if not a real NSE
     symbol; name-consistency guard kills hallucinated tickers), labelled 🖐️ curated / 🤖 AI-verify.
   - **Weekly sector-rotation push — ✅ shipped** (`sector_brief.build_sector_rotation`,
-    `email_bot.maybe_sector_rotation`, Sun ≥18:00 IST; on-demand `sector: rotation`): all sectors by RS vs
-    Nifty + valuation-vs-own-history → leaders / laggards / turning-up-from-cheap.
-  - *Still pending:* a **financial-sector stock ranking** (ROE/NIM/P-B) — banks/NBFCs/insurers aren't
-    Piotroski/Altman-scorable, so they get the index read + smart-money + supply-chain but no within-sector
-    Top/Undervalued list.
+    `email_bot.maybe_sector_rotation`, **Sat ≥18:00 IST**; on-demand `sector: rotation`): all sectors by RS
+    vs Nifty + valuation-vs-own-history → leaders / laggards / turning-up-from-cheap.
+  - **Financial-sector stock ranking — ✅ shipped** (`screener.financial_screen`): banks/NBFCs/insurers
+    aren't Piotroski/Altman-scorable, so `within_sector_ranking` routes lender sectors to **ROA + ROE +
+    NIM proxy + cheap P/B** (rank-normalised in-set, standalone-or-consolidated). `sector: bank` etc. now
+    gets a proper Top (Undervalued where a usable equity element gives P/B).
 - **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `email_bot.maybe_premarket`,
   08:30–09:00 IST once/trading-day): GIFT Nifty implied Nifty open (vs Nifty-50 prev close) + overnight
   US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS

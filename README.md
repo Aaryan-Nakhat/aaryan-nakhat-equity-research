@@ -61,7 +61,8 @@ Personal use. Not a hosted product.
   undervalued names inside it**, and a **🔗 supply-chain** section — the smaller **listed ancillaries**
   feeding the sector's marquee names (curated + AI, every name verified against the NSE master; also
   **`suppliers: <company>`**, e.g. `suppliers: BEL`). **Email `sector: rotation`** (also pushed **weekly,
-  Sun ≥18:00**) ranks **all** sectors — leaders / laggards / **turning-up-from-cheap**. Every list is a
+  Sat ≥18:00**) ranks **all** sectors — leaders / laggards / **turning-up-from-cheap**. Financial sectors
+  (banks/NBFCs/insurers) are ranked on **ROA/ROE/NIM/P-B** (Piotroski/Altman don't apply to lenders). Every list is a
   real table; a **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas.
   `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `analysis/smallcap.py`,
   `analysis/policy.py` (+ `scrapers/pib.py`), `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the
