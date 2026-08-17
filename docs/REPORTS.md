@@ -382,6 +382,8 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
         │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
         │  `screen: technical` (strongest chart setups to buy — entry/stop/target) ·
+        │  `sector: <name>` (top-down read on a sectoral index — trend + valuation vs
+        │  own history + smart-money + best/cheapest names; `sector: list` for options) ·
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
         │  to sell if you need cash) — each a numbered list; reply a number → deep report
@@ -680,6 +682,40 @@ headline list) is handed to `synthesize.premarket_brief` (Gemini, **uncapped** o
 "overnight drivers → likely open → what to watch" paragraph — grounded strictly in the numbers given,
 never a trade call. The email closes with a plain-English **legend** (GIFT Nifty, implied gap, VIX, FII
 net-long, overnight global) so no term is assumed. FII positioning reuses `analysis/positioning.py`.
+
+## Sector analysis — `sector: <name>` (`analysis/sector_analysis.py`, `reports/sector_brief.py`)
+
+A **top-down** read on a whole NSE sectoral index — the workbench's missing "is this sector one to
+**enter / add to** now, and which names inside it are strongest / most **undervalued**?" lens. On-demand
+email command (`sector: defence`, `sector: pharma`, `sector: realty`, … ; `sector: list` shows the ~20
+covered sectors). A `_CATALOG` maps each canonical sector → its `index_close` index name + constituent
+CSV slug + valuation lens + aliases (`resolve_sector` fuzzy-matches "defense"→defence etc.).
+
+The report (all from data we already refresh daily):
+- **Sector index technicals** — `index_technicals` computes SMA 20/50/200, RSI, MACD, ATR, **relative
+  strength vs Nifty 50**, % from 52-wk high on the index's `index_close` OHLC series, reusing
+  `technical.indicators_from_prices` (the shared stock/index indicator core).
+- **Sector valuation** — `index_valuation` takes the index's own PE (PB for financial lenses) and its
+  **percentile vs its own ~5-yr history** (cheap/expensive vs itself) + vs Nifty 50. This is the key
+  "fairly valued / overvalued" read.
+- **Smart-money proxy** — `smart_money` aggregates, across the sector's constituents: institutional
+  ownership Δ (`ownership.ownership_changes`), marquee-investor moves (`investors.all_moves`), and
+  mutual-fund exposure (`mf_holdings` by ISIN) → net **accumulating / distributing**. NSE publishes no
+  FII/DII *cash* by sector, so this is an honest aggregate-of-constituents proxy (market-wide FII/DII is
+  shown only as backdrop).
+- **News** — sector-keyword-filtered market headlines.
+- **LLM verdict** — `synthesize.sector_thesis` (uncapped) → an enter / add-&-accumulate / hold-&-watch /
+  avoid read grounded strictly in the above (weighs momentum *and* valuation — a strong-but-expensive
+  sector reads differently from a strong-and-cheap one).
+- **Within-sector picks** — `within_sector_ranking` runs `screener.fundamental_screen(symbols=…)` over the
+  constituents → a **numbered** Top (composite) and Undervalued (cheap-vs-own-history) list; **reply a
+  number → that stock's deep report** (the `screen:` pending-menu pattern). Constituents fetched live from
+  the NSE archive CSV (plain HTTP), macro-industry fallback on a 404.
+
+**Known limits (v1):** financial sectors (banks / NBFCs / insurers) get the index read + smart-money but
+**no per-stock quality/forensic ranking** — Piotroski/Altman/Beneish assume a non-financial balance sheet
+(the report says so). Constituent depth = names with financials ingested. **Phase 2:** supplier / ancillary
+"indirect contributors" mapping; a pushed weekly sector-rotation digest; a financial-specific stock ranking.
 
 ## Status / follow-ups
 
