@@ -140,9 +140,48 @@ def _positions(con: duckdb.DuckDBPyConnection):
     return positions, sq
 
 
+def _holding_cost(con: duckdb.DuckDBPyConnection, symbol: str, by_q: dict,
+                  quarters_desc: list) -> dict:
+    """This investor's inferred **cost zone** in ``symbol`` vs the current price → a
+    profit-booking-risk read. Cost is inferred from the price range of the quarters they added
+    in (exact prices aren't disclosed); a position held since our earliest snapshot is
+    cost-unknown. Reuses the ``ownership`` helpers. ``{}`` if not computable."""
+    from equity_research.analysis import ownership
+    qs = sorted(quarters_desc)                                 # ascending
+    if len(qs) < 2:
+        return {}
+    cur = ownership.current_price(con, symbol)
+    if not cur:
+        return {}
+    held_before = (by_q.get(qs[0]) or 0.0) > 0
+    adds = []
+    for i in range(1, len(qs)):
+        d = (by_q.get(qs[i]) or 0.0) - (by_q.get(qs[i - 1]) or 0.0)
+        if d > 0.05:
+            z = ownership._price_window(con, symbol, qs[i - 1], qs[i])
+            if z:
+                adds.append((d, z))
+    if adds:
+        wsum = sum(d for d, _ in adds)
+        avg = sum(d * z["avg"] for d, z in adds) / wsum
+        lo, hi = min(z["lo"] for _, z in adds), max(z["hi"] for _, z in adds)
+        gain = (cur - avg) / avg * 100
+    elif held_before:
+        z = ownership._price_window(con, symbol, qs[0], qs[-1])
+        avg, gain = None, None
+        lo, hi = (z["lo"], z["hi"]) if z else (None, None)
+    else:
+        return {}
+    emoji, read = ownership.booking_flag(gain)
+    return {"cost_avg": avg, "zone_lo": lo, "zone_hi": hi, "gain_pct": gain,
+            "cost_emoji": emoji, "cost_read": read, "current_price": cur}
+
+
 def holdings(con: duckdb.DuckDBPyConnection, canonical: str) -> list[dict] | None:
-    """An investor's current book: ``[{symbol, name, as_of, pct}]`` at each company's
-    latest snapshot, biggest stake first. None if the name isn't tracked."""
+    """An investor's current book: ``[{symbol, name, as_of, pct, + cost fields}]`` at each
+    company's latest snapshot, biggest stake first. Each row also carries the investor's inferred
+    **cost zone vs current price** and a booking-risk read (see ``_holding_cost``). None if the
+    name isn't tracked."""
     if canonical not in _INVESTORS:
         return None
     positions, sq = _positions(con)
@@ -152,8 +191,10 @@ def holdings(con: duckdb.DuckDBPyConnection, canonical: str) -> list[dict] | Non
         latest = sq[symbol][0]
         pct = by_q.get(latest)
         if pct and pct > 0:
-            out.append({"symbol": symbol, "name": names.get(symbol, symbol),
-                        "as_of": latest, "pct": pct})
+            row = {"symbol": symbol, "name": names.get(symbol, symbol),
+                   "as_of": latest, "pct": pct}
+            row.update(_holding_cost(con, symbol, by_q, sq[symbol]))
+            out.append(row)
     out.sort(key=lambda r: r["pct"], reverse=True)
     return out
 

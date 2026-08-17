@@ -1121,11 +1121,22 @@ def _send_investor(name: str, req: EmailRequest) -> None:
         _reply_text(req, f"No disclosed (≥~1%) holdings found for **{canon}** in the ingested "
                          "SHP universe yet.\n\n" + _INVESTOR_CAVEAT)
         return
-    table = _md_table(["#", "Symbol", "Company", "Stake", "As of"],
-                      [[i, r["symbol"], r["name"][:34], f"{r['pct']:.2f}%", f"{r['as_of']:%b-%Y}"]
-                       for i, r in enumerate(book, 1)], align="rllrr")
+    def _cost_cell(r):
+        if r.get("gain_pct") is not None:
+            avg = r.get("cost_avg")
+            return f"{r['cost_emoji']} {r['gain_pct']:+.0f}%" + (f" (~₹{avg:,.0f})" if avg else "")
+        if r.get("zone_lo") is not None:              # held since before our data
+            return "⚪ pre-data"
+        return "—"
+    table = _md_table(["#", "Symbol", "Company", "Stake", "Now vs their cost", "As of"],
+                      [[i, r["symbol"], r["name"], f"{r['pct']:.2f}%", _cost_cell(r),
+                        f"{r['as_of']:%b-%Y}"] for i, r in enumerate(book, 1)], align="rlllrr")
     parts = [f"**👤 {canon} — disclosed holdings** ({len(book)} names ≥~1%)\n\n"
-             "**Reply with a number for that stock's full deep report.**\n\n" + table]
+             "**Reply with a number for that stock's full deep report.**\n\n" + table
+             + "\n\n_**Now vs their cost** = current price vs the price zone of the quarters "
+             "**this investor** added in (inferred — exact prices aren't disclosed). 🟢 near cost · "
+             "🟡 in profit · 🟠🔴 large gains → watch for profit-booking; ⚪ pre-data = held since "
+             "before our data (cost unknown). Deepens as more shareholding history is ingested._"]
     if mv and (mv["entered"] or mv["exited"] or mv["added"] or mv["trimmed"]):
         def _fmt(items, kind):
             return ", ".join(
