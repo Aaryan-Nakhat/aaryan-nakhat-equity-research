@@ -77,6 +77,8 @@ def main() -> None:
     ap.add_argument("--skip-financials", action="store_true", help="SHP only (faster)")
     ap.add_argument("--skip-shp", action="store_true", help="financials only")
     ap.add_argument("--quarters", type=int, default=4, help="SHP quarters to backfill")
+    ap.add_argument("--skip-deep", type=int, default=0,
+                    help="skip SHP for symbols that already have >= this many quarters (resume a run)")
     ap.add_argument("--seed-smallcaps", action="store_true",
                     help="first land Nifty Smallcap 250 + Microcap 250 into sector_map, then backfill them")
     args = ap.parse_args()
@@ -98,7 +100,7 @@ def main() -> None:
         log.info("universe: %d symbols%s", len(syms),
                  " (holdcos only)" if args.holdcos_only else " (Nifty-500 + known holdcos)")
 
-        fin_ok = shp_ok = fails = 0
+        fin_ok = shp_ok = skipped = fails = 0
         t0 = time.time()
         for i, sym in enumerate(syms, 1):
             if not args.skip_financials:
@@ -110,6 +112,14 @@ def main() -> None:
                     fails += 1
                     log.exception("financials failed for %s", sym)
             if not args.skip_shp:
+                # resume: skip symbols that already have enough quarters (so an interrupted run — a
+                # power/network drop — re-runs cheaply, only doing the names not yet deepened)
+                if args.skip_deep:
+                    have = con.execute("SELECT count(DISTINCT as_of) FROM shp_holders "
+                                       "WHERE symbol = ?", [sym]).fetchone()[0]
+                    if have >= args.skip_deep:
+                        skipped += 1
+                        continue
                 try:
                     if ingest_shp_history(sym, con, quarters=args.quarters):
                         shp_ok += 1
@@ -119,10 +129,10 @@ def main() -> None:
             if i % 10 == 0 or i == len(syms):
                 rate = i / max(time.time() - t0, 1e-6)
                 eta = (len(syms) - i) / rate / 60
-                log.info("  %d/%d done — financials %d · shp %d · fails %d · ~%.0f min left",
-                         i, len(syms), fin_ok, shp_ok, fails, eta)
-        log.info("DONE — %d symbols · financials %d · shp %d · fails %d · %.1f min",
-                 len(syms), fin_ok, shp_ok, fails, (time.time() - t0) / 60)
+                log.info("  %d/%d done — financials %d · shp %d · skipped %d · fails %d · ~%.0f min left",
+                         i, len(syms), fin_ok, shp_ok, skipped, fails, eta)
+        log.info("DONE — %d symbols · financials %d · shp %d · skipped %d · fails %d · %.1f min",
+                 len(syms), fin_ok, shp_ok, skipped, fails, (time.time() - t0) / 60)
     finally:
         con.close()
 
