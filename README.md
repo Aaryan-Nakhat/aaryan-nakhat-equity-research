@@ -53,7 +53,12 @@ Personal use. Not a hosted product.
   schemes / policies / reforms — often at the announced / cabinet-approved / **draft** / consultation
   stage, *before* formal launch — and an LLM maps each to the **sector(s)** it hits and the **listed
   companies** likely to benefit (resolved to NSE symbols, watchlist names flagged). Primary sources
-  only — **no news/social-media rumor**. Every list is a real table; a
+  only — **no news/social-media rumor**. **Email `sector: <name>`** (e.g. `sector: defence`;
+  `sector: list` for the ~20 covered) → a **top-down read on a whole sectoral index**: its trend +
+  momentum + relative strength vs Nifty, its **valuation vs its own ~5-yr history** (cheap/expensive vs
+  itself), a smart-money proxy (institutional ownership Δ + MF exposure + marquee moves across the
+  sector's stocks), sector headlines, an LLM enter/accumulate/hold verdict, and the **best + most
+  undervalued names inside it** (numbered — reply for a deep report). Every list is a real table; a
   **weekly "Screener movements" email** (Sat ≥18:00 IST) pushes only the deltas.
   `analysis/screener.py`, `analysis/holdco.py`, `analysis/investors.py`, `analysis/smallcap.py`,
   `analysis/policy.py` (+ `scrapers/pib.py`), `screen_digest.py`; seed once with `scripts/backfill_universe.py` (`--seed-smallcaps` for the

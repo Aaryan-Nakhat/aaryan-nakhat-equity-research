@@ -286,6 +286,16 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
 deep-report section (`nse_api.insider_trades`, `insider_trades` table); **midday same-day
 digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email_bot.maybe_intraday`)
 — live movers + today's filings/insider via NSE's NextApi live quote (`live_quotes_batch`).
+- **Sectoral analysis — `sector: <name>` — ✅ v1 shipped** (`analysis/sector_analysis.py`,
+  `reports/sector_brief.py`, `synthesize.sector_thesis`, `email_bot._send_sector_analysis`): the missing
+  **top-down** lens. Per sectoral index (~20 in a `_CATALOG`) — technicals + RS-vs-Nifty + **valuation vs
+  its own ~5-yr history** (all from `index_close`), a smart-money proxy (institutional ownership Δ + MF
+  exposure + marquee moves across constituents; FII/DII-by-sector isn't published), sector news, an LLM
+  enter/accumulate/hold verdict, and a **numbered within-sector Top + Undervalued** list (reply → deep
+  report). Reuses `technical.indicators_from_prices`, `screener.fundamental_screen(symbols=…)`. *Phase 2:*
+  the user's **supplier / ancillary "indirect contributors" mapping** (no structured dataset — its own
+  design); a **weekly sector-rotation push**; a **financial-sector stock ranking** (banks/NBFCs/insurers
+  aren't Piotroski/Altman-scorable, so v1 gives them the index read + smart-money only).
 - **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `email_bot.maybe_premarket`,
   08:30–09:00 IST once/trading-day): GIFT Nifty implied Nifty open (vs Nifty-50 prev close) + overnight
   US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS
