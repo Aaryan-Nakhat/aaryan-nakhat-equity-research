@@ -337,7 +337,7 @@ def within_sector_ranking(con: duckdb.DuckDBPyConnection, members: list[dict],
     quality_ok = [r for r in rows if r.get("cheapness") is not None
                   and (r.get("quality") is None or r["quality"] >= 3)]
     quality_ok.sort(key=lambda r: -(r.get("cheapness") or 0))
-    uv = [r for r in quality_ok if (r.get("cheapness") or 0) >= 60]
+    uv = [r for r in quality_ok if (r.get("cheapness") or 0) >= 55]
     return {"top": top, "undervalued": uv[:top_n], "cheapest": quality_ok[:top_n],
             "genuinely_cheap": bool(uv), "scored": len(rows), "total": len(syms)}
 

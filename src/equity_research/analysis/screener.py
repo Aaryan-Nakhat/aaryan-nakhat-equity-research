@@ -140,6 +140,14 @@ def fundamental_screen(con: duckdb.DuckDBPyConnection, *, universe: str = "NIFTY
     return rows[:limit]
 
 
+def _cheap_word(c: float) -> str:
+    """Plain-English valuation band from the 0-100 cheapness score (higher = cheaper) — clearer
+    than 'cheaper than 0% of its own history' (which just means 'at its priciest ever')."""
+    return ("very cheap vs its own history" if c >= 75 else "cheap vs its own history" if c >= 55
+            else "mid-range vs its own history" if c >= 40
+            else "a bit pricey vs its own history" if c >= 25 else "expensive vs its own history")
+
+
 def _why(r: dict) -> str:
     bits = []
     if r.get("quality") is not None:
@@ -147,7 +155,7 @@ def _why(r: dict) -> str:
     if r.get("forensic") is not None:
         bits.append(f"forensic {r['forensic']:.1f}/4")
     if r.get("cheapness") is not None:
-        bits.append(f"cheaper than {r['cheapness']:.0f}% of its own history")
+        bits.append(_cheap_word(r["cheapness"]))
     return " · ".join(bits)
 
 
