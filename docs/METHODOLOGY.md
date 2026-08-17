@@ -175,6 +175,18 @@ with zero).
   holders matched across quarters by normalised name (+ token-subset fallback for scheme relabels)
   → entered / exited / added / trimmed with the pp delta; notable holders (promoter/MF/FPI/listed)
   sorted first. **Model:** none.
+- **Smart-money cost & profit-booking risk** (`analysis/ownership.institutional_cost`) — the *price*
+  context on top of the %-holding. Exact transaction prices aren't disclosed, so a holder's **cost is
+  inferred**: across every ingested SHP quarter (backfilled to ~16 = ~4 yr by `ingest_shp_history`),
+  find the quarters in which the holder **increased** their stake; for each such window `(qₜ₋₁, qₜ]`
+  take the stock's price range from `equity_eod` (lo/hi/avg close) — that quarter is when the buy
+  happened. Weight the add-quarters by the stake added → an estimated **average cost**; compare to the
+  current price → **gain %** → a plain-English booking-risk band (`booking_flag`: 🔵 below cost · 🟢
+  near cost <15% · 🟡 in profit <50% · 🟠 big gains <90% · 🔴 high risk). **Honest floor:** a holder
+  already present in the *earliest* snapshot entered *before* our data → cost labelled **unknown**,
+  never faked. Stake-weighted across holders for a symbol-level read. Same maths powers the marquee-HNI
+  view (`investors._holding_cost`) and the portfolio heads-up (`analysis/booking_risk.py`, email
+  `booking`). **Model:** none (deterministic price-zone inference).
 - *Contingent liabilities & RPTs* live only in the notes to accounts (not the XBRL), so the
   **Analysis section (LLM)** extracts them from the filing PDFs and flags anything material.
 
@@ -388,6 +400,10 @@ The LLM (**Gemini 2.5 Pro / Vertex AI**) is used **only** here — everything el
 | Digest event analysis | `synthesize.analyze_filing` | one filing PDF | inline point-wise read |
 | Board-meeting labels | `synthesize.label_events` | event subjects | clean purpose text |
 | Policy radar | `synthesize.policy_impact` | PIB releases | scheme → sector → beneficiaries (JSON) |
+| Fund thesis | `synthesize.fund_thesis` | fund report | qualitative fund read + verdict |
+| Sector top-down read | `synthesize.sector_thesis` | sector brief (tech/val/flows/news) | enter/accumulate/hold verdict |
+| Supply-chain suggest | `synthesize.supply_chain_suppliers` | company/sector (+ Google Search) | listed ancillaries (verified vs master) |
+| Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
 
 **Simulation:** Monte-Carlo DCF (§B.11). **Solvers:** reverse-DCF & XIRR (bisection).
@@ -408,6 +424,18 @@ The LLM (**Gemini 2.5 Pro / Vertex AI**) is used **only** here — everything el
 - **Coverage is bounded by what's ingested:** ~750–800 stocks have financials; SHP/holdco/investor
   signals only light up where SHP is ingested; MF holdings cover a handful of AMCs (NAV/returns cover
   all ~14k); levels need ≥60 trading days.
+- **Smart-money cost zones are an inference, not disclosed prices** — SEBI doesn't publish transaction
+  prices, so a holder's cost is estimated from the price *range* of the quarters they added in (SHP is
+  quarterly, backfilled ~16 quarters ≈ 4 yr). A position built before the earliest snapshot is honestly
+  **cost-unknown**, not guessed. A slow signal (quarterly) and a *heads-up*, not a trade trigger.
+- **Sector-level FII/DII flow isn't published** — the sector report's "smart-money" read is an
+  **aggregate across the sector's constituents** (institutional ownership Δ + MF exposure + marquee
+  moves), not an official sector cash-flow figure; market-wide FII/DII is shown only as backdrop.
+- **Sector index "vs own history" needs history** — a valuation percentile is only shown with ≥250
+  trading days of `index_close`; newer sub-indices (NBFC/Insurance/Capital Goods) show the raw PE/PB and
+  "limited history" instead. Financial sectors are ranked on ROA/ROE/NIM/P-B (Piotroski/Altman don't
+  apply to lenders). Supply-chain names are AI-suggested + curated, **verified against `equity_master`**
+  and labelled — a discovery aid, not a confirmed supplier ledger.
 - **Peer set** is the granular `basic_industry`; a name outside the ingested universe is skipped, not
   wrong.
 - **The LLM can be wrong** — it reads primary filings but is a language model; the verdict is a

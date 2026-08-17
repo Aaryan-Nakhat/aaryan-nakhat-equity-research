@@ -48,6 +48,8 @@
 | F&O: OI, PCR, option chain, FII deriv stats | 🟡 | **Hardest** — heavily rate-limited / bot-protected. |
 | ASM / GSM / surveillance, circuit limits | 🟡 | |
 | Index constituents (Nifty 50/500, sector) | 🟡 | CSV. Carries only the **macro-sector** (e.g. 'Consumer Durables'). |
+| Sector-index constituents (Pharma / Bank / Defence …) | 🟢 | Per-index archive CSV `ind_<slug>list.csv` (Symbol + Company + **ISIN** + industry) — powers the within-sector ranking + supply-chain. Plain HTTP; macro-industry fallback on 404. |
+| **GIFT Nifty** (overnight Nifty future, NSE IX) | 🟢 | `nseix.com/api/derivatives-watch` — clean JSON over **plain HTTP** (NSE IX isn't behind Akamai, unlike nseindia.com). Nearest-expiry NIFTY FUTIDX = the pre-market lead indicator. `scrapers/nseix.py`. |
 | Granular industry (basic_industry) | 🟡 | `getSymbolData.secInfo.basicIndustry` (e.g. 'Gems Jewellery And Watches') — the fine tier the constituent CSVs omit. Enriched onto `sector_map` via `ingest_basic_industries` so peers group jeweller-with-jewellers, not all of 'Consumer Durables'. |
 | **IPOs** — live / upcoming issues + subscription | 🟡 | `/api/ipo-current-issue`, `/api/all-upcoming-issues?category=ipo`, `/api/ipo-detail` (category-wise). Browser tier. |
 | **IPO offer documents** — RHP / price-band KPIs / anchor | 🟢 | Archive `nsearchives…/content/ipo/<DOC>_<SYM>.zip`, predictable per symbol. Plain HTTP. The **primary source** for pre-listing financials, fresh/OFS, risks. |

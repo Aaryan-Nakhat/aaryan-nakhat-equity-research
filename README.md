@@ -83,7 +83,12 @@ Personal use. Not a hosted product.
   shareholding section** (every promoter account + public >1% holder from the SHP XBRL,
   sorted, each classified individual / **LISTED company** (the Elcid pattern, with its
   symbol) / unlisted pvt / MF / FPI) plus a **quarter-over-quarter ownership diff** (who
-  entered / added / trimmed / exited, notable holders first), and every
+  entered / added / trimmed / exited, notable holders first) and a **💰 smart-money cost &
+  profit-booking-risk** block — each institution's *inferred cost zone* (from the price range of
+  the quarters they added in, ~4 yr of SHP history) vs the current price → a booking-risk flag
+  (near cost / big gains ⚠️), with pre-our-data holdings honestly marked cost-unknown; the same
+  read appears in the `sector:` and `investor:` views, and **email `booking`** ranks *your*
+  holdings by how much institutions are up (elevated selling risk). Every
   valuation/forensic/technical section has a
   plain-English "how to read this"; it also offers an opt-in **growth-triggers 1-pager**
   (reply `1`) — forward-looking catalysts, each with an **estimated ₹ cr / % business
