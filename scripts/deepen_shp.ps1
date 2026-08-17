@@ -1,6 +1,6 @@
-# Deepen SHP history to 12 quarters (~3 yr) for the cost-zone feature.
+# Deepen SHP history to 16 quarters (~4 yr) for the cost-zone feature.
 # Stops the email bot (single-writer DuckDB), runs the SHP-only backfill, restarts the bot.
-# Meant to run overnight via a one-time Scheduled Task. Idempotent/resumable — safe to re-run.
+# Run via the DeepenSHPBackfill Scheduled Task. Idempotent/resumable — safe to re-run.
 
 $ErrorActionPreference = "Continue"
 $proj = "D:\Desktop\Projects\aaryan-nakhat-equity-research"
@@ -15,9 +15,12 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 3
 
-Log "=== running backfill (SHP only, 12 quarters) ==="
+Log "=== running backfill (SHP only, 16 quarters) ==="
 Set-Location $proj
-& uv run python scripts\backfill_universe.py --skip-financials --quarters 12 *>> $log
+$uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
+if (-not $uv) { $uv = "$env:USERPROFILE\.local\bin\uv.exe" }
+Log "using uv at: $uv"
+& $uv run python scripts\backfill_universe.py --skip-financials --quarters 16 *>> $log
 Log "=== backfill exit code: $LASTEXITCODE ==="
 
 Log "=== restarting bot ==="
