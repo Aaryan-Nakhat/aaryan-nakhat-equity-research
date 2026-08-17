@@ -383,7 +383,10 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
         │  `screen: technical` (strongest chart setups to buy — entry/stop/target) ·
         │  `sector: <name>` (top-down read on a sectoral index — trend + valuation vs
-        │  own history + smart-money + best/cheapest names; `sector: list` for options) ·
+        │  own history + smart-money + best/cheapest names + supply chain; `sector: list`
+        │  for options) · `sector: rotation` (all sectors ranked — leaders/laggards/
+        │  value-turning; also pushed weekly Sun ≥18:00) · `suppliers: <company>`
+        │  (smaller listed ancillaries feeding a marquee name) ·
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
         │  to sell if you need cash) — each a numbered list; reply a number → deep report
@@ -712,10 +715,27 @@ The report (all from data we already refresh daily):
   number → that stock's deep report** (the `screen:` pending-menu pattern). Constituents fetched live from
   the NSE archive CSV (plain HTTP), macro-industry fallback on a 404.
 
-**Known limits (v1):** financial sectors (banks / NBFCs / insurers) get the index read + smart-money but
+**Supply chain — indirect contributors (`analysis/supply_chain.py`):** the sector report ends with a
+**🔗 Supply chain** section — the smaller **listed** ancillaries feeding the sector's marquee names (the
+*indirect* beneficiaries, excluding index members). Also a standalone **`suppliers: <company>`** command
+(`suppliers: BEL`). No structured supplier data exists, so it's a **hybrid**: a hand-curated seed
+(`_CURATED_SECTOR`/`_CURATED_COMPANY`, flagship sectors like defence) + LLM suggestions
+(`synthesize.supply_chain_suppliers`, Google-Search-grounded) — **every** name verified against
+`equity_master` (dropped if it doesn't resolve to a real NSE symbol; a name-consistency guard rejects a
+hallucinated ticker like "PNC"→Pritish Nandy). Rows labelled 🖐️ curated vs 🤖 **AI-suggested (verify)**.
+A discovery aid, not a confirmed supplier ledger.
+
+**Sector rotation (`sector_brief.build_sector_rotation`, `email_bot.maybe_sector_rotation`):** ranks
+**every** sector by relative strength vs Nifty + trend + valuation vs its own history →
+**leaders / laggards / 💎 turning-up-from-cheap** (value+momentum inflection). On-demand
+**`sector: rotation`**, and **pushed weekly (Sunday ≥18:00 IST**, once/ISO-week via
+`scan.sector_rotation_due`/`mark_sector_rotation`). Deterministic — no LLM/network.
+
+**Known limits:** financial sectors (banks / NBFCs / insurers) get the index read + smart-money but
 **no per-stock quality/forensic ranking** — Piotroski/Altman/Beneish assume a non-financial balance sheet
-(the report says so). Constituent depth = names with financials ingested. **Phase 2:** supplier / ancillary
-"indirect contributors" mapping; a pushed weekly sector-rotation digest; a financial-specific stock ranking.
+(the report says so). Constituent depth = names with financials ingested. Supply-chain covers **listed**
+vendors only (many suppliers are private). **Still pending:** a financial-specific stock ranking
+(ROE/NIM/P-B) for banks/NBFCs/insurers.
 
 ## Status / follow-ups
 

@@ -292,10 +292,18 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   its own ~5-yr history** (all from `index_close`), a smart-money proxy (institutional ownership Δ + MF
   exposure + marquee moves across constituents; FII/DII-by-sector isn't published), sector news, an LLM
   enter/accumulate/hold verdict, and a **numbered within-sector Top + Undervalued** list (reply → deep
-  report). Reuses `technical.indicators_from_prices`, `screener.fundamental_screen(symbols=…)`. *Phase 2:*
-  the user's **supplier / ancillary "indirect contributors" mapping** (no structured dataset — its own
-  design); a **weekly sector-rotation push**; a **financial-sector stock ranking** (banks/NBFCs/insurers
-  aren't Piotroski/Altman-scorable, so v1 gives them the index read + smart-money only).
+  report). Reuses `technical.indicators_from_prices`, `screener.fundamental_screen(symbols=…)`.
+  - **Supply-chain / indirect contributors — ✅ shipped** (`analysis/supply_chain.py`,
+    `synthesize.supply_chain_suppliers`): a 🔗 section in the sector report **and** a standalone
+    `suppliers: <company>` command. Hybrid — hand-curated seed (`_CURATED_SECTOR`/`_CURATED_COMPANY`) +
+    Google-Search-grounded LLM; **every** name verified against `equity_master` (dropped if not a real NSE
+    symbol; name-consistency guard kills hallucinated tickers), labelled 🖐️ curated / 🤖 AI-verify.
+  - **Weekly sector-rotation push — ✅ shipped** (`sector_brief.build_sector_rotation`,
+    `email_bot.maybe_sector_rotation`, Sun ≥18:00 IST; on-demand `sector: rotation`): all sectors by RS vs
+    Nifty + valuation-vs-own-history → leaders / laggards / turning-up-from-cheap.
+  - *Still pending:* a **financial-sector stock ranking** (ROE/NIM/P-B) — banks/NBFCs/insurers aren't
+    Piotroski/Altman-scorable, so they get the index read + smart-money + supply-chain but no within-sector
+    Top/Undervalued list.
 - **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `email_bot.maybe_premarket`,
   08:30–09:00 IST once/trading-day): GIFT Nifty implied Nifty open (vs Nifty-50 prev close) + overnight
   US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS
