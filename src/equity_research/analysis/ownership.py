@@ -115,6 +115,119 @@ def _match(cur: list[dict], prev: list[dict]) -> list[tuple[dict | None, dict | 
     return pairs
 
 
+def _price_window(con: duckdb.DuckDBPyConnection, symbol: str, start, end) -> dict | None:
+    """Price range (lo/hi/avg close) for ``symbol`` over ``(start, end]`` — the cost zone for a
+    stake change that happened in that quarter. ``None`` if no EOD in the window."""
+    r = con.execute(
+        "SELECT min(close), max(close), avg(close) FROM equity_eod "
+        "WHERE symbol = ? AND series IN ('EQ','BE','BZ') AND trade_date > ? AND trade_date <= ?",
+        [symbol, start, end]).fetchone()
+    if not r or r[0] is None:
+        return None
+    return {"lo": float(r[0]), "hi": float(r[1]), "avg": float(r[2])}
+
+
+def current_price(con: duckdb.DuckDBPyConnection, symbol: str) -> float | None:
+    r = con.execute(
+        "SELECT close FROM equity_eod WHERE symbol = ? AND series IN ('EQ','BE','BZ') "
+        "ORDER BY trade_date DESC LIMIT 1", [symbol]).fetchone()
+    return float(r[0]) if r and r[0] is not None else None
+
+
+def booking_flag(gain_pct: float | None) -> tuple[str, str]:
+    """Map a gain-vs-cost % to a (emoji, plain-English profit-booking-risk read)."""
+    if gain_pct is None:
+        return "⚪", "cost unknown (position predates our data)"
+    if gain_pct < -5:
+        return "🔵", f"~{abs(gain_pct):.0f}% below cost — underwater, no selling pressure"
+    if gain_pct < 15:
+        return "🟢", f"~{gain_pct:+.0f}% vs cost — near cost, little incentive to sell"
+    if gain_pct < 50:
+        return "🟡", f"~{gain_pct:+.0f}% in profit — some may start booking"
+    if gain_pct < 90:
+        return "🟠", f"~{gain_pct:+.0f}% gains — elevated profit-booking risk"
+    return "🔴", f"~{gain_pct:+.0f}% gains — high profit-booking risk (unless still in a strong uptrend)"
+
+
+def institutional_cost(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | None:
+    """Estimate the **cost zone** of each notable institutional holder and their gain vs the
+    current price — the price-context on top of the raw % holding, so you can gauge profit-booking
+    risk. Exact transaction prices aren't disclosed, so a holder's cost is inferred from the price
+    range of the quarters in which they **added** (from the SHP snapshots we have). A holder that
+    was already holding in our earliest snapshot entered *before* our data — flagged cost-unknown
+    rather than faked. ``None`` if <2 quarters or no price.
+
+    Returns ``{current_price, window:{from,to}, holders:[{name, category, pct, avg_cost, zone_lo,
+    zone_hi, gain_pct, emoji, read, basis}], summary:{avg_gain_pct, emoji, read, known, total}}``.
+    """
+    qs = [r[0] for r in con.execute(
+        "SELECT DISTINCT as_of FROM shp_holders WHERE symbol = ? ORDER BY as_of", [symbol]).fetchall()]
+    if len(qs) < 2:
+        return None
+    cur = current_price(con, symbol)
+    if not cur:
+        return None
+    latest, earliest = qs[-1], qs[0]
+
+    traj: dict[str, dict] = {}
+    for as_of, name, pct, cat, cls, prom in con.execute(
+            "SELECT as_of, holder_name, pct, category, classification, is_promoter "
+            "FROM shp_holders WHERE symbol = ?", [symbol]).fetchall():
+        h = traj.setdefault(_norm(name), {"name": name, "cat": cat, "cls": cls,
+                                          "prom": prom, "q": {}})
+        h["q"][as_of] = pct or 0.0
+        # keep the most recent label/category as the display one
+        if as_of == latest:
+            h.update(name=name, cat=cat, cls=cls, prom=prom)
+
+    holders = []
+    for h in traj.values():
+        if not _is_notable(h["cat"], h["cls"], h["prom"]):
+            continue
+        cur_pct = h["q"].get(latest, 0.0)
+        if cur_pct < 0.3:                                  # skip trivially small current stakes
+            continue
+        held_before = h["q"].get(earliest, 0.0) > 0        # in our first snapshot → entered earlier
+        adds = []                                          # (delta_pp, price_zone) for add-quarters
+        for i in range(1, len(qs)):
+            d = h["q"].get(qs[i], 0.0) - h["q"].get(qs[i - 1], 0.0)
+            if d > 0.05:                                   # a meaningful increase that quarter
+                z = _price_window(con, symbol, qs[i - 1], qs[i])
+                if z:
+                    adds.append((d, z))
+        if adds:
+            wsum = sum(d for d, _ in adds)
+            avg_cost = sum(d * z["avg"] for d, z in adds) / wsum
+            zlo, zhi = min(z["lo"] for _, z in adds), max(z["hi"] for _, z in adds)
+            gain = (cur - avg_cost) / avg_cost * 100
+            basis = ("cost of adds within our data" +
+                     ("; plus an older holding whose cost is unknown" if held_before else ""))
+        elif held_before:                                  # held throughout, entered before our data
+            z = _price_window(con, symbol, earliest, latest)
+            avg_cost, gain = None, None
+            zlo, zhi = (z["lo"], z["hi"]) if z else (None, None)
+            basis = "held before our data — cost unknown (price ranged as shown while they held)"
+        else:
+            continue
+        emoji, read = booking_flag(gain)
+        holders.append({"name": h["name"], "category": h["cat"], "pct": cur_pct,
+                        "avg_cost": avg_cost, "zone_lo": zlo, "zone_hi": zhi, "gain_pct": gain,
+                        "emoji": emoji, "read": read, "basis": basis})
+    holders.sort(key=lambda x: -x["pct"])
+
+    known = [h for h in holders if h["gain_pct"] is not None]
+    if known:
+        wsum = sum(h["pct"] for h in known)
+        avg_gain = sum(h["gain_pct"] * h["pct"] for h in known) / wsum
+        s_emoji, s_read = booking_flag(avg_gain)
+    else:
+        avg_gain, s_emoji, s_read = None, "⚪", "cost mostly unknown (holdings predate our ~1yr data)"
+    return {"current_price": cur, "window": {"from": earliest, "to": latest},
+            "holders": holders[:10],
+            "summary": {"avg_gain_pct": avg_gain, "emoji": s_emoji, "read": s_read,
+                        "known": len(known), "total": len(holders)}}
+
+
 def ownership_changes(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | None:
     """QoQ ownership diff for ``symbol`` between its two most recent SHP snapshots.
 
