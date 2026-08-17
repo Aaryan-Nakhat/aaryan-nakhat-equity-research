@@ -41,6 +41,7 @@ from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import md  # noqa: E402
+from equity_research.reports import premarket  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
@@ -55,6 +56,8 @@ IST = ZoneInfo("Asia/Kolkata")
 SCAN_HOUR = 18
 INTRADAY_HOUR, INTRADAY_MIN = 12, 30    # midday same-day digest (12:30 IST)
 INTRADAY_CUTOFF_HOUR = 14               # don't fire a stale "midday" digest after 2pm
+PREMARKET_HOUR, PREMARKET_MIN = 8, 30   # pre-open GIFT Nifty digest (08:30 IST)
+PREMARKET_CUTOFF_HOUR = 9              # don't fire a stale "pre-market" note after 9am (open ~9:15)
 IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
 PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
 
@@ -1283,6 +1286,43 @@ def maybe_intraday() -> None:
     scan.mark_intraday()
 
 
+def _push_premarket(md_text: str) -> bool:
+    """Deliver the pre-market digest. Returns True if sent."""
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send pre-market digest")
+        return False
+    today = datetime.now(IST).date()
+    emailer.send_report(f"🌅 Pre-market — {today:%d-%b-%Y}", md_text, to=to,
+                        html=emailer.body_html(md_text, "Pre-market"))
+    log.info("pre-market digest sent to %s", to)
+    return True
+
+
+def maybe_premarket() -> None:
+    """Fire the pre-open GIFT Nifty digest once per trading day, in the 08:30–09:00 IST window."""
+    now = datetime.now(IST)
+    if not (PREMARKET_HOUR, PREMARKET_MIN) <= (now.hour, now.minute) or now.hour >= PREMARKET_CUTOFF_HOUR:
+        return
+    if scan.already_premarket_today() or not scan.market_open_today():
+        return
+    log.info("pre-market digest firing")
+    con = connect()
+    try:
+        md_text = premarket.build_premarket(con)
+    except Exception:  # noqa: BLE001
+        log.exception("pre-market build failed")
+        return                                  # no mark → retried next heartbeat (still in window)
+    finally:
+        con.close()
+    if md_text is None:
+        log.info("pre-market: no data to report — no email sent")
+        scan.mark_premarket()                   # nothing to fetch today; don't retry all morning
+        return
+    _push_premarket(md_text)
+    scan.mark_premarket()
+
+
 def maybe_scan() -> None:
     """Fire the watchlist scan once per trading day, first heartbeat at/after 18:00 IST."""
     now = datetime.now(IST)
@@ -1373,6 +1413,7 @@ def main() -> None:
                 # a *later* email to nudge it. An unconditional drain each loop guarantees every
                 # UNSEEN request is picked up within one cycle — no more "send it 3-4 times".
                 _drain(inbox)
+                maybe_premarket()    # heartbeat: pre-open GIFT Nifty digest (08:30–09:00 IST)
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
                 maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)

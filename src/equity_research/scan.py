@@ -280,6 +280,26 @@ def mark_intraday(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
+def already_premarket_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_premarket_date") == datetime.now(_IST).date().isoformat()
+    finally:
+        if own:
+            con.close()
+
+
+def mark_premarket(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_premarket_date", datetime.now(_IST).date().isoformat())
+    finally:
+        if own:
+            con.close()
+
+
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
     """Ingest the latest available trading day's full EOD set (idempotent)."""
     today = date.today()
