@@ -300,6 +300,32 @@ def mark_premarket(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
+def _iso_week(dt: datetime) -> str:
+    y, w, _ = dt.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def sector_rotation_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True once per ISO week — the weekly sector-rotation push hasn't fired yet this week."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_sector_rotation_week") != _iso_week(datetime.now(_IST))
+    finally:
+        if own:
+            con.close()
+
+
+def mark_sector_rotation(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_sector_rotation_week", _iso_week(datetime.now(_IST)))
+    finally:
+        if own:
+            con.close()
+
+
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
     """Ingest the latest available trading day's full EOD set (idempotent)."""
     today = date.today()

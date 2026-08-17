@@ -361,6 +361,40 @@ def build_sector_analysis(con: duckdb.DuckDBPyConnection, canonical: str) -> dic
             "fii_dii_backdrop": fii_dii}
 
 
+def rank_all_sectors(con: duckdb.DuckDBPyConnection) -> dict:
+    """Rank every catalog sector for rotation: relative strength vs Nifty + trend + valuation vs
+    own history. Returns ``{leaders, laggards, turning, all}`` — ``turning`` = cheap *and*
+    improving (a value+momentum inflection). Deterministic, fast (no network/LLM). For the weekly
+    push and the on-demand ``sector: rotation`` view."""
+    out = []
+    for canon, meta in _CATALOG.items():
+        tech = index_technicals(con, meta["index"])
+        val = index_valuation(con, meta["index"], meta["lens"])
+        if not tech and not val:
+            continue
+        rs = tech.get("rs_vs_nifty") if tech else None
+        rs_pct = (rs - 1) * 100 if rs else None
+        close, s50, s200 = ((tech.get("close"), tech.get("sma50"), tech.get("sma200"))
+                            if tech else (None, None, None))
+        if close and s50 and s200:
+            trend = "up" if close > s50 > s200 else "down" if close < s50 < s200 else "mixed"
+        else:
+            trend = "n/a"
+        out.append({"canonical": canon, "index_name": meta["index"], "emoji": meta["emoji"],
+                    "rs_pct": rs_pct, "trend": trend, "rsi": tech.get("rsi14") if tech else None,
+                    "macd_hist": tech.get("macd_hist") if tech else None,
+                    "val_pctile": val.get("own_history_pctile") if val else None,
+                    "val_reading": val.get("reading") if val else None,
+                    "metric": val.get("metric") if val else None,
+                    "current": val.get("current") if val else None})
+    ranked = sorted([o for o in out if o["rs_pct"] is not None], key=lambda o: -o["rs_pct"])
+    turning = [o for o in ranked if o["val_pctile"] is not None and o["val_pctile"] <= 40
+               and o["trend"] != "down" and (o["rs_pct"] > 0 or (o.get("macd_hist") or 0) > 0)]
+    turning.sort(key=lambda o: (o["val_pctile"], -o["rs_pct"]))
+    return {"leaders": ranked[:6], "laggards": ranked[-6:][::-1], "turning": turning[:6],
+            "all": ranked}
+
+
 def _sector_news(canonical: str, meta: dict) -> list[dict]:
     """Market headlines filtered to this sector's keywords (best-effort, [] on failure)."""
     try:

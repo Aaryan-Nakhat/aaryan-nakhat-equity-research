@@ -35,8 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (holdco, investors, policy, screener,  # noqa: E402
-                                      sector_analysis, sell_advisor, smallcap, technical,
-                                      technical_screen)
+                                      sector_analysis, sell_advisor, smallcap, supply_chain,
+                                      technical, technical_screen)
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -514,6 +514,14 @@ def _sector_query(subject: str) -> str | None:
     return m.group(1).strip()
 
 
+def _suppliers_query(subject: str) -> str | None:
+    """Parse a supply-chain request ('suppliers: BEL', 'supply chain: HAL', 'ancillaries: <co>')
+    → the company text, or None if not a suppliers command."""
+    m = re.match(r"^\s*(?:re:\s*)?(?:suppliers?|supply\s*chain|ancillaries|ancillary|vendors?)"
+                 r"\s*[:\-]\s*(.+)$", subject, flags=re.I)
+    return m.group(1).strip() if m else None
+
+
 def _policy_query(subject: str) -> bool:
     """True for a bare policy-radar request ('policy:', 'schemes', 'policy radar', 'govt schemes')
     outside the `screen:` prefix."""
@@ -672,6 +680,25 @@ def _send_sector_list(req: EmailRequest) -> None:
                         in_reply_to=req.message_id, references=req.references or req.message_id)
 
 
+def _send_sector_rotation(req: EmailRequest) -> None:
+    """On-demand sector-rotation digest (leaders / laggards / value-turning across all sectors)."""
+    log.info("running sector rotation (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — ranking all sectors by relative strength vs Nifty + valuation "
+                     "vs their own history. Lands in this thread shortly.")
+    con = connect()
+    try:
+        body = _screen_run(lambda: sector_brief.build_sector_rotation(con))
+    finally:
+        con.close()
+    if not body:
+        _reply_text(req, "Couldn't rank the sectors this time — please resend `sector: rotation`.")
+        return
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Sector rotation"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent sector rotation to %s", req.sender)
+
+
 def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
     """Top-down sector report → numbered top/undervalued list; reply a number → deep report."""
     meta = sector_analysis.catalog()[canonical]
@@ -696,6 +723,43 @@ def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
                         html=emailer.body_html(body, f"Sector — {report['sector_name']}"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent sector analysis '%s' (%d picks) to %s", canonical, len(cands), req.sender)
+
+
+def _send_suppliers(req: EmailRequest, query: str) -> None:
+    """Map ONE company's smaller listed suppliers/ancillaries → numbered list; reply → deep report."""
+    cand = resolve(query)
+    if not cand:
+        _reply_text(req, f"Couldn't resolve '{query}' to an NSE company — try the exact name or symbol.")
+        return
+    target = cand[0]
+    log.info("running supplier map for %s (req from %s)", target.symbol, req.sender)
+    _reply_text(req, f"📩 Got it — mapping the smaller **listed** suppliers / ancillaries feeding "
+                     f"{target.name} ({target.symbol}). ~1 min; the list lands in this thread.")
+    con = connect()
+    try:
+        sup = _screen_run(lambda: supply_chain.suppliers_for_company(con, target.symbol, target.name))
+    finally:
+        con.close()
+    if not sup:
+        _reply_text(req, f"No **listed** suppliers/ancillaries surfaced for {target.name} that I could "
+                         f"verify on NSE. (This maps listed vendors only — many suppliers are private.)")
+        return
+    table = _md_table(
+        ["#", "Symbol", "Company", "Supplies", "Source"],
+        [[i, r["symbol"], r["name"][:28], (r.get("role") or "")[:40],
+          "🖐️ curated" if r["source"] == "curated" else "🤖 AI"] for i, r in enumerate(sup, 1)],
+        align="rllll")
+    body = (f"**🔗 Supply chain — {target.name} ({target.symbol})**\n\n"
+            "Smaller **listed** companies that supply / make components for it — the *indirect* "
+            "beneficiaries beyond the marquee name. 🖐️ hand-curated · 🤖 **AI-suggested, verify** the "
+            "link before acting. **Reply a number for that stock's full deep report.**\n\n" + table +
+            f"\n\n_Listed vendors only — a discovery aid, not a confirmed supplier ledger. "
+            f"(Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, f"suppliers:{target.symbol}", [_MenuItem(r["symbol"], r["name"]) for r in sup])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, f"Suppliers — {target.symbol}"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent supplier map for %s (%d names) to %s", target.symbol, len(sup), req.sender)
 
 
 def _send_smallcap_screen(req: EmailRequest) -> None:
@@ -1243,8 +1307,11 @@ def handle_request(req: EmailRequest) -> None:
     # 1e-tri) explicit sector analysis ('sector: defence' / 'sector: pharma' / 'sector: list')
     secq = _sector_query(req.subject)
     if secq:
-        if secq.lower() in ("list", "help", "?", "options", "all", "sectors"):
+        if secq.lower() in ("list", "help", "?", "options", "sectors"):
             _send_sector_list(req)
+            return
+        if secq.lower() in ("rotation", "rotate", "rotations", "overview", "all", "compare"):
+            _send_sector_rotation(req)
             return
         canon = sector_analysis.resolve_sector(secq)
         if canon:
@@ -1253,6 +1320,12 @@ def handle_request(req: EmailRequest) -> None:
             names = ", ".join(sector_analysis.catalog().keys())
             _reply_text(req, f"I don't recognise the sector '{secq}'. Try `sector: list` to see the "
                              f"options, or one of: {names}.")
+        return
+
+    # 1e-quater) supply-chain map ('suppliers: BEL' / 'supply chain: HAL' / 'ancillaries: <co>')
+    supq = _suppliers_query(req.subject)
+    if supq:
+        _send_suppliers(req, supq)
         return
 
     # 1e-bis) bare government policy / scheme radar ('policy:', 'schemes', 'policy radar')
@@ -1451,6 +1524,39 @@ def maybe_screen_digest() -> None:
         con.close()
 
 
+def maybe_sector_rotation() -> None:
+    """Fire the weekly sector-rotation push once per ISO week (Sunday ≥18:00 IST): all sectors
+    ranked by relative strength vs Nifty + valuation vs their own history — leaders, laggards, and
+    value-turning candidates. Reads the latest EOD, so a weekend fire is fine. The week-marker
+    advances only after a successful send."""
+    now = datetime.now(IST)
+    if now.weekday() != 6 or now.hour < SCAN_HOUR:      # Sunday evening, weekly
+        return
+    if not scan.sector_rotation_due():
+        return
+    log.info("weekly sector-rotation push firing")
+    con = connect()
+    try:
+        body = sector_brief.build_sector_rotation(con)
+    except Exception:  # noqa: BLE001
+        log.exception("sector rotation failed")             # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    if not body:
+        scan.mark_sector_rotation()                         # nothing ranked — don't retry all evening
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send sector rotation")
+        return
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"🔄 Sector rotation — {today}", body, to=to,
+                        html=emailer.body_html(body, "Sector rotation"))
+    scan.mark_sector_rotation()                             # advance week-marker ONLY after send
+    log.info("weekly sector-rotation push sent to %s", to)
+
+
 # ----------------- main loop -----------------
 def main() -> None:
     channels = os.environ.get("CHANNELS", "email").lower()
@@ -1483,6 +1589,7 @@ def main() -> None:
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
                 maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)
+                maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sun ≥18:00)
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")
