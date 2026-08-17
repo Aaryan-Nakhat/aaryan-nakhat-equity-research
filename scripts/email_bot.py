@@ -34,9 +34,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import (holdco, investors, policy, screener,  # noqa: E402
-                                      sector_analysis, sell_advisor, smallcap, supply_chain,
-                                      technical, technical_screen)
+from equity_research.analysis import (booking_risk, holdco, investors, policy,  # noqa: E402
+                                      screener, sector_analysis, sell_advisor, smallcap,
+                                      supply_chain, technical, technical_screen)
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -522,6 +522,13 @@ def _suppliers_query(subject: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _booking_query(subject: str) -> bool:
+    """True for a portfolio profit-booking-risk request ('booking', 'booking risk', 'profit
+    booking', 'sell risk', 'booking:')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:booking(?:\s*risk)?|profit[\s-]*booking|sell[\s-]*risk)"
+                         r"\s*[:\-]?\s*$", subject, flags=re.I))
+
+
 def _policy_query(subject: str) -> bool:
     """True for a bare policy-radar request ('policy:', 'schemes', 'policy radar', 'govt schemes')
     outside the `screen:` prefix."""
@@ -760,6 +767,58 @@ def _send_suppliers(req: EmailRequest, query: str) -> None:
                         html=emailer.body_html(body, f"Suppliers — {target.symbol}"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent supplier map for %s (%d names) to %s", target.symbol, len(sup), req.sender)
+
+
+def _send_booking_risk(req: EmailRequest) -> None:
+    """Heads-up on YOUR holdings where institutions sit on big gains (elevated selling risk)."""
+    log.info("running portfolio booking-risk (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — checking your holdings for where the tracked institutions are "
+                     "sitting on big gains (profit-booking risk). Lands in this thread shortly.")
+    con = connect()
+    try:
+        res = _screen_run(lambda: booking_risk.portfolio_booking_risk(con, "holding"))
+    finally:
+        con.close()
+    if res is None:
+        _reply_text(req, "That scan timed out this time — please resend `booking` shortly.")
+        return
+    scored, nodata = res["scored"], res["nodata"]
+    if not scored:
+        _reply_text(req, "None of your holdings have enough shareholding history yet to estimate "
+                         "an institutional cost. (Deepens as SHP history is ingested.)")
+        return
+
+    def _risk(r):
+        return f"{r['emoji']} {r['avg_gain']:+.0f}%"
+
+    def _who(r):
+        t = r.get("top_holder")
+        return (f"{t['name']} {t['gain_pct']:+.0f}%" if t else "—")
+    rows = [[i, r["symbol"], r["name"], _risk(r), str(r["n_high"]), _who(r)]
+            for i, r in enumerate(scored, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Instns' avg gain", "≥50% holders", "Deepest holder"],
+                      rows, align="rlllrl")
+    high = [r for r in scored if r["avg_gain"] >= 50]
+    lead = (f"**{len(high)} of your {len(scored)} scored holdings** have institutions sitting on "
+            f"**≥50% gains** — watch those for profit-booking pressure." if high
+            else "None of your holdings show institutions on big (≥50%) gains right now.")
+    body = ("**⚠️ Profit-booking risk — your holdings**\n\n" + lead + " Ranked by the stake-weighted "
+            "gain the **tracked institutions** are sitting on (inferred from the price zones of the "
+            "quarters they added in — exact prices aren't disclosed). Highest = deepest in profit = "
+            "most likely to book. **Reply a number for that stock's deep report.**\n\n" + table)
+    if nodata:
+        body += ("\n\n_No institutional cost estimate yet for: "
+                 + ", ".join(r["symbol"] for r in nodata[:20])
+                 + " (held before our data / thin shareholding history — deepens as more is ingested)._")
+    body += ("\n\n_A heads-up, not a sell signal — a strong stock can keep running past institutional "
+             f"cost. Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_")
+    cands = [_MenuItem(r["symbol"], r["name"]) for r in scored] + \
+            [_MenuItem(r["symbol"], r["name"]) for r in nodata]
+    _set_pending(req, "booking", cands)
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Booking risk — holdings"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent booking-risk (%d scored, %d nodata) to %s", len(scored), len(nodata), req.sender)
 
 
 def _send_smallcap_screen(req: EmailRequest) -> None:
@@ -1337,6 +1396,11 @@ def handle_request(req: EmailRequest) -> None:
     supq = _suppliers_query(req.subject)
     if supq:
         _send_suppliers(req, supq)
+        return
+
+    # 1e-quinque) portfolio profit-booking risk ('booking' / 'booking risk' / 'profit booking')
+    if _booking_query(req.subject):
+        _send_booking_risk(req)
         return
 
     # 1e-bis) bare government policy / scheme radar ('policy:', 'schemes', 'policy radar')

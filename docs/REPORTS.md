@@ -403,7 +403,8 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  (smaller listed ancillaries feeding a marquee name) ·
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
-        │  to sell if you need cash) — each a numbered list; reply a number → deep report
+        │  to sell if you need cash) · `booking` (YOUR holdings where institutions sit
+        │  on big gains → profit-booking risk) — each a numbered list; reply → deep report
 PUSH  08:30–09:00 IST, once per trading day → premarket.build_premarket → ONE
         "🌅 Pre-market" email: GIFT Nifty implied open (vs Nifty-50 prev close),
         overnight US/Asia indices, India VIX + FII index-futures stance, latest
