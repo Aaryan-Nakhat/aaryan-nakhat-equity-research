@@ -35,13 +35,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (holdco, investors, policy, screener,  # noqa: E402
-                                      sell_advisor, smallcap, technical, technical_screen)
+                                      sector_analysis, sell_advisor, smallcap, technical,
+                                      technical_screen)
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import md  # noqa: E402
 from equity_research.reports import premarket  # noqa: E402
+from equity_research.reports import sector_brief  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
@@ -503,6 +505,15 @@ def _screen_query(subject: str) -> str | None:
     return "value"
 
 
+def _sector_query(subject: str) -> str | None:
+    """Parse a sector request → the raw sector text (e.g. 'defence', 'pharma', 'list'), or None if
+    not a `sector:` command. 'sector: list' / 'sector: help' returns the literal 'list'."""
+    m = re.match(r"^\s*(?:re:\s*)?sector\s*[:\-]\s*(.+)$", subject, flags=re.I)
+    if not m:
+        return None
+    return m.group(1).strip()
+
+
 def _policy_query(subject: str) -> bool:
     """True for a bare policy-radar request ('policy:', 'schemes', 'policy radar', 'govt schemes')
     outside the `screen:` prefix."""
@@ -645,6 +656,46 @@ def _send_fundamental_screen(req: EmailRequest) -> None:
                         html=emailer.body_html(md, "Screen — value"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent fundamental screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_sector_list(req: EmailRequest) -> None:
+    """List the sectors the `sector:` command understands."""
+    cat = sector_analysis.catalog()
+    lines = [f"- {m['emoji']} **{k}** — {m['index']}" for k, m in cat.items()]
+    md = ("**🧭 Sector analysis — available sectors**\n\n"
+          "Send `sector: <name>` (e.g. `sector: defence`, `sector: pharma`, `sector: realty`) for a "
+          "top-down read: index trend + valuation vs its own history, who's accumulating it, and the "
+          "best / cheapest names inside it (reply a number for a stock's deep report).\n\n"
+          + "\n".join(lines))
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Sectors"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+
+
+def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
+    """Top-down sector report → numbered top/undervalued list; reply a number → deep report."""
+    meta = sector_analysis.catalog()[canonical]
+    log.info("running sector analysis '%s' (req from %s)", canonical, req.sender)
+    _reply_text(req, f"📩 Got it — pulling the top-down read on {meta['emoji']} "
+                     f"{meta['index'].replace('Nifty ', '')}: index trend + valuation vs its own "
+                     f"history, who's accumulating it, and the best / cheapest names inside it "
+                     f"(~1–2 min). The report will land in this thread.")
+    con = connect()
+    try:
+        report = _screen_run(lambda: sector_brief.build_sector_report(con, canonical))
+    finally:
+        con.close()
+    if not report:
+        _reply_text(req, f"Couldn't build that sector this time (timed out or no index data) — "
+                         f"please resend `sector: {canonical}` in a moment.")
+        return
+    body = report["markdown"]
+    cands = [_MenuItem(p["symbol"], p["name"]) for p in report["picks"]]  # plain SYM → reply → deep report
+    _set_pending(req, f"sector:{canonical}", cands)
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, f"Sector — {report['sector_name']}"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent sector analysis '%s' (%d picks) to %s", canonical, len(cands), req.sender)
 
 
 def _send_smallcap_screen(req: EmailRequest) -> None:
@@ -1187,6 +1238,21 @@ def handle_request(req: EmailRequest) -> None:
             _send_technical_screen(req)
         else:
             _send_fundamental_screen(req)
+        return
+
+    # 1e-tri) explicit sector analysis ('sector: defence' / 'sector: pharma' / 'sector: list')
+    secq = _sector_query(req.subject)
+    if secq:
+        if secq.lower() in ("list", "help", "?", "options", "all", "sectors"):
+            _send_sector_list(req)
+            return
+        canon = sector_analysis.resolve_sector(secq)
+        if canon:
+            _send_sector_analysis(req, canon)
+        else:
+            names = ", ".join(sector_analysis.catalog().keys())
+            _reply_text(req, f"I don't recognise the sector '{secq}'. Try `sector: list` to see the "
+                             f"options, or one of: {names}.")
         return
 
     # 1e-bis) bare government policy / scheme radar ('policy:', 'schemes', 'policy radar')

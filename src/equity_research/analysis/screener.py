@@ -90,16 +90,25 @@ def _normalise(rows: list[dict], key: str) -> None:
 
 
 def fundamental_screen(con: duckdb.DuckDBPyConnection, *, universe: str = "NIFTY500",
-                       limit: int = 25) -> list[dict]:
+                       symbols: list[str] | None = None, limit: int = 25) -> list[dict]:
     """Ranked value+quality+forensic screen over symbols with financials.
 
-    Restricted to ``sector_map.universe`` (default NIFTY500). Returns
-    ``[{symbol, name, composite, quality, forensic, cheapness, pe, pb, why}, …]``,
+    Scored over an explicit ``symbols`` list when given (e.g. a sector index's constituents),
+    else restricted to ``sector_map.universe`` (default NIFTY500). Only names with financials
+    ingested participate — rank-normalisation is **within the scored set**, so the same helper
+    powers a whole-universe screen and a within-sector ranking. Returns
+    ``[{symbol, name, composite, quality, forensic, cheapness, cheapness_n, pe, pb, why}, …]``,
     best composite first. Best-effort: a symbol missing a pillar is scored on the rest.
     """
-    syms = [r[0] for r in con.execute(
-        "SELECT DISTINCT f.symbol FROM financials f "
-        "JOIN sector_map s ON s.symbol = f.symbol WHERE s.universe = ?", [universe]).fetchall()]
+    if symbols is not None:
+        placeholders = ",".join("?" * len(symbols)) or "NULL"
+        syms = [r[0] for r in con.execute(
+            f"SELECT DISTINCT symbol FROM financials WHERE symbol IN ({placeholders})",
+            symbols).fetchall()]
+    else:
+        syms = [r[0] for r in con.execute(
+            "SELECT DISTINCT f.symbol FROM financials f "
+            "JOIN sector_map s ON s.symbol = f.symbol WHERE s.universe = ?", [universe]).fetchall()]
     names = dict(con.execute("SELECT symbol, company FROM sector_map").fetchall())
     rows: list[dict] = []
     for sym in syms:
