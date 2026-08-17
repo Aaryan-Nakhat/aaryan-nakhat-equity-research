@@ -197,6 +197,20 @@ one continuous move, not a spurious exit-and-re-entry in both lists.
 **backfill** (`ingest_shp_history` → `nse_shp.all_quarters`, parsing each quarter's SHP XBRL),
 so the diff works on the first report rather than after waiting a quarter. (Verified live:
 Asian Paints Mar→Jun 2026 → SBI MF trimmed 5.20%→4.31%, ICICI Pru trimmed, UTI MF exited.)
+The block also shows the **price zone that quarter** (`ownership_changes.action_zone`) — roughly
+where those adds/trims happened — vs the current price.
+
+**Smart-money cost & profit-booking risk:** a `### 💰 Smart-money cost & profit-booking risk` block
+(`deep_brief._smart_money_cost_block` → `analysis.ownership.institutional_cost`) adds the **price
+context** the raw % holding lacks. Exact transaction prices aren't disclosed, so each notable holder's
+**cost is inferred from the price range of the quarter(s) they added in** across the SHP snapshots we
+have, weighted into an avg, and compared to the current price → a plain-English **booking-risk read**
+(`ownership.booking_flag`: 🔵 below cost · 🟢 near cost · 🟡 in profit · 🟠 big gains · 🔴 high risk).
+A holder already present in our **earliest** snapshot entered *before* our data, so their cost is
+honestly labelled **unknown** (not faked). A stake-weighted summary gives the overall read. Also
+surfaced per-name in the **sector** report's smart-money adds ("now +X% vs add-zone"). Depth grows with
+SHP history ingested (`ingest_shp_history` now defaults to **12 quarters** ≈ 3 years). *Verified: MTAR —
+HSBC MF add-zone ~₹2,357 vs ₹7,234 now → 🔴 ~+207%; a recent Sundaram add ~₹6,457 → 🟢 near cost.*
 
 **Auto multi-filing read:** `generate_report` auto-fetches **all the company's
 meaningful filings since the last fiscal year-end (plus the latest results)** —

@@ -279,5 +279,9 @@ def ownership_changes(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | Non
     exited.sort(key=_rank_appear)
     added.sort(key=_rank_delta)
     trimmed.sort(key=_rank_delta)
+    # the price zone of the quarter these moves happened in (prev_as_of, cur_as_of] — the cost
+    # zone for adds / the exit zone for trims — plus the current price for a vs-cost read.
+    zone = _price_window(con, symbol, prev_as_of, cur_as_of)
     return {"as_of": cur_as_of, "prev_as_of": prev_as_of,
-            "entered": entered, "exited": exited, "added": added, "trimmed": trimmed}
+            "entered": entered, "exited": exited, "added": added, "trimmed": trimmed,
+            "action_zone": zone, "current_price": current_price(con, symbol)}
