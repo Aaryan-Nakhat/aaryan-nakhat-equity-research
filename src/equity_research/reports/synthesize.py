@@ -794,3 +794,38 @@ def extract_guidance(pdfs: list[tuple[str, bytes]] | None, *, model: str = MODEL
     if not any(d.get(k) is not None for k in ("revenue_cr", "ebitda_cr", "ebit_margin", "pat_cr")):
         return None
     return d
+
+
+_PREMARKET_SYS = """You are a markets-desk analyst writing the "overnight & pre-open" note for an \
+Indian equity investor, delivered before the 9:15 AM NSE open. You are given a structured brief: \
+overnight moves in US and Asian indices, the GIFT Nifty implied-open read (GIFT Nifty is the Nifty-50 \
+future that trades through the night on NSE IX — it is the single best lead indicator for the Indian \
+open), FII index-futures positioning, India VIX, and a list of the latest Indian-market headlines.
+
+Write a tight, plain-English read (about 4-6 sentences, no bullet dump, no preamble, no sign-off):
+1. What drove the overnight global tape (US close, Asia this morning) and the mood it sets.
+2. The clearest read on how Nifty is likely to OPEN today, grounded in the GIFT Nifty gap and VIX — say \
+gap-up / gap-down / flat and roughly how strong, but never present a directional open as a certainty.
+3. One or two SPECIFIC things to watch today, drawn from the headlines (a data print, a sector in focus, \
+a stock-specific event, a global cue).
+
+Rules: use only the numbers and facts given — never invent a level, a percentage, or a headline. If the \
+headlines are thin or off-topic, say so briefly rather than padding. No investment advice, no price \
+targets, no disclaimers, no hype words. This is context to start the trading day, not a recommendation."""
+
+
+def premarket_brief(context: str, *, model: str = MODEL) -> str | None:
+    """One short LLM read of the overnight tape + GIFT Nifty + headlines. ``context`` is the
+    pre-formatted structured brief. Returns a plain-text paragraph, or ``None`` on any failure
+    (the digest then ships the numbers without the narrative). Never raises."""
+    if not (context or "").strip():
+        return None
+    try:
+        resp = _client().models.generate_content(
+            model=model,
+            contents=[types.Part.from_text(text=context)],
+            config=types.GenerateContentConfig(system_instruction=_PREMARKET_SYS),
+        )
+        return (resp.text or "").strip() or None
+    except Exception:  # noqa: BLE001 — narrative is best-effort; numbers still ship
+        return None

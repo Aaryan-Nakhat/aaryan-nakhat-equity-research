@@ -385,6 +385,11 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
         │  to sell if you need cash) — each a numbered list; reply a number → deep report
+PUSH  08:30–09:00 IST, once per trading day → premarket.build_premarket → ONE
+        "🌅 Pre-market" email: GIFT Nifty implied open (vs Nifty-50 prev close),
+        overnight US/Asia indices, India VIX + FII index-futures stance, latest
+        headlines, and an LLM "overnight read". A before-the-open setup, not a
+        trade call. Every input degrades independently; holiday/weekend-skipped.
 PUSH  >=18:00 IST, once per trading day → run_watchlist_scan → digest email:
         Upcoming events + per-stock Movers + Events (deals / corporate events /
         forensic changes, with inline filing analysis). Lines-only, NO PDFs.
@@ -650,6 +655,31 @@ holdco-only seed). **`--seed-smallcaps`** first lands **Nifty Smallcap 250 + Mic
 else" universe for `screen: smallcap` (Nifty-500 is all large/mid). Pair with **`--only-missing`** to
 skip the already-ingested Nifty-500 and do just the ~500 new small-cap names. This is a multi-hour
 browser-tier run — launch it as a Windows scheduled task with the bot stopped, per the ingest note.
+
+## Pre-market digest (`reports/premarket.py`, `email_bot.maybe_premarket`)
+
+A **before-the-open** read pushed once per trading day in the **08:30–09:00 IST** window (fires after
+market open ~09:15 is pointless, so it's cut off at 09:00; `last_premarket_date` in `alert_state`
+guarantees once/day; holiday/weekend-skipped via `scan.market_open_today`). It answers "what does the
+overnight tape imply for how Nifty opens?".
+
+Four **independent, best-effort** inputs (any can fail without sinking the email):
+- **GIFT Nifty** (`scrapers/nseix.py::gift_nifty`) — the Nifty-50 future that trades ~21h/day on NSE IX
+  (GIFT City), the market's best lead indicator for the domestic open. Plain-HTTP JSON
+  (`nseix.com/api/derivatives-watch`, **no browser needed**); we take the nearest-expiry NIFTY FUTIDX.
+- **Nifty-50 spot prev close + India VIX** (`scrapers/markets_global.py::nifty_reference`) — from NSE
+  `allIndices` (plain HTTP, Camoufox fallback if Akamai blocks). Prev close is the **implied-gap baseline**.
+- **Overnight US/Asia indices** (`markets_global.overnight_indices`) — S&P/Nasdaq/Dow + Nikkei/Hang Seng
+  from Yahoo's unauthenticated `v8/finance/chart` endpoint.
+- **Headlines** (`markets_global.market_headlines`) — Moneycontrol markets RSS (the feed emits malformed
+  `&`-less numeric entities like `day#39;s`; `_clean_title` repairs them).
+
+**Implied gap** = GIFT Nifty − Nifty-50 prev close → pts/% → bias bucket (`strong/mild gap-up`, `flat`,
+`mild/strong gap-down` at ±0.15% / ±0.5%). The structured brief (global + gap + VIX + FII stance + the
+headline list) is handed to `synthesize.premarket_brief` (Gemini, **uncapped** output) for a tight
+"overnight drivers → likely open → what to watch" paragraph — grounded strictly in the numbers given,
+never a trade call. The email closes with a plain-English **legend** (GIFT Nifty, implied gap, VIX, FII
+net-long, overnight global) so no term is assumed. FII positioning reuses `analysis/positioning.py`.
 
 ## Status / follow-ups
 
