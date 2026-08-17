@@ -740,7 +740,11 @@ report a usable equity element, so they rank on ROA/NIM).
 
 **Known limits:** constituent depth = names with financials ingested. Supply-chain covers **listed**
 vendors only (many suppliers are private). Newer sub-indices (NBFC / Insurance / Capital Goods) have
-<60 days of `index_close` history, so no technicals yet (valuation still works).
+only a few weeks of `index_close` history → **no technicals** (needs ≥60 days) and **no valuation
+percentile** (needs ≥250 days — the report says "limited price history" and shows the raw PE/PB level
+instead of a misleading vs-history read); their within-sector ranking still works. Insurers score thinly
+(life-insurance accounting doesn't fit the ROA/NIM model). Capital Goods has no NSE constituent CSV, so it
+ranks the broad macro-industry set rather than the ~15-name index.
 
 ## Status / follow-ups
 

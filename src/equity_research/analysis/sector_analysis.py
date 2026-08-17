@@ -192,17 +192,24 @@ def index_valuation(con: duckdb.DuckDBPyConnection, index_name: str, lens: str) 
     if series.empty:
         return {}
     cur = float(series.iloc[-1])
-    pctile = float((series < cur).mean() * 100)   # % of own history cheaper than now
-    if pctile >= 80:
-        reading = "expensive vs its own history"
-    elif pctile >= 60:
-        reading = "a bit rich vs its own history"
-    elif pctile <= 20:
-        reading = "cheap vs its own history"
-    elif pctile <= 40:
-        reading = "below its own average"
+    # A "vs its own history" percentile is only meaningful with enough history. Newer sub-indices
+    # (e.g. Nifty NBFC / Insurance / Capital Goods) have only a few weeks in index_close — a
+    # percentile over ~40 days would be misleading, so report the level without the vs-history read.
+    _MIN_HIST = 250                                # ~1 trading year
+    if len(series) < _MIN_HIST:
+        pctile, reading = None, "limited price history — no vs-history read yet"
     else:
-        reading = "around its own average"
+        pctile = float((series < cur).mean() * 100)   # % of own history cheaper than now
+        if pctile >= 80:
+            reading = "expensive vs its own history"
+        elif pctile >= 60:
+            reading = "a bit rich vs its own history"
+        elif pctile <= 20:
+            reading = "cheap vs its own history"
+        elif pctile <= 40:
+            reading = "below its own average"
+        else:
+            reading = "around its own average"
     nifty = con.execute(
         "SELECT pe, pb FROM index_close WHERE index_name = 'Nifty 50' "
         "ORDER BY trade_date DESC LIMIT 1").fetchone()

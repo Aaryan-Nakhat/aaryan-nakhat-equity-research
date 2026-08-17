@@ -134,10 +134,13 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
                 rows.append(["Relative strength vs Nifty", f"{(tech['rs_vs_nifty'] - 1) * 100:+.1f}% "
                              f"over ~3m ({'leading' if tech['rs_vs_nifty'] > 1 else 'lagging'})"])
         if val:
-            rows.append([f"Valuation ({val['metric']})", f"{_f(val.get('current'), 1)} — "
-                         f"{val.get('reading')} (richer than {_f(val.get('own_history_pctile'))}% of its "
-                         f"own {val.get('years')}y); Nifty {val['metric']} "
-                         f"{_f(val.get('nifty_pe') if val['metric'] == 'PE' else val.get('nifty_pb'), 1)}"])
+            nifty_val = val.get("nifty_pe") if val["metric"] == "PE" else val.get("nifty_pb")
+            pct = val.get("own_history_pctile")
+            hist = (f" (richer than {pct:.0f}% of its own {val.get('years')}y)"
+                    if pct is not None else "")
+            rows.append([f"Valuation ({val['metric']})",
+                         f"{_f(val.get('current'), 1)} — {val.get('reading')}{hist}; "
+                         f"Nifty {val['metric']} {_f(nifty_val, 1)}"])
             if val.get("div_yield") is not None:
                 rows.append(["Dividend yield", f"{_f(val.get('div_yield'), 2)}%"])
         parts += ["## 📈 Sector index — technicals & valuation",
@@ -281,10 +284,12 @@ def _brief_for_llm(sector_name: str, data: dict) -> str:
     L += [f"- {s}" for s in (tech.get("signals", []) if tech else [])] or ["- (insufficient history)"]
     L.append("")
     if val:
-        L.append(f"VALUATION: {val['metric']} {val.get('current'):.1f} — {val.get('reading')} "
-                 f"(richer than {val.get('own_history_pctile'):.0f}% of its own {val.get('years')}y "
-                 f"history); Nifty-50 {val['metric']} "
-                 f"{(val.get('nifty_pe') if val['metric'] == 'PE' else val.get('nifty_pb')) or float('nan'):.1f}; "
+        pct = val.get("own_history_pctile")
+        hist = (f" (richer than {pct:.0f}% of its own {val.get('years')}y history)"
+                if pct is not None else "")
+        nifty_val = val.get("nifty_pe") if val["metric"] == "PE" else val.get("nifty_pb")
+        L.append(f"VALUATION: {val['metric']} {val.get('current'):.1f} — {val.get('reading')}{hist}; "
+                 f"Nifty-50 {val['metric']} {nifty_val if nifty_val is not None else float('nan'):.1f}; "
                  f"div yield {val.get('div_yield')}.")
     if sm:
         L.append(f"SMART MONEY (proxy): institutions {sm.get('net')} — {sm.get('adds')} adds vs "
