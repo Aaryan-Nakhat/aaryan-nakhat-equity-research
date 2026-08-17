@@ -317,13 +317,17 @@ def smart_money(con: duckdb.DuckDBPyConnection, members: list[dict]) -> dict:
 
 # ── within-sector ranking ────────────────────────────────────────────────────────
 def within_sector_ranking(con: duckdb.DuckDBPyConnection, members: list[dict],
-                          top_n: int = 8) -> dict:
-    """Rank the constituents on quality+forensic+cheapness (``screener.fundamental_screen``).
-    Returns ``{top, undervalued, scored, total}`` — top by composite, undervalued by cheapness
-    (cheap vs own history, quality-gated)."""
+                          top_n: int = 8, *, lens: str = "earnings") -> dict:
+    """Rank the constituents and return ``{top, undervalued, cheapest, scored, total}``. Uses the
+    **financial** ranking (ROA/ROE/NIM/P-B) for lender sectors (banks/NBFCs/insurers — Piotroski/
+    Altman don't apply), else the quality+forensic+cheapness screen. Top by composite, undervalued
+    by cheapness (quality-gated)."""
     syms = [m["symbol"] for m in members]
     name_of = {m["symbol"]: (m.get("company") or m["symbol"]) for m in members}
-    rows = screener.fundamental_screen(con, symbols=syms, limit=len(syms))
+    if lens == "financial":
+        rows = screener.financial_screen(con, syms, limit=len(syms))
+    else:
+        rows = screener.fundamental_screen(con, symbols=syms, limit=len(syms))
     for r in rows:                        # prefer the constituent CSV's company name
         r["name"] = name_of.get(r["symbol"], r["name"])
     top = rows[:top_n]
@@ -351,8 +355,8 @@ def build_sector_analysis(con: duckdb.DuckDBPyConnection, canonical: str) -> dic
         return None
     members = constituents(con, canonical)
     sm = smart_money(con, members) if members else {}
-    ranking = within_sector_ranking(con, members) if members else {"top": [], "undervalued": [],
-                                                                    "scored": 0, "total": 0}
+    ranking = (within_sector_ranking(con, members, lens=meta["lens"]) if members
+               else {"top": [], "undervalued": [], "scored": 0, "total": 0})
     news = _sector_news(canonical, meta)
     fii_dii = _market_fii_dii()
     return {"canonical": canonical, "index_name": meta["index"], "emoji": meta["emoji"],

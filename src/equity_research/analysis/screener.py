@@ -20,7 +20,7 @@ import logging
 
 import duckdb
 
-from equity_research.analysis import forensic, sector, valuation
+from equity_research.analysis import forensic, fundamentals, sector, valuation
 
 log = logging.getLogger(__name__)
 
@@ -148,4 +148,98 @@ def _why(r: dict) -> str:
         bits.append(f"forensic {r['forensic']:.1f}/4")
     if r.get("cheapness") is not None:
         bits.append(f"cheaper than {r['cheapness']:.0f}% of its own history")
+    return " · ".join(bits)
+
+
+# ── financial-sector ranking (banks / NBFCs / insurers) ─────────────────────────
+# Piotroski/Altman/Beneish assume a non-financial balance sheet, so lenders are scored on the
+# metrics that actually matter for them: profitability (ROA/ROE), margin (NIM proxy), and
+# cheapness (low P/B). Each is rank-normalised WITHIN the scored set (same _normalise as above).
+_FIN_WEIGHTS = {"roa": 0.28, "roe": 0.22, "nim": 0.15, "cheap": 0.35}
+_NET_ELEMENTS = ("ProfitLossForPeriod", "ProfitLossForThePeriod",
+                 "ProfitLossAfterTaxesMinorityInterestAndShareOfProfitLossOfAssociates",
+                 "ProfitLossFromOrdinaryActivitiesAfterTax")
+_EQ_ELEMENTS = ("Equity", "EquityAttributableToOwnersOfParent")
+
+
+def _fin_metrics(con: duckdb.DuckDBPyConnection, symbol: str) -> dict:
+    """ROA / ROE / NIM-proxy / P-B for a lender, from the latest annual filing. Tries both
+    standalone and consolidated and keeps whichever yields the most data. All best-effort."""
+    best, best_score = {"roa": None, "roe": None, "nim": None, "pb": None}, -1
+    for cons in (False, True):
+        a = fundamentals.load_annual(con, symbol, cons)
+        if a.empty:
+            continue
+        latest = a.loc[a.index[-1]]
+
+        def val(*names):
+            for n in names:
+                v = latest.get(n)
+                if v is not None and v == v:
+                    return float(v)
+            return None
+        net, assets, eq = val(*_NET_ELEMENTS), latest.get("Assets"), val(*_EQ_ELEMENTS)
+        assets = float(assets) if assets is not None and assets == assets else None
+        ie, iex = latest.get("InterestEarned"), latest.get("InterestExpended")
+        roa = 100 * net / assets if net is not None and assets else None
+        roe = 100 * net / eq if net is not None and eq and eq > 0 else None
+        nim = (100 * (float(ie) - float(iex)) / assets
+               if ie is not None and iex is not None and assets else None)
+        snap = valuation.snapshot(con, symbol, cons)
+        pb = snap.get("pb")
+        pb = float(pb) if pb is not None and pb == pb and pb > 0 else None
+        m = {"roa": roa, "roe": roe, "nim": nim, "pb": pb}
+        score = sum(v is not None for v in m.values())
+        if score > best_score:
+            best, best_score = m, score
+    return best
+
+
+def financial_screen(con: duckdb.DuckDBPyConnection, symbols: list[str], *,
+                     limit: int = 25) -> list[dict]:
+    """Rank lenders (banks / NBFCs / insurers) on ROA + ROE + NIM + cheap P/B. Same shape as
+    ``fundamental_screen`` (``composite``, ``cheapness``, ``why``) so the sector report's
+    Top/Undervalued tables and reply-menu work unchanged. Best-effort; thin names are skipped."""
+    if not symbols:
+        return []
+    placeholders = ",".join("?" * len(symbols))
+    syms = [r[0] for r in con.execute(
+        f"SELECT DISTINCT symbol FROM financials WHERE symbol IN ({placeholders})",
+        symbols).fetchall()]
+    names = dict(con.execute("SELECT symbol, company FROM sector_map").fetchall())
+    rows: list[dict] = []
+    for sym in syms:
+        try:
+            m = _fin_metrics(con, sym)
+        except Exception:  # noqa: BLE001 — a thin name shouldn't break the screen
+            log.exception("financial scoring failed for %s", sym)
+            continue
+        if all(v is None for v in m.values()):
+            continue
+        # "cheap" is the inverse of P/B (lower P/B = cheaper); missing → neutral later
+        m["cheap"] = -m["pb"] if m["pb"] is not None else None
+        rows.append({"symbol": sym, "name": names.get(sym, sym), **m})
+    if not rows:
+        return []
+    for key in ("roa", "roe", "nim", "cheap"):
+        _normalise(rows, key)
+    for r in rows:
+        r["composite"] = round(100 * sum(_FIN_WEIGHTS[k] * r[f"{k}_n"] for k in _FIN_WEIGHTS), 1)
+        # a 0-100 "cheapness" score (higher = cheaper on P/B) so the sector Undervalued list works
+        r["cheapness"] = round(r["cheap_n"] * 100, 0) if r.get("pb") is not None else None
+        r["why"] = _fin_why(r)
+    rows.sort(key=lambda r: (-r["composite"], r["symbol"]))
+    return rows[:limit]
+
+
+def _fin_why(r: dict) -> str:
+    bits = []
+    if r.get("roa") is not None:
+        bits.append(f"ROA {r['roa']:.1f}%")
+    if r.get("roe") is not None:
+        bits.append(f"ROE {r['roe']:.0f}%")
+    if r.get("nim") is not None:
+        bits.append(f"NIM~{r['nim']:.1f}%")
+    if r.get("pb") is not None:
+        bits.append(f"P/B {r['pb']:.1f}")
     return " · ".join(bits)
