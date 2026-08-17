@@ -385,7 +385,7 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  `sector: <name>` (top-down read on a sectoral index — trend + valuation vs
         │  own history + smart-money + best/cheapest names + supply chain; `sector: list`
         │  for options) · `sector: rotation` (all sectors ranked — leaders/laggards/
-        │  value-turning; also pushed weekly Sun ≥18:00) · `suppliers: <company>`
+        │  value-turning; also pushed weekly Sat ≥18:00) · `suppliers: <company>`
         │  (smaller listed ancillaries feeding a marquee name) ·
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
@@ -728,14 +728,19 @@ A discovery aid, not a confirmed supplier ledger.
 **Sector rotation (`sector_brief.build_sector_rotation`, `email_bot.maybe_sector_rotation`):** ranks
 **every** sector by relative strength vs Nifty + trend + valuation vs its own history →
 **leaders / laggards / 💎 turning-up-from-cheap** (value+momentum inflection). On-demand
-**`sector: rotation`**, and **pushed weekly (Sunday ≥18:00 IST**, once/ISO-week via
+**`sector: rotation`**, and **pushed weekly (Saturday ≥18:00 IST**, once/ISO-week via
 `scan.sector_rotation_due`/`mark_sector_rotation`). Deterministic — no LLM/network.
 
-**Known limits:** financial sectors (banks / NBFCs / insurers) get the index read + smart-money but
-**no per-stock quality/forensic ranking** — Piotroski/Altman/Beneish assume a non-financial balance sheet
-(the report says so). Constituent depth = names with financials ingested. Supply-chain covers **listed**
-vendors only (many suppliers are private). **Still pending:** a financial-specific stock ranking
-(ROE/NIM/P-B) for banks/NBFCs/insurers.
+**Financial-sector ranking (`screener.financial_screen`):** banks / NBFCs / insurers can't be scored on
+Piotroski/Altman/Beneish (those assume a non-financial balance sheet), so `within_sector_ranking` routes
+lender sectors to a lender-appropriate composite — **ROA + ROE + NIM (proxy) + cheap P/B**, each
+rank-normalised within the set, tried on both standalone & consolidated. So a `sector: bank` /
+`sector: nbfc` report still gets a proper Top (and Undervalued where P/B is available; some banks don't
+report a usable equity element, so they rank on ROA/NIM).
+
+**Known limits:** constituent depth = names with financials ingested. Supply-chain covers **listed**
+vendors only (many suppliers are private). Newer sub-indices (NBFC / Insurance / Capital Goods) have
+<60 days of `index_close` history, so no technicals yet (valuation still works).
 
 ## Status / follow-ups
 

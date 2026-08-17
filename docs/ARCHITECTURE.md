@@ -147,10 +147,10 @@ heartbeat gate: once/trading-day in the 08:30–09:00 IST window (already_premar
         (any input can fail without sinking the email — a setup briefing, not a trade call)
 ```
 
-## Flow F — Push: weekly sector-rotation digest (Sun ≥18:00 IST)
+## Flow F — Push: weekly sector-rotation digest (Sat ≥18:00 IST)
 
 ```
-heartbeat gate: once/ISO-week, Sunday ≥18:00 IST (scan.sector_rotation_due); reads latest EOD
+heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.sector_rotation_due); reads latest EOD
         │
         ▼  sector_analysis.rank_all_sectors() — every catalog sector scored on relative strength
               vs Nifty + trend + valuation-vs-own-history (all from index_close; no LLM/network)
