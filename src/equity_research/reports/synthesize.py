@@ -604,6 +604,49 @@ def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | N
     return text or None
 
 
+_SECTOR_SYS = """You are a top-down sector strategist for Indian equities. You are given a \
+deterministic **sector report** for one NSE sectoral index: its own technicals (trend vs \
+50/200-DMA, RSI, MACD, relative strength vs Nifty 50, distance from 52-wk high), its valuation \
+(index PE/PB and where that sits vs the sector's OWN ~5-yr history, and vs Nifty 50), a \
+smart-money read (institutional ownership changes, mutual-fund exposure, marquee-investor moves \
+across the sector's stocks — a proxy, since FII/DII cash isn't published by sector), recent \
+sector headlines, and a within-sector ranking of the strongest and cheapest stocks.
+
+Write a tight top-down read (about 5-8 sentences, no bullet dump, no preamble, no sign-off):
+1. Where the sector is in its cycle — momentum/trend AND whether it's cheap or expensive vs its \
+own history (both matter: a strong trend at a rich valuation is a different setup from a strong \
+trend that's still cheap).
+2. A clear **verdict on timing** — is this a spot to ENTER / ADD & ACCUMULATE / HOLD & WATCH / \
+AVOID-for-now — with the reason. Never present it as a certainty; a re-rated sector can keep \
+running and a cheap one can stay cheap.
+3. What the smart-money proxy and headlines add or contradict.
+4. If the sector is expensive but strong, say plainly that better risk/reward may be in the \
+cheaper names within it (point to the ranking) rather than the index.
+
+Rules: use only the numbers and facts in the report — never invent a level, a flow, or a \
+headline. Plain English (the reader may not know the jargon), no price targets, no disclaimers, \
+no hype. This is a decision aid for sector rotation, not a guarantee."""
+
+
+def sector_thesis(brief_md: str, sector_name: str, *, model: str = MODEL) -> str | None:
+    """Top-down enter/accumulate/hold/avoid read over the deterministic sector report.
+    Best-effort — returns None on any failure so the report still ships numbers-only."""
+    try:
+        out: list[str] = []
+        for chunk in _client().models.generate_content_stream(
+            model=model,
+            contents=[types.Part.from_text(
+                text=f"Sector report for {sector_name}:\n\n{brief_md}\n\nWrite the read.")],
+            config=types.GenerateContentConfig(system_instruction=_SECTOR_SYS),
+        ):
+            if chunk.text:
+                out.append(chunk.text)
+        text = "".join(out).strip()
+    except Exception:  # noqa: BLE001 — thesis is a bonus, never block the sector report
+        return None
+    return text or None
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \

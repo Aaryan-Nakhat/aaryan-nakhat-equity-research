@@ -53,9 +53,13 @@ def _atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
     return tr.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
 
 
-def indicators(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
-    """Full indicator frame (DMA/EMA/MACD/RSI/Bollinger/ATR/volume/delivery)."""
-    p = load_prices(con, symbol)
+def indicators_from_prices(p: pd.DataFrame) -> pd.DataFrame:
+    """Full indicator frame (DMA/EMA/MACD/RSI/Bollinger/ATR/volume/delivery) from a
+    date-indexed OHLC(V) frame. ``close``/``high``/``low`` are required; ``volume`` and
+    ``deliv_per`` are optional (an **index** series from ``index_close`` has neither), so
+    their rolling averages are only added when the column is present. This shared core lets
+    both the stock path (``equity_eod``) and the sector-index path (``index_close``) compute
+    identical indicators."""
     if p.empty:
         return p
     c = p["close"]
@@ -73,11 +77,18 @@ def indicators(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
     out["bb_upper"] = out["sma20"] + 2 * std20
     out["bb_lower"] = out["sma20"] - 2 * std20
     out["atr14"] = _atr(p)
-    out["vol_avg20"] = p["volume"].rolling(20).mean()
-    out["deliv_avg20"] = p["deliv_per"].rolling(20).mean()
+    if "volume" in p:
+        out["vol_avg20"] = p["volume"].rolling(20).mean()
+    if "deliv_per" in p:
+        out["deliv_avg20"] = p["deliv_per"].rolling(20).mean()
     out["high_52w"] = c.rolling(252, min_periods=20).max()
     out["low_52w"] = c.rolling(252, min_periods=20).min()
     return out
+
+
+def indicators(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
+    """Full indicator frame for a stock (DMA/EMA/MACD/RSI/Bollinger/ATR/volume/delivery)."""
+    return indicators_from_prices(load_prices(con, symbol))
 
 
 def relative_strength(con: duckdb.DuckDBPyConnection, symbol: str, *,
