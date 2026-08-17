@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import duckdb
 
-from equity_research.analysis import sector_analysis
+from equity_research.analysis import sector_analysis, supply_chain
 from equity_research.reports import md, synthesize
 
 
@@ -77,6 +77,22 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
     picks: list[dict] = [{"symbol": r["symbol"], "name": r["name"]} for r in top]
     seen = {r["symbol"] for r in top}
     for r in uv_list:
+        if r["symbol"] not in seen:
+            picks.append({"symbol": r["symbol"], "name": r["name"]})
+            seen.add(r["symbol"])
+
+    # supply chain: the smaller LISTED ancillaries feeding the sector's marquee names (Phase-2,
+    # best-effort — curated seed + AI, all verified against the NSE master). Excludes the index's
+    # own constituents (those are direct, not indirect).
+    supply: list[dict] = []
+    try:
+        members = sector_analysis.constituents(con, canonical)
+        csyms = {m["symbol"] for m in members}
+        primes = [r["symbol"] for r in top] or [m["symbol"] for m in members[:6]]
+        supply = supply_chain.sector_supply_chain(con, canonical, index_name, primes, csyms)
+    except Exception:  # noqa: BLE001 — supply-chain is a bonus, never break the sector report
+        supply = []
+    for r in supply:
         if r["symbol"] not in seen:
             picks.append({"symbol": r["symbol"], "name": r["name"]})
             seen.add(r["symbol"])
@@ -157,6 +173,18 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
                 for r in uv_list]
         parts += [label, md.table(["#", "Symbol", "Company", "Cheapness", "Why"], rows, "rllll")]
 
+    # supply chain / indirect contributors
+    if supply:
+        rows = [[num_of[r["symbol"]], r["symbol"], (r["name"] or "")[:24],
+                 (r.get("role") or "")[:40],
+                 "🖐️ curated" if r["source"] == "curated" else "🤖 AI"] for r in supply]
+        parts += ["## 🔗 Supply chain — smaller listed ancillaries",
+                  "_The **indirect** beneficiaries: smaller listed companies that supply / make "
+                  "components for the sector's marquee names (not index members themselves). "
+                  "🖐️ = hand-curated; 🤖 = **AI-suggested, verify** the link before acting. Reply a "
+                  "number for a deep report._",
+                  md.table(["#", "Symbol", "Company", "Supplies", "Source"], rows, "rllll")]
+
     if rk.get("total") and rk.get("scored"):
         parts.append(f"_Ranked {rk.get('scored')} of {rk.get('total')} constituents with ingested "
                      f"financials._")
@@ -169,6 +197,59 @@ def build_sector_report(con: duckdb.DuckDBPyConnection, canonical: str) -> dict 
                      "read above as the sector call; ask for any name directly for its deep report._")
 
     return {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks, "sector_name": sector_name}
+
+
+_ROTATION_LEGEND = (
+    "\n\n---\n"
+    "**📖 How to read this**\n\n"
+    "- **RS vs Nifty** — the sector index's return vs the Nifty 50 over ~3 months. Positive = the "
+    "sector is **leading** the market (money rotating in); negative = lagging.\n"
+    "- **Trend** — price vs its 50 & 200-day averages (up / mixed / down).\n"
+    "- **Valuation** — where the sector's PE/PB sits vs its **own ~5-yr history** (cheap = room; "
+    "expensive = stretched).\n"
+    "- **💎 Turning up from cheap** — sectors that are still **cheap vs their own history** yet "
+    "**not in a downtrend and starting to outperform** — the classic value+momentum rotation setup "
+    "(early, higher-conviction).\n"
+    "- _Reply `sector: <name>` (e.g. `sector: pharma`) for the full read on any of these — trend, "
+    "valuation, smart-money, best/cheapest names and supply chain. A momentum map, not a trade call._"
+)
+
+
+def _rot_rows(items):
+    out = []
+    for o in items:
+        val = (f"{o['metric']} {_f(o['current'], 1)} ({o['val_reading']})"
+               if o.get("current") is not None else "n/a")
+        out.append([f"{o['emoji']} {o['index_name'].replace('Nifty ', '')}",
+                    _signed(o["rs_pct"], 1) + "%", o["trend"], val])
+    return out
+
+
+def build_sector_rotation(con: duckdb.DuckDBPyConnection) -> str | None:
+    """Weekly (and on-demand) sector-rotation digest: leaders / laggards / value-turning across all
+    sectors. ``None`` if nothing ranked. Deterministic — no LLM, no network."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    r = sector_analysis.rank_all_sectors(con)
+    if not r["all"]:
+        return None
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    parts = [f"# 🔄 Sector rotation — week of {today:%d-%b-%Y}",
+             "_Where money is rotating (relative strength vs Nifty) and where value is starting to "
+             "turn. Reply `sector: <name>` for the full read on any one._"]
+    if r["leaders"]:
+        parts += ["## 🚀 Leaders — strongest vs Nifty",
+                  md.table(["Sector", "RS vs Nifty", "Trend", "Valuation"], _rot_rows(r["leaders"]),
+                           "lrll")]
+    if r["turning"]:
+        parts += ["## 💎 Turning up from cheap (value + momentum)",
+                  md.table(["Sector", "RS vs Nifty", "Trend", "Valuation"], _rot_rows(r["turning"]),
+                           "lrll")]
+    if r["laggards"]:
+        parts += ["## 🐌 Laggards — weakest vs Nifty",
+                  md.table(["Sector", "RS vs Nifty", "Trend", "Valuation"], _rot_rows(r["laggards"]),
+                           "lrll")]
+    return "\n\n".join(parts) + _ROTATION_LEGEND
 
 
 def _brief_for_llm(sector_name: str, data: dict) -> str:

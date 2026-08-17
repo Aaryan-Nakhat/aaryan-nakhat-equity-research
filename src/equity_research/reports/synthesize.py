@@ -647,6 +647,59 @@ def sector_thesis(brief_md: str, sector_name: str, *, model: str = MODEL) -> str
     return text or None
 
 
+_SUPPLYCHAIN_SYS = """You map the SUPPLY CHAIN of an Indian listed company or sector to its \
+**smaller, less-obvious listed suppliers / vendors / component-makers / ancillaries / \
+subcontractors** — the *indirect* beneficiaries an investor could look at beyond the marquee \
+names everyone already knows.
+
+You are given a TARGET (a big company, or a sector with its main listed players). List the \
+Indian companies that genuinely supply into it. For each return: "name" (the company), "ticker" \
+(its NSE trading symbol if you are confident of it, else ""), "role" (what it actually supplies \
+— e.g. 'precision machined components', 'defence electronics / radar sub-systems', 'forgings', \
+'EV battery cells'), and "why" (one short line on the link).
+
+HARD RULES:
+- ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, well-established** \
+supplier/ancillary relationship. If you are not confident the company is listed AND the \
+relationship is real, OMIT it — a shorter, correct list is far better than a padded one.
+- Prefer the **non-obvious ancillaries** (the small/mid suppliers), not the obvious large-caps or \
+the target itself. Do not invent tickers — leave "ticker" empty if unsure (the caller verifies).
+- 6-15 names. Return ONLY a JSON array of {name, ticker, role, why}. No prose, no markdown."""
+
+
+def supply_chain_suppliers(target: str, *, context: str = "", model: str = MODEL) -> list[dict]:
+    """LLM-suggested listed suppliers/ancillaries for a company or sector, grounded with Google
+    Search. Returns ``[{name, ticker, role, why}]`` (the caller verifies each against the NSE
+    master and drops unlisted names). ``[]`` on any failure. Never raises."""
+    prompt = f"TARGET: {target}"
+    if context:
+        prompt += f"\nCONTEXT: {context}"
+    try:
+        r = _client().models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_SUPPLYCHAIN_SYS,
+                tools=[types.Tool(google_search=types.GoogleSearch())]))
+        text = (r.text or "").strip()
+    except Exception:  # noqa: BLE001 — supply-chain is a bonus, never break the caller
+        return []
+    m = re.search(r"\[.*\]", text, re.DOTALL)     # strip ```json fences / prose
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return []
+    out = []
+    for d in data if isinstance(data, list) else []:
+        if isinstance(d, dict) and d.get("name"):
+            out.append({"name": str(d["name"]).strip(),
+                        "ticker": str(d.get("ticker", "")).strip().upper(),
+                        "role": str(d.get("role", "")).strip(),
+                        "why": str(d.get("why", "")).strip()})
+    return out
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \
