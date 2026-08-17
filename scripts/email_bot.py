@@ -1525,12 +1525,12 @@ def maybe_screen_digest() -> None:
 
 
 def maybe_sector_rotation() -> None:
-    """Fire the weekly sector-rotation push once per ISO week (Sunday ≥18:00 IST): all sectors
+    """Fire the weekly sector-rotation push once per ISO week (Saturday ≥18:00 IST): all sectors
     ranked by relative strength vs Nifty + valuation vs their own history — leaders, laggards, and
     value-turning candidates. Reads the latest EOD, so a weekend fire is fine. The week-marker
     advances only after a successful send."""
     now = datetime.now(IST)
-    if now.weekday() != 6 or now.hour < SCAN_HOUR:      # Sunday evening, weekly
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:      # Saturday evening, weekly
         return
     if not scan.sector_rotation_due():
         return
