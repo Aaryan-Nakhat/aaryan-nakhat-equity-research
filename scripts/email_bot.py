@@ -59,7 +59,10 @@ SCAN_HOUR = 18
 INTRADAY_HOUR, INTRADAY_MIN = 12, 30    # midday same-day digest (12:30 IST)
 INTRADAY_CUTOFF_HOUR = 14               # don't fire a stale "midday" digest after 2pm
 PREMARKET_HOUR, PREMARKET_MIN = 8, 30   # pre-open GIFT Nifty digest (08:30 IST)
-PREMARKET_CUTOFF_HOUR = 9              # don't fire a stale "pre-market" note after 9am (open ~9:15)
+PREMARKET_CUTOFF_HOUR = 12             # catch-up: laptop is asleep at 08:30, so fire on the FIRST
+                                       # heartbeat after 08:30 (typically your ~09:25 login), up to
+                                       # noon (the 12:30 midday digest takes over past that). Past the
+                                       # 09:15 open the digest self-relabels to a "gap so far" snapshot.
 IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
 PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
 
