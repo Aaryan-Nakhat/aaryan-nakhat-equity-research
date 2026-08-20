@@ -14,6 +14,7 @@ when we have essentially nothing worth sending.
 from __future__ import annotations
 
 from datetime import datetime
+from datetime import time as _time
 from zoneinfo import ZoneInfo
 
 import duckdb
@@ -148,15 +149,24 @@ def build_premarket(con: duckdb.DuckDBPyConnection) -> str | None:
     context = _llm_context(gift, ref, gap, glob, fii, news)
     brief = synthesize.premarket_brief(context)
 
-    today = datetime.now(_IST).date()
-    parts = [f"# 🌅 Pre-market — {today:%a %d-%b-%Y}",
-             "_Before-the-open read: what the overnight tape and GIFT Nifty imply for how Nifty may "
-             "start the day. Not a trade call — see the legend at the bottom._"]
+    now = datetime.now(_IST)
+    today = now.date()
+    pre_open = now.time() < _time(9, 15)   # laptop-asleep catch-up may fire this after the open
+    stamp = "" if pre_open else f"  ·  _as of {now:%H:%M} — market already open_"
+    if pre_open:
+        subtitle = ("_Before-the-open read: what the overnight tape and GIFT Nifty imply for how Nifty "
+                    "may start the day. Not a trade call — see the legend at the bottom._")
+    else:
+        subtitle = ("_Morning snapshot (sent when this machine woke). Nifty is already trading, so the "
+                    "'gap' below is **vs yesterday's close**, and the overnight-tape read still frames "
+                    "the day. Not a trade call — see the legend at the bottom._")
+    parts = [f"# 🌅 Pre-market — {today:%a %d-%b-%Y}{stamp}", subtitle]
 
     # headline implied-open line
     if gap and gift:
+        label = "Implied open" if pre_open else "Gap so far"
         parts.append(
-            f"## {gap['emoji']} Implied open: **{gap['bias']}**  ·  "
+            f"## {gap['emoji']} {label}: **{gap['bias']}**  ·  "
             f"GIFT Nifty {_f(gift.get('last'), 0)}  ·  gap {_signed(gap['pts'], 0)} pts "
             f"({_signed(gap['pct'], 2)}%)")
     elif gift:

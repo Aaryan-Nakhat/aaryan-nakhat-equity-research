@@ -128,11 +128,14 @@ heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (screen_digest.due_this_wee
            fingerprints advance only AFTER a successful send (commit_screen_state)
 ```
 
-## Flow E — Push: pre-market digest (08:30 IST)
+## Flow E — Push: pre-market digest (fires on first wake ≥08:30 IST)
 
 ```
-heartbeat gate: once/trading-day in the 08:30–09:00 IST window (already_premarket_today),
-                holiday/weekend-skipped; cut off at 09:00 (open ~09:15)
+heartbeat gate: once/trading-day, FIRST heartbeat in the 08:30–12:00 IST window
+                (already_premarket_today), holiday/weekend-skipped. Catch-up by design: this
+                machine (a laptop) is asleep at 08:30, so the digest fires whenever it wakes
+                — typically the ~09:25 login. Past the 09:15 open it self-relabels to a
+                "gap so far" morning snapshot; the 12:30 midday digest takes over after noon.
         │
         ▼  premarket.build_premarket() — four INDEPENDENT best-effort inputs (all plain HTTP):
               • nseix.gift_nifty() — GIFT Nifty, the overnight Nifty future (NSE IX)
