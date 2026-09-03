@@ -160,6 +160,21 @@ Both validated `200` via `Fetcher`:
 - **F&O bhavcopy** (`BhavCopy_NSE_FO_…_YYYYMMDD_F_0000.csv.zip`, UDiFF) — every
   contract's OHLC/settlement/OI. → `nse_archives.fetch_fo_bhavcopy(date)`.
 
+## Global supply-shock signals — plain-HTTP, no DB (the 💨 Tailwind Scout)
+
+Feeds the Tailwind radar; these are *signal* sources (news/official), not primary DB data, so they
+are **not** landed in DuckDB — every downstream catalyst carries its source link + NSE-master
+verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
+- **Google News RSS** (`scrapers/social.py::google_news`) — `news.google.com/rss/search?q=…+when:Nd`,
+  parsed with `ElementTree`; the global-breadth workhorse. `scout()` fans queries over the chokepoint
+  catalog + generic probes and dedups.
+- **US Federal Register** (`scrapers/fedregister.py::recent_rules`) — `federalregister.gov/api/v1`
+  JSON, RULE + PRORULE (proposed/upcoming) + NOTICE; the official US leg, merged into the signal
+  stream. Plain HTTP, no auth.
+- **Reddit** (`social.py::reddit_search`) — `old.reddit.com/search.json`; now 403s unauth → a
+  process-lifetime circuit-breaker (`_reddit_dead`) skips it after the first block. **Twitter/X**
+  (`social.py::twitter_search`) via nitter mirrors is similarly best-effort (mirrors mostly down).
+
 ## Storage (DuckDB landing)
 
 `common/db.py` defines the schema + a date-idempotent writer; `ingest.py` maps

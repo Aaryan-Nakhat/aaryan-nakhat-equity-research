@@ -323,8 +323,20 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   reusing `supply_chain._verify`/`_implausible`, watchlist-flag, rank). Autonomous (you never name a
   material); each catalyst **source-cited**; reply a number → deep report. Verified live: DRC cobalt ban →
   HINDCOPPER/HINDALCO, US tungsten-scrap curb → KENNAMET/MIDHANI, China Ge/Ga curb → HINDZINC/NATIONALUM.
-  *Next:* Twitter/X (login-walled), US Federal Register API hard-anchor for upcoming rules, mid-week urgent
-  break-in into the daily digest.
+  **Since extended — ✅:** **US Federal Register** API merged into the Scout (official US leg incl.
+  proposed rules); **mid-week urgent break-in** (`maybe_tailwind_urgent`, fresh high-severity only,
+  `tailwind_seen_keys` dedup); **X/Twitter** best-effort (nitter, mostly down); **Mapper tightened** to
+  existing-producer small/mid-caps (kills "merely bid" giants; market-cap tier + intent-only flags);
+  **full-commodity coverage** (~30 goods — metals/agri/pharma/chemicals/fertiliser/energy + dual
+  import-substitution / export-share mechanism); **three materiality reads** (supplier world-share +
+  per-firm revenue-share & production-share, LLM estimates, 🟡 verify); **24h result cache** + `--latest`.
+  *Next:* a paid X API key for reliable Twitter.
+- **`help` command — ✅ shipped** (`email_bot._send_help`/`_HELP_SECTIONS`): email `help` → the full
+  command menu, section by section as tables (Subject → what you get) + the auto-pushes + tips.
+- **Mailbox housekeeping — ✅ shipped** (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`): the
+  server account auto-bins processed **workbench** mail (Inbox `SEEN FROM <client>` + Sent via the
+  `X-EquityBot` header) >30 min old, scoped to client correspondence so personal mail is untouched;
+  heartbeat-run (≤15 min), Gmail Trash. Client `.invest` cleanup intentionally not done.
 - Mutual-fund analytics — see the **Mutual-fund module** track above (Phase 1 shipped;
   holdings/overlap/reports/forensic-look-through are Phases 3–5). Personal MF portfolio
   tracking (overlap, XIRR, concentration) was scoped but deprioritised vs signal + research.
