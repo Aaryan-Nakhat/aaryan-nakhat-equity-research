@@ -37,6 +37,7 @@ from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (booking_risk, holdco, investors, policy,  # noqa: E402
                                       screener, sector_analysis, sell_advisor, smallcap,
                                       supply_chain, technical, technical_screen)
+from equity_research import mail_cleanup  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
@@ -66,6 +67,8 @@ PREMARKET_CUTOFF_HOUR = 12             # catch-up: laptop is asleep at 08:30, so
                                        # 09:15 open the digest self-relabels to a "gap so far" snapshot.
 IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
 PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
+MAIL_BIN_AFTER_MIN = 30     # server-account: bin workbench mail this old (sending is long done)
+MAIL_SWEEP_EVERY_MIN = 15   # how often the housekeeping pass runs (a cheap IMAP search)
 
 ALLOWED = {a.strip().lower() for a in os.environ.get("EMAIL_ALLOWED_SENDERS", "").split(",") if a.strip()}
 
@@ -1885,6 +1888,34 @@ def maybe_tailwind_urgent() -> None:
     log.info("urgent Tailwind break-in sent to %s (%d catalysts)", to, rep["n_catalysts"])
 
 
+_last_mail_sweep: datetime | None = None
+
+
+def maybe_mail_housekeeping() -> None:
+    """Move processed workbench mail on the SERVER account (this bot's Gmail) to Trash once it's
+    older than 30 min — requests in Inbox (SEEN, from the client) and reports in Sent (to the
+    client). Scoped strictly to correspondence with the client address, so the account's personal
+    mail is never touched. Runs at most every ~15 min. Best-effort; never blocks the loop."""
+    global _last_mail_sweep
+    now = datetime.now(IST)
+    if _last_mail_sweep and (now - _last_mail_sweep).total_seconds() < MAIL_SWEEP_EVERY_MIN * 60:
+        return
+    correspondent = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not correspondent:
+        return
+    _last_mail_sweep = now                                  # set before, so a failure doesn't hot-loop
+    try:
+        n = mail_cleanup.sweep_server_mailbox(
+            host=os.environ.get("IMAP_HOST", "imap.gmail.com"),
+            port=int(os.environ.get("IMAP_PORT", "993")),
+            user=os.environ["IMAP_USER"], password=os.environ["IMAP_PASS"],
+            correspondent=correspondent, older_than_minutes=MAIL_BIN_AFTER_MIN)
+        if n:
+            log.info("mail housekeeping: binned %d server workbench mail(s)", n)
+    except Exception:  # noqa: BLE001
+        log.exception("mail housekeeping failed")
+
+
 # ----------------- main loop -----------------
 def main() -> None:
     channels = os.environ.get("CHANNELS", "email").lower()
@@ -1920,6 +1951,7 @@ def main() -> None:
                 maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
                 maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
                 maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
+                maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")
