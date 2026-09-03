@@ -33,11 +33,15 @@ from equity_research.scrapers import fedregister, social
 
 log = logging.getLogger("equity-research.tailwind")
 
-# ── the one bit of curation: the critical-material chokepoint catalog ──
+# ── the one bit of curation: the commodity / input chokepoint catalog ──
 # Anchors the Analyst (so it reasons from real chokepoints, not thin air) and drives the Scout's
-# targeted queries. Small, reliable, grows over time — same philosophy as the sector _CATALOG.
+# targeted queries. It spans ALL commodity categories — metals & minerals, agri / soft commodities,
+# pharma inputs, industrial chemicals, fertiliser, energy — not just critical minerals. It's a
+# representative anchor, NOT exhaustive: the generic probes + the Analyst's open-ended detection catch
+# the long tail (any commodity, e.g. onion, wheat, coal, PVC). Grows over time.
 # ``share`` = the dominant supplier's rough share of world supply (context, not a live figure).
 _CHOKEPOINTS: list[dict] = [
+    # — metals & minerals —
     {"material": "tungsten", "supplier": "China", "share": "~80%",
      "sectors": ["defence", "cutting tools", "semiconductors"]},
     {"material": "gallium", "supplier": "China", "share": "~98%",
@@ -68,16 +72,62 @@ _CHOKEPOINTS: list[dict] = [
      "sectors": ["specialty chemicals", "semiconductors", "agrochemicals"]},
     {"material": "vanadium", "supplier": "China / Russia", "share": "China ~60%",
      "sectors": ["steel alloys", "grid-scale batteries"]},
+    # — agri / soft commodities (India is often the swing exporter → a rival's ban lifts Indian names) —
+    {"material": "sugar", "supplier": "Brazil / India / Thailand", "share": "top-3 exporter",
+     "sectors": ["sugar mills", "ethanol", "FMCG"]},
+    {"material": "cotton", "supplier": "India / US / China / Brazil", "share": "top producer",
+     "sectors": ["textiles", "cotton yarn / spinning", "apparel"]},
+    {"material": "tea", "supplier": "China / India / Kenya", "share": "top-2 producer",
+     "sectors": ["plantations", "beverages FMCG"]},
+    {"material": "coffee", "supplier": "Brazil / Vietnam", "share": "top-2 exporter",
+     "sectors": ["plantations", "beverages FMCG"]},
+    {"material": "basmati / rice", "supplier": "India / Vietnam / Thailand", "share": "top exporter",
+     "sectors": ["rice / agri exporters", "FMCG staples"]},
+    {"material": "edible oil / palm oil", "supplier": "Indonesia / Malaysia", "share": "~85% palm",
+     "sectors": ["edible-oil refiners", "FMCG", "oleochemicals"]},
+    {"material": "natural rubber", "supplier": "Thailand / Indonesia / Vietnam", "share": "top-3",
+     "sectors": ["tyres", "auto", "plantations"]},
+    {"material": "spices (turmeric / cumin / pepper)", "supplier": "India / Vietnam", "share": "top exporter",
+     "sectors": ["spice / agri exporters", "FMCG"]},
+    # — pharma inputs (India depends on China for APIs/KSMs → a China curb helps Indian API makers) —
+    {"material": "active pharmaceutical ingredients (APIs)", "supplier": "China", "share": "~65% of India's imports",
+     "sectors": ["pharma / APIs", "bulk drugs", "import substitution"]},
+    {"material": "paracetamol / antibiotic KSMs", "supplier": "China", "share": "dominant",
+     "sectors": ["pharma / bulk drugs", "import substitution"]},
+    {"material": "vitamins (feed / pharma)", "supplier": "China", "share": "dominant",
+     "sectors": ["pharma", "animal feed", "nutraceuticals"]},
+    # — industrial chemicals —
+    {"material": "titanium dioxide (TiO2)", "supplier": "China", "share": "~50%",
+     "sectors": ["paints", "specialty chemicals", "plastics"]},
+    {"material": "soda ash", "supplier": "China / US", "share": "large",
+     "sectors": ["glass", "detergents", "specialty chemicals"]},
+    {"material": "fluorochemicals / refrigerant gases", "supplier": "China", "share": "dominant",
+     "sectors": ["specialty chemicals", "refrigerants", "pharma"]},
+    # — fertiliser —
+    {"material": "urea / DAP fertiliser", "supplier": "China / Russia / Middle East", "share": "large exporters",
+     "sectors": ["fertilisers", "agri inputs"]},
+    {"material": "potash (MOP)", "supplier": "Canada / Russia / Belarus", "share": "~70%",
+     "sectors": ["fertilisers", "agri inputs"]},
+    # — energy —
+    {"material": "crude oil / LNG", "supplier": "OPEC+ / Russia / US", "share": "concentrated",
+     "sectors": ["oil & gas", "refiners", "gas utilities"]},
 ]
 
-# Generic supply-shock probes so the Scout catches moves on materials NOT yet in the catalog.
+# Generic supply-shock probes — broad, category-spanning, so the Scout catches ANY commodity move,
+# including ones not individually catalogued (onion, wheat, coal, uranium, PVC, steel, …).
 _GENERIC_QUERIES = [
     "China export ban critical minerals",
-    "China export controls rare earth this week",
-    "US tariff critical minerals",
+    "China export controls this week",
+    "US tariff critical minerals OR chemicals",
     "export restriction semiconductor materials",
-    "India alternative supplier critical minerals",
-    "mineral export quota shortage",
+    "India alternative supplier import substitution",
+    "agricultural commodity export ban India",
+    "food grain export ban OR restriction",
+    "pharma API OR bulk drug export curb China",
+    "fertiliser export ban OR shortage",
+    "edible oil OR sugar OR rice export ban",
+    "cotton OR textile export restriction",
+    "commodity export quota OR shortage price surge",
 ]
 
 
@@ -154,6 +204,7 @@ def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
         seen[v["symbol"]] = {
             "symbol": v["symbol"], "name": v["name"],
             "role": c.get("role", ""), "why": c.get("why", ""),
+            "revenue_share": c.get("revenue_share", ""), "market_share": c.get("market_share", ""),
             "industry": ind[0] if ind else None, "mcap_cr": mcap if mcap != float("inf") else None,
             "on_watchlist": on_watch, "aspirational": aspirational, "tier": tier,
             "_sort_mcap": mcap,

@@ -24,17 +24,24 @@ _SEV_EMOJI = {"high": "🔥", "medium": "▲", "low": "•"}
 _LEGEND = (
     "\n\n---\n"
     "**📖 How to read this**\n\n"
-    "- **The idea:** when one country dominates a critical material and restricts it (export ban, "
-    "quota, tariff, production cut), the sectors that *must* keep buying (defence, semiconductors, "
-    "EV batteries…) hunt for other suppliers — and listed players elsewhere who make that thing get "
-    "a **tailwind**. This scans the world for those moves and finds the Indian names that benefit.\n"
+    "- **The idea:** when one country dominates a commodity/input (a metal, a farm crop, a pharma "
+    "ingredient, a chemical, a fertiliser…) and restricts it — export ban, quota, tariff, production "
+    "cut, crop failure — buyers scramble, and the Indian listed players who make or export that same "
+    "thing get a **tailwind** (either by *substituting imports* or by *gaining export share*). This "
+    "scans the world for those moves and finds the Indian names that benefit.\n"
+    "- **🌍 of world supply** — the dominant supplier's rough share of global supply of that good "
+    "(bigger = harder for buyers to switch = stronger tailwind). Analyst estimate.\n"
+    "- **Rev** — estimated **% of that company's revenue** from this good (its materiality — a pure-play "
+    "at ~60%+ benefits far more than one at ~5%). **Its share** — the company's rough production/export "
+    "share of this good. **Both are LLM/grounded estimates — verify against the annual report**; 'n/a' "
+    "means not confidently known (an honest blank, not zero).\n"
     "- **Status** — 🔴 in effect · 🟠 proposed / imminent · 🟡 rumored. **Severity** — 🔥 high · ▲ "
     "medium · • low.\n"
-    "- **Beneficiary tiers** — 🟢 hand-curated · 🟡 **AI-suggested, verify** the link before acting · "
-    "⭐ already on your watchlist. Every name is checked against the NSE master; implausible ones are "
-    "dropped, but the AI link is still yours to confirm.\n"
-    "- _An idea **generator**, not a call — each catalyst carries its source; treat every name as a "
-    "lead worth 10 minutes of your own check. Where there's no clean listed beneficiary, it says so._"
+    "- **Tier** — 🟢 hand-curated · 🟡 **AI-suggested, verify** · ⭐ on your watchlist; the size tag "
+    "(small/mid/large-cap) and **⚠ intent-only** (announced/bid, not yet a producer) help you judge. "
+    "Every name is checked against the NSE master; implausible ones are dropped.\n"
+    "- _An idea **generator**, not a call — each catalyst carries its source; treat every name (and every "
+    "estimated %) as a lead worth 10 minutes of your own check. No clean listed beneficiary → it says so._"
 )
 
 
@@ -48,8 +55,10 @@ def _catalyst_block(c: dict, start_no: int) -> tuple[str, list]:
     if c.get("headline"):
         bits.append(c["headline"])
     meta = []
+    if c.get("supplier_share"):
+        meta.append(f"🌍 **{c['supplier_share']}** (world supply)")
     if c.get("sectors"):
-        meta.append("**needs it:** " + ", ".join(c["sectors"]))
+        meta.append("**benefits:** " + ", ".join(c["sectors"]))
     if c.get("status"):
         meta.append(f"**status:** {c['status']}")
     if c.get("date"):
@@ -65,11 +74,13 @@ def _catalyst_block(c: dict, start_no: int) -> tuple[str, list]:
     if bens:
         rows = []
         for b in bens:
-            rows.append([start_no + len(picks), b["symbol"], b["name"],
-                         b.get("role", ""), b.get("tier", "")])
+            company = f"{b['name']} ({b['symbol']})"
+            rows.append([start_no + len(picks), company, b.get("role", ""),
+                         b.get("revenue_share") or "n/a", b.get("market_share") or "n/a",
+                         b.get("tier", "")])
             picks.append(b)
-        body = md.table(["#", "Symbol", "Company", "What it makes / why it benefits", "Tier"],
-                        rows, "rllll")
+        body = md.table(["#", "Company (NSE)", "What it makes / why", "Rev", "Its share", "Tier"],
+                        rows, "rlllll")
     else:
         body = "_No clean **listed** Indian beneficiary surfaced for this one — noted, not forced._"
     return title + "\n\n" + "\n\n".join(bits) + "\n\n" + body, picks
