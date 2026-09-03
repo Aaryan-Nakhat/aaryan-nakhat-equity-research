@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 
 from imapclient import IMAPClient
 
+from equity_research.reports.email import BOT_HEADER   # 'X-EquityBot' — stamped on every bot send
+
 log = logging.getLogger("equity-research.mailclean")
 
 _BATCH = 200          # move in chunks so the first backlog-clearing run doesn't hit IMAP limits
@@ -47,14 +49,17 @@ def sweep_server_mailbox(*, host: str, port: int, user: str, password: str,
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
     moved = 0
     c = IMAPClient(host, port=port, ssl=True, timeout=60)
+    c.normalise_times = False          # keep INTERNALDATE tz-AWARE (default naive-local misreads as UTC)
     try:
         c.login(user, password)
         trash = _find_folder(c, "\\Trash", "[Gmail]/Trash")
         sent = _find_folder(c, "\\Sent", "[Gmail]/Sent Mail")
-        # (folder, search criteria) — Inbox: only SEEN (processed) requests FROM the client;
-        # Sent: the reports the bot sent TO the client. Both scoped to the client address only.
+        # (folder, search criteria). Inbox: only SEEN (processed) requests FROM the client — nothing
+        # in-flight/unprocessed. Sent: EVERYTHING the bot sent (the X-EquityBot header), so ALL report
+        # types are cleaned — stock reports, screeners, sector, Tailwind, the digests, and the acks —
+        # not just deep reports. Both stay off the account's personal mail.
         targets = [("INBOX", ["SEEN", "FROM", correspondent]),
-                   (sent, ["TO", correspondent])]
+                   (sent, ["HEADER", BOT_HEADER, "1"])]
         for folder, crit in targets:
             try:
                 c.select_folder(folder)
