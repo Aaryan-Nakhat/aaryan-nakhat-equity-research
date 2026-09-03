@@ -542,9 +542,15 @@ def _policy_query(subject: str) -> bool:
 
 def _tailwind_query(subject: str) -> bool:
     """True for a global supply-shock / Tailwind request ('tailwind', 'tailwind:', 'catalysts',
-    'global catalysts', 'supply shock')."""
+    'global catalysts', 'supply shock'), optionally with a trailing '--latest' / 'fresh' flag."""
     return bool(re.match(r"^\s*(?:re:\s*)?(?:tailwind|tailwinds|global\s*catalyst(?:s)?|"
-                         r"catalyst(?:s)?|supply\s*shock(?:s)?)\s*[:\-]?\s*$", subject, flags=re.I))
+                         r"catalyst(?:s)?|supply\s*shock(?:s)?)\s*[:\-]?\s*"
+                         r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
+
+
+def _wants_latest(subject: str) -> bool:
+    """True if a Tailwind request asks to bypass the 24h cache ('--latest' / 'latest' / 'fresh')."""
+    return bool(re.search(r"(?:--?\s*)?\b(?:latest|fresh|refresh)\b", subject or "", flags=re.I))
 
 
 def _investor_query(subject: str) -> str | None:
@@ -699,11 +705,13 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`suppliers: <company>` e.g. `suppliers: BEL`",
          "The smaller LISTED suppliers / ancillaries feeding that name. Reply a number → deep report."],
     ]),
-    ("💨 Global supply shocks (Tailwind)", "", [
+    ("💨 Global supply shocks (Tailwind)", "Cached for 24h — add `--latest` to force a fresh scan.", [
         ["`tailwind` (or `catalysts`)",
          "Global commodity shocks — export bans / quotas / tariffs (metals, agri, pharma, chemicals, "
          "energy…) → verified Indian beneficiaries, with the supplier's world-share and each firm's "
          "revenue-share & market share. Reply with a symbol → deep report."],
+        ["`tailwind --latest` (or `tailwind fresh`)",
+         "Same, but forces a brand-new live scan instead of the 24h-cached result."],
     ]),
     ("🏛️ Government policy radar", "", [
         ["`policy` (or `schemes`)",
@@ -857,14 +865,20 @@ def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
 
 
 def _send_tailwind(req: EmailRequest) -> None:
-    """💨 Tailwind — global supply/policy shocks → verified Indian beneficiaries; reply → deep report."""
-    log.info("running Tailwind (req from %s)", req.sender)
-    _reply_text(req, "📩 Got it — scouting global policy & supply moves (export bans, quotas, "
-                     "tariffs, cuts) and mapping the Indian listed names that benefit. This runs a "
-                     "few agents end-to-end (~2–4 min); the report lands in this thread.")
+    """💨 Tailwind — global supply/policy shocks → verified Indian beneficiaries; reply → deep report.
+    Serves the 24h cache by default; `tailwind --latest` (or `fresh`) forces a live re-scan."""
+    latest = _wants_latest(req.subject)
+    log.info("running Tailwind (req from %s, latest=%s)", req.sender, latest)
+    _reply_text(req, "📩 Got it — pulling the latest global supply-shock scan and the Indian names "
+                     "that benefit. Forcing a fresh live scan (~2–4 min); it lands in this thread."
+                     if latest else
+                     "📩 Got it — fetching the global supply-shock scan (cached for 24h, so this is "
+                     "quick unless it's stale; add `--latest` to force a fresh live scan). Lands in "
+                     "this thread shortly.")
     con = connect()
     try:
-        rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con), timeout=420)
+        rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con, use_cache=not latest),
+                          timeout=420)
     finally:
         con.close()
     if not rep:
@@ -873,12 +887,21 @@ def _send_tailwind(req: EmailRequest) -> None:
                          "valid answer — I don't force one. Try again in a day or two.")
         return
     body = rep["markdown"]
+    if rep.get("from_cache"):                              # note that this is a reused (not live) scan
+        stamp = ""
+        try:
+            ca = datetime.fromisoformat(rep["cached_at"]).astimezone(IST)
+            stamp = f" from {ca:%d-%b %H:%M}"
+        except Exception:  # noqa: BLE001
+            pass
+        body = (f"> ♻️ _Cached scan{stamp} (within 24h — same data as the last run). Reply "
+                f"`tailwind --latest` for a fresh live scan._\n\n" + body)
     _set_pending(req, "tailwind", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
     emailer.send_report(_re_subject(req.subject), body, to=req.sender,
                         html=emailer.body_html(body, "Tailwind"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
-    log.info("sent Tailwind (%d catalysts, %d picks) to %s",
-             rep["n_catalysts"], len(rep["picks"]), req.sender)
+    log.info("sent Tailwind (%d catalysts, %d picks, cache=%s) to %s",
+             rep["n_catalysts"], len(rep["picks"]), rep.get("from_cache", False), req.sender)
 
 
 def _send_suppliers(req: EmailRequest, query: str) -> None:

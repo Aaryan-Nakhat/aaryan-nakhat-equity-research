@@ -35,6 +35,10 @@ _LEGEND = (
     "at ~60%+ benefits far more than one at ~5%). **Its share** — the company's rough production/export "
     "share of this good. **Both are LLM/grounded estimates — verify against the annual report**; 'n/a' "
     "means not confidently known (an honest blank, not zero).\n"
+    "- **♻️ Fresh vs cached** — a scan is **cached for 24 hours**: email `tailwind` again within a "
+    "day and you get the *same* result instantly (no re-fetch, no token cost — the news barely moves "
+    "hour to hour). Email **`tailwind --latest`** to force a brand-new live scan. The weekly Saturday "
+    "push and the mid-week urgent alert are always fresh.\n"
     "- **Status** — 🔴 in effect · 🟠 proposed / imminent · 🟡 rumored. **Severity** — 🔥 high · ▲ "
     "medium · • low.\n"
     "- **Tier** — 🟢 hand-curated · 🟡 **AI-suggested, verify** · ⭐ on your watchlist; the size tag "
@@ -87,9 +91,25 @@ def _catalyst_block(c: dict, start_no: int) -> tuple[str, list]:
 
 
 def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
-                          max_catalysts: int = 8) -> dict | None:
-    """Run the pipeline and format it. Returns ``{markdown, picks, n_catalysts}`` or ``None``
-    when nothing surfaced (so the caller can stay silent / say so)."""
+                          max_catalysts: int = 8, use_cache: bool = False) -> dict | None:
+    """Run the pipeline and format it. Returns ``{markdown, picks, keys, n_catalysts}`` (plus
+    ``from_cache``/``cached_at`` when served from cache) or ``None`` when nothing surfaced.
+
+    The scan is expensive (live fetch + grounded LLM calls) and the news barely moves hour to
+    hour, so a fresh run is **cached for 24h**. With ``use_cache=True`` a run within that window
+    returns the stored result instantly (no re-fetch, no token cost); ``use_cache=False`` (the
+    weekly push, or an on-demand ``--latest``) always runs fresh. Every fresh run refreshes the
+    cache."""
+    from equity_research import scan
+
+    if use_cache:
+        hit = scan.tailwind_cache_get(con)
+        if hit and hit.get("report"):
+            rep = dict(hit["report"])
+            rep["from_cache"] = True
+            rep["cached_at"] = hit.get("cached_at")
+            return rep
+
     res = tailwind.run_tailwind(con, days=days, max_catalysts=max_catalysts)
     cats = res.get("catalysts") or []
     if not cats:
@@ -111,8 +131,10 @@ def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
                    + (f" · **{n_watch} on your watchlist** ⭐" if n_watch else ""))
     parts.insert(2, header_note)
 
-    return {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks,
-            "keys": res.get("keys", []), "n_catalysts": len(cats)}
+    report = {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks,
+              "keys": res.get("keys", []), "n_catalysts": len(cats)}
+    scan.tailwind_cache_put(report, con)                   # refresh the 24h cache on every fresh run
+    return report
 
 
 def build_tailwind_urgent(con: duckdb.DuckDBPyConnection, seen_keys: set[str], *,
