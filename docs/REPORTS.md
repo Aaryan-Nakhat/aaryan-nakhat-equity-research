@@ -392,7 +392,8 @@ PULL  you email a stock name (Subject) from an allowlisted address
         ▼  instant ack → reply in-thread: the FULL deep report in the body
            + the same report (tables + charts) as the attached PDF
            ▼  then a separate "want a deeper cut? reply 1) growth triggers" email
-        │  other Subjects: `fund: <name>` · `ipo: ongoing|upcoming|<name>` ·
+        │  other Subjects (`help` lists them all in-email) — `fund: <name>` ·
+        │  `ipo: ongoing|upcoming|<name>` ·
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
         │  discounts) · `screen: investors` (marquee-investor moves last quarter) ·
         │  `screen: technical` (strongest chart setups to buy — entry/stop/target) ·

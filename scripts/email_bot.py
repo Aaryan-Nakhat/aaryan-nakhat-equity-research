@@ -553,6 +553,14 @@ def _investor_query(subject: str) -> str | None:
     return m.group(1).strip() if m and m.group(1).strip() else None
 
 
+def _help_query(subject: str) -> bool:
+    """True for a bare help / command-menu request ('help', 'commands', 'menu', '?',
+    'what can you do')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:help|help\s*me|commands?|command\s*list|menu|"
+                         r"what\s*can\s*(?:you|i)\s*(?:do|ask)|\?)\s*[:\-]?\s*$",
+                         subject, flags=re.I))
+
+
 def _sell_query(subject: str) -> bool:
     """True for a holdings sell-priority request — bare 'sell' / 'raise' / 'trim' (optionally
     with trailing text, e.g. 'sell: need cash'). Ranks YOUR holdings weakest-hand first."""
@@ -647,6 +655,111 @@ def _crore(v) -> str:
 
 
 _md_table = md.table          # shared markdown pipe-table helper (renders as styled <table>)
+
+
+# The complete command menu, section by section. Kept in one place so `help` never drifts from
+# what handle_request actually dispatches. (cmd, what-you-get) rows; commands in `backticks`.
+_HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
+    ("📊 Stock deep report", "Just put a company name or NSE symbol in the Subject — the core report.", [
+        ["`Adani Power` (any company name or symbol)",
+         "Full deep report: fundamentals, forensics (Altman / Beneish / Piotroski), sector-lens "
+         "valuation, technicals, shareholding + smart-money cost & profit-booking risk — with a PDF."],
+        ["`Reliance consolidated` / `Reliance standalone`",
+         "Same report, forced to that financials basis (default auto-picks)."],
+        ["reply `1` after a report",
+         "Growth-triggers 1-pager — forward catalysts, each with an estimated ₹cr / % business impact."],
+    ]),
+    ("💰 Your portfolio & holdings", "Reads your tagged holdings in the watchlist.", [
+        ["`booking`", "Where the tracked institutions on YOUR holdings sit on big gains → "
+                      "profit-booking (selling) risk, ranked."],
+        ["`sell` (or `raise` / `trim`)",
+         "Ranks your holdings weakest-hand-first — which to sell first if you need cash."],
+    ]),
+    ("🔎 Idea screeners — find new names", "Each returns a numbered list; reply a number → deep report.", [
+        ["`screen: value` (or just `screen`)",
+         "Quality + forensic + cheap-vs-own-history, ranked across the Nifty-500."],
+        ["`screen: holdco`", "Holding companies trading below their listed-stake NAV (the Elcid trade)."],
+        ["`screen: investors`", "Where marquee HNIs just entered / added / trimmed."],
+        ["`screen: smallcap`", "Capex-led small-caps (spending now for future growth)."],
+        ["`screen: technical`", "Strongest chart setups to buy — with entry / stop / target."],
+        ["`screen: policy`", "Recent govt schemes/policies → likely listed beneficiaries."],
+    ]),
+    ("🧭 Sector analysis", "Top-down, one sectoral index at a time.", [
+        ["`sector: <name>` e.g. `sector: defence`, `sector: pharma`",
+         "Trend + valuation vs its own history + who's accumulating + best & cheapest names + "
+         "supply chain. Reply a number → deep report."],
+        ["`sector: list`", "The ~20 sectors covered."],
+        ["`sector: rotation`", "All sectors ranked — leaders / laggards / turning-up-from-cheap."],
+    ]),
+    ("👤 Marquee investors (HNIs)", "", [
+        ["`investor: <name>` e.g. `investor: Mukul Agrawal`",
+         "That investor's disclosed holdings + latest-quarter moves + their cost vs the current price."],
+    ]),
+    ("🔗 Supply chain", "", [
+        ["`suppliers: <company>` e.g. `suppliers: BEL`",
+         "The smaller LISTED suppliers / ancillaries feeding that name. Reply a number → deep report."],
+    ]),
+    ("💨 Global supply shocks (Tailwind)", "", [
+        ["`tailwind` (or `catalysts`)",
+         "Global commodity shocks — export bans / quotas / tariffs (metals, agri, pharma, chemicals, "
+         "energy…) → verified Indian beneficiaries, with the supplier's world-share and each firm's "
+         "revenue-share & market share. Reply with a symbol → deep report."],
+    ]),
+    ("🏛️ Government policy radar", "", [
+        ["`policy` (or `schemes`)",
+         "Recent official (PIB) schemes / policies → likely listed beneficiaries (watchlist flagged). "
+         "Same as `screen: policy`."],
+    ]),
+    ("📈 Quick technical levels", "Computed, no LLM wait (~30s).", [
+        ["`levels: <name>` (or `chart:` / `setup:`)",
+         "Support / resistance zones, structure, patterns, entry / stop / target + an annotated chart."],
+    ]),
+    ("🟢 IPOs", "", [
+        ["`ipo: ongoing`", "IPOs open right now → reply a number → full analysis."],
+        ["`ipo: upcoming`", "Upcoming IPOs whose RHP is out → reply a number → analysis."],
+        ["`ipo: <name>`", "That IPO's note — price band, financials, fresh vs OFS, risks, anchors."],
+    ]),
+    ("💵 Mutual funds", "", [
+        ["`fund: <name>` (or `mf: <name>`) e.g. `fund: Parag Parikh Flexi Cap`",
+         "Fund report — returns, rolling performance, risk, top holdings — with a PDF. "
+         "Several matches → a numbered menu."],
+    ]),
+    ("📬 Arrives automatically (no command needed)", "Scheduled pushes to your inbox.", [
+        ["🌅 Pre-market (morning)", "GIFT Nifty implied Nifty open + overnight US/Asia + VIX / FII + news."],
+        ["🔔 Midday (12:30)", "Live movers, filings today, insider trades."],
+        ["📊 Full digest (18:00)", "Market header + watchlist alerts + events (with filing analysis) + insider."],
+        ["📡 Screener movements (Sat 18:00)", "What newly crossed the screens this week."],
+        ["🔄 Sector rotation (Sat 18:00)", "Sector leaders / laggards / value-turning."],
+        ["💨 Tailwind (Sat + mid-week urgent)", "Global supply-shock → Indian beneficiaries."],
+    ]),
+]
+
+_HELP_FOOTER = (
+    "**Tips**\n\n"
+    "- **Reply a number** to any list (screeners, sectors, suppliers, IPOs, funds) to drill into it.\n"
+    "- Add **consolidated** or **standalone** after a stock name to force the financials basis.\n"
+    "- A list's numbered menu stays answerable for **24h** in that email thread.\n"
+    "- Not sure of a name? Just send your best guess — I resolve it (and ask if there are several)."
+)
+
+
+def _send_help(req: EmailRequest) -> None:
+    """The full command menu — every option, section by section, each as a table."""
+    log.info("sending help/command menu to %s", req.sender)
+    parts = ["# 📖 Your command menu",
+             "_Everything you can email me — put the command in the **Subject** line. "
+             "Section by section below._"]
+    for title, intro, rows in _HELP_SECTIONS:
+        parts.append(f"## {title}")
+        if intro:
+            parts.append(f"_{intro}_")
+        parts.append(_md_table(["Put this in the Subject", "What you get back"], rows, "ll"))
+    parts.append("---")
+    parts.append(_HELP_FOOTER)
+    body = "\n\n".join(parts)
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Commands"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
 
 
 def _send_fundamental_screen(req: EmailRequest) -> None:
@@ -1373,6 +1486,11 @@ def handle_request(req: EmailRequest) -> None:
             _reply_text(req, "There's no active menu in this thread any more (menus expire "
                              "after 24h or after being used). Send a fresh request — a company "
                              "name, `fund: <name>`, or `ipo: ongoing`.")
+        return
+
+    # 1a) help / command menu ('help', 'commands', 'menu', '?')
+    if _help_query(req.subject):
+        _send_help(req)
         return
 
     # 1b) explicit fund request ('fund: <name>' / 'mf: <name>')
