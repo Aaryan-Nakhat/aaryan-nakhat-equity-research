@@ -8,9 +8,37 @@ Landscape A4 so the wide financial tables fit.
 from __future__ import annotations
 
 import base64
+import html as _html
+import os
 
 import markdown as _md
 from playwright.sync_api import sync_playwright
+
+# Compliance footer stamped on every rendered report (email body + PDF). Overridable
+# via the ``REPORT_DISCLAIMER`` env var; set it to an empty string to disable. A
+# public-facing finance tool must not present automated/LLM output as advice.
+DEFAULT_DISCLAIMER = (
+    "⚠️ Automated research for personal & educational use only — NOT investment "
+    "advice, a recommendation, or an offer to buy or sell any security. Figures may be delayed, "
+    "incomplete, or inaccurate, and AI-generated commentary can contain errors. Verify "
+    "independently and consult a SEBI-registered investment adviser before acting. You alone are "
+    "responsible for your investment decisions."
+)
+
+
+def disclaimer_text() -> str:
+    """The active disclaimer string (env override or the built-in default)."""
+    val = os.environ.get("REPORT_DISCLAIMER")
+    return DEFAULT_DISCLAIMER if val is None else val.strip()
+
+
+def _disclaimer_html() -> str:
+    """Styled disclaimer footer for the rendered HTML/PDF, or '' when disabled."""
+    text = disclaimer_text()
+    if not text:
+        return ""
+    return (f'<hr><p style="font-size:11px;color:#777;line-height:1.45;margin-top:14px">'
+            f'{_html.escape(text)}</p>')
 
 _CSS = """
 * { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
@@ -94,7 +122,7 @@ def render_html(markdown_text: str, title: str = "",
     return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{title}</title><style>{_CSS}</style></head>'
-            f'<body>{body}{_charts_html(images or [])}</body></html>')
+            f'<body>{body}{_charts_html(images or [])}{_disclaimer_html()}</body></html>')
 
 
 def report_to_pdf(markdown_text: str, title: str = "",
