@@ -13,7 +13,7 @@ import os
 import smtplib
 from email.message import EmailMessage
 
-from equity_research.reports.pdf import render_html
+from equity_research.reports.pdf import disclaimer_text, render_html
 
 # Marks every email the bot sends, so the inbound poller can ignore its own
 # replies (no request/reply loop) when send + receive share one mailbox.
@@ -63,7 +63,12 @@ def send_report(subject: str, body: str, *, to: str | None = None,
         # CRLF+indent whitespace, which EmailMessage rejects in a header value.
         msg["In-Reply-To"] = " ".join(in_reply_to.split())
         msg["References"] = " ".join((references or in_reply_to).split())
-    msg.set_content(body)
+    # Compliance footer on the plain-text part. The HTML alternative already
+    # carries it (render_html appends the same disclaimer), so a client shows it
+    # whichever part it renders. Empty REPORT_DISCLAIMER disables both.
+    disc = disclaimer_text()
+    text_body = f"{body}\n\n—\n{disc}" if disc else body
+    msg.set_content(text_body)
     if html:
         msg.add_alternative(html, subtype="html")
     for filename, data in attachments or []:

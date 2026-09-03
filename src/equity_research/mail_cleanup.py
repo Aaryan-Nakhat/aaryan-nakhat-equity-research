@@ -1,10 +1,9 @@
 """Server-mailbox housekeeping — move processed workbench mail to Gmail Trash.
 
-The bot's account (``IMAP_USER``, e.g. aaryan.nakhat@gmail.com) is ALSO a personal Gmail, so this
-ONLY ever touches mail **corresponding with the workbench client** (``correspondent``, e.g.
-aaryan.nakhat.invest@gmail.com): processed requests in the Inbox (matched ``SEEN FROM correspondent``)
-and the reports the bot sent (matched ``TO correspondent`` in Sent). Personal mail from any other
-sender is never matched.
+The bot's account (``IMAP_USER``) may ALSO be a personal Gmail, so this ONLY ever touches mail
+**corresponding with the workbench client** (``correspondent`` — the ``REPORT_TO`` address):
+processed requests in the Inbox (matched ``SEEN FROM correspondent``) and the reports the bot sent
+(matched ``TO correspondent`` in Sent). Personal mail from any other sender is never matched.
 
 A message is only binned once it's older than a grace window (30 min by default), so a report still
 in flight — or an unprocessed request (Inbox match requires ``SEEN``) — is never disturbed. "Bin" =
