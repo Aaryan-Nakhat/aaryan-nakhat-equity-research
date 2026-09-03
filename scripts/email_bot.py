@@ -1705,7 +1705,43 @@ def maybe_tailwind() -> None:
     emailer.send_report(f"💨 Tailwind — {today}", rep["markdown"], to=to,
                         html=emailer.body_html(rep["markdown"], "Tailwind"))
     scan.mark_tailwind()                                    # advance week-marker ONLY after send
+    scan.add_tailwind_seen(rep.get("keys", []))            # so the mid-week urgent alert won't repeat these
     log.info("weekly Tailwind push sent to %s (%d catalysts)", to, rep["n_catalysts"])
+
+
+def maybe_tailwind_urgent() -> None:
+    """Mid-week urgent break-in: on a trading day (Mon–Fri) ≥18:00 IST, once/day, run the lighter
+    Tailwind pass and — only if a FRESH, high-severity shock with a verified Indian beneficiary just
+    landed — send a compact '💨 Fresh supply shock' email alongside the daily digest. Saturday is
+    skipped (the full weekly push covers it). Marks done each evening whether or not it sent, so the
+    ~1–2 min pipeline runs at most once per trading day; the seen-set stops it repeating a shock."""
+    now = datetime.now(IST)
+    if now.weekday() == 5 or now.hour < SCAN_HOUR:          # Sat → weekly handles it; else evening only
+        return
+    if scan.already_tailwind_urgent_today() or not scan.market_open_today():
+        return
+    log.info("mid-week urgent Tailwind check firing")
+    con = connect()
+    try:
+        seen = scan.tailwind_seen_keys(con)
+        rep = tailwind_brief.build_tailwind_urgent(con, seen)
+    except Exception:  # noqa: BLE001
+        log.exception("urgent tailwind build failed")       # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    scan.mark_tailwind_urgent()                             # ran today — don't re-run all evening
+    if not rep:
+        return                                              # quiet day — the common, correct outcome
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send urgent Tailwind")
+        return
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"💨 Fresh supply shock — {today}", rep["markdown"], to=to,
+                        html=emailer.body_html(rep["markdown"], "Fresh supply shock"))
+    scan.add_tailwind_seen(rep.get("keys", []))            # don't re-alert this shock the rest of the week
+    log.info("urgent Tailwind break-in sent to %s (%d catalysts)", to, rep["n_catalysts"])
 
 
 # ----------------- main loop -----------------
@@ -1742,6 +1778,7 @@ def main() -> None:
                 maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)
                 maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
                 maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
+                maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")

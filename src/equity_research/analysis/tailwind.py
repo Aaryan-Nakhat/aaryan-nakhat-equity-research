@@ -29,7 +29,7 @@ import duckdb
 
 from equity_research.analysis import supply_chain
 from equity_research.reports import synthesize
-from equity_research.scrapers import social
+from equity_research.scrapers import fedregister, social
 
 log = logging.getLogger("equity-research.tailwind")
 
@@ -124,27 +124,35 @@ def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
 
 # ── orchestration ──
 _SEV_RANK = {"high": 0, "medium": 1, "low": 2, "": 3}
+_FRESH_STATUS = {"in-effect", "proposed"}                  # rumored is too soft for a mid-week alert
 
 
-def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
-                 max_catalysts: int = 8) -> dict:
-    """Run the full 4-tier pipeline. Returns
-    ``{catalysts: [{material, imposer, action, status, severity, sectors, headline, source_url,
-    source_name, date, beneficiaries: [...]}], n_signals, n_catalysts}``.
-    Catalysts with a watchlist hit rank first, then by severity, then by #beneficiaries.
-    Best-effort throughout — an empty ``catalysts`` list is a valid, honest result."""
+def catalyst_key(d: dict) -> str:
+    """Stable dedup key for a catalyst — normalised material + action. Lets the mid-week urgent
+    break-in skip a shock it (or the weekly push) has already surfaced."""
+    return f"{(d.get('material') or '').lower().strip()}|{(d.get('action') or '').lower().strip()}"
+
+
+def _scout_signals(days: int) -> list[dict]:
+    """Tier ① — the merged signal stream: Google News (+ best-effort Reddit) for GLOBAL breadth
+    plus the US Federal Register (official, US-only) for the US leg and its proposed rules."""
+    def _norm(t: str) -> str:
+        return "".join(ch for ch in (t or "").lower() if ch.isalnum())[:80]
+
     signals = social.scout(_scout_queries(), days=days)
-    if not signals:
-        log.info("tailwind: no signals scouted")
-        return {"catalysts": [], "n_signals": 0, "n_catalysts": 0}
+    have = {_norm(s["title"]) for s in signals}
+    for r in fedregister.recent_rules(days=max(days, 21)):  # official US anchor; wider window (rules are sparse)
+        k = _norm(r["title"])
+        if k and k not in have:
+            have.add(k)
+            signals.append(r)
+    return signals
 
-    disruptions = synthesize.tailwind_analyst(
-        signals, chokepoints=[c["material"] for c in _CHOKEPOINTS])
-    if not disruptions:
-        log.info("tailwind: analyst found no genuine disruptions in %d signals", len(signals))
-        return {"catalysts": [], "n_signals": len(signals), "n_catalysts": 0}
 
-    watch = {s for (s,) in con.execute("SELECT symbol FROM watchlist").fetchall()}
+def _map_and_audit(con: duckdb.DuckDBPyConnection, disruptions: list[dict],
+                   watch: set[str]) -> list[dict]:
+    """Tiers ③+④ — for each sourced disruption, map to beneficiaries then audit them. Returns the
+    catalysts (with ``beneficiaries`` + ``n_watch`` attached), sorted watchlist → severity → count."""
     out = []
     for d in disruptions:
         if not d.get("source_url"):                        # unsourced → never surface
@@ -154,10 +162,58 @@ def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
         d["beneficiaries"] = bens
         d["n_watch"] = sum(1 for b in bens if b["on_watchlist"])
         out.append(d)
-
     out.sort(key=lambda d: (-d["n_watch"], _SEV_RANK.get(d.get("severity", ""), 3),
                             -len(d["beneficiaries"])))
-    out = out[:max_catalysts]
+    return out
+
+
+def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
+                 max_catalysts: int = 8) -> dict:
+    """Run the full 4-tier pipeline. Returns
+    ``{catalysts: [{material, imposer, action, status, severity, sectors, headline, source_url,
+    source_name, date, beneficiaries: [...]}], keys, n_signals, n_catalysts}``.
+    Catalysts with a watchlist hit rank first, then by severity, then by #beneficiaries.
+    Best-effort throughout — an empty ``catalysts`` list is a valid, honest result."""
+    signals = _scout_signals(days)
+    if not signals:
+        log.info("tailwind: no signals scouted")
+        return {"catalysts": [], "keys": [], "n_signals": 0, "n_catalysts": 0}
+
+    disruptions = synthesize.tailwind_analyst(
+        signals, chokepoints=[c["material"] for c in _CHOKEPOINTS])
+    if not disruptions:
+        log.info("tailwind: analyst found no genuine disruptions in %d signals", len(signals))
+        return {"catalysts": [], "keys": [], "n_signals": len(signals), "n_catalysts": 0}
+
+    watch = {s for (s,) in con.execute("SELECT symbol FROM watchlist").fetchall()}
+    out = _map_and_audit(con, disruptions, watch)[:max_catalysts]
     log.info("tailwind: %d catalysts (from %d signals, %d disruptions)",
              len(out), len(signals), len(disruptions))
-    return {"catalysts": out, "n_signals": len(signals), "n_catalysts": len(out)}
+    return {"catalysts": out, "keys": [catalyst_key(c) for c in out],
+            "n_signals": len(signals), "n_catalysts": len(out)}
+
+
+def run_tailwind_urgent(con: duckdb.DuckDBPyConnection, *, seen_keys: set[str],
+                        days: int = 7, max_catalysts: int = 2) -> dict:
+    """Lighter mid-week pass for the daily digest's urgent break-in. Runs Scout + Analyst (cheap),
+    keeps only **fresh, high-severity, in-effect/proposed** disruptions NOT already surfaced
+    (``seen_keys``), then maps+audits just those. Returns the same shape as ``run_tailwind``, and
+    only catalysts that have at least one verified beneficiary (an alert with no actionable name is
+    noise). Empty is the common, correct result on a quiet day."""
+    signals = _scout_signals(days)
+    if not signals:
+        return {"catalysts": [], "keys": [], "n_signals": 0, "n_catalysts": 0}
+    disruptions = synthesize.tailwind_analyst(
+        signals, chokepoints=[c["material"] for c in _CHOKEPOINTS])
+    fresh = [d for d in disruptions
+             if d.get("severity") == "high" and d.get("status") in _FRESH_STATUS
+             and d.get("source_url") and catalyst_key(d) not in seen_keys]
+    if not fresh:
+        log.info("tailwind-urgent: nothing fresh & high-severity (of %d disruptions)", len(disruptions))
+        return {"catalysts": [], "keys": [], "n_signals": len(signals), "n_catalysts": 0}
+
+    watch = {s for (s,) in con.execute("SELECT symbol FROM watchlist").fetchall()}
+    out = [c for c in _map_and_audit(con, fresh[:max_catalysts], watch) if c["beneficiaries"]]
+    log.info("tailwind-urgent: %d actionable fresh catalyst(s)", len(out))
+    return {"catalysts": out, "keys": [catalyst_key(c) for c in out],
+            "n_signals": len(signals), "n_catalysts": len(out)}

@@ -163,29 +163,43 @@ heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.sector_rotation_due);
         only after a successful send. Reply `sector: <name>` for the full read on any one.
 ```
 
-## Flow G — Push: weekly 💨 Tailwind global supply-shock radar (Sat ≥18:00 IST)
+## Flow G — Push: 💨 Tailwind global supply-shock radar (weekly Sat + mid-week urgent break-in)
 
 ```
-heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
+WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
         │
         ▼  tailwind.run_tailwind() — a FOUR-TIER agent pipeline, each tier one job, chained:
-              ① SCOUT   scrapers/social.py::scout — Google News RSS (+ Reddit best-effort) fanned
-                        over the chokepoint catalog + generic supply-shock probes → raw signals
+              ① SCOUT   tailwind._scout_signals — GLOBAL breadth from Google News RSS
+                        (scrapers/social.py, + Reddit best-effort) fanned over the chokepoint
+                        catalog + generic probes, MERGED with the US Federal Register
+                        (scrapers/fedregister.py — official US rules incl. PROPOSED/upcoming; US-only)
               ② ANALYST synthesize.tailwind_analyst — triage signals → genuine disruptions
-                        (export ban/quota/tariff/cut/shortage); DEMANDS a real source index (drops
-                        anything it can't tie to a fetched URL — the anti-hallucination gate)
+                        (export ban/quota/tariff/cut/shortage); returns the source SIGNAL INDEX not a
+                        free URL, so every citation is a real fetched link — the anti-hallucination gate
               ③ MAPPER  synthesize.tailwind_beneficiaries — Google-Search-grounded → candidate
                         Indian listed beneficiaries (alternate producers / substitutes), per disruption
               ④ AUDITOR tailwind.auditor — verify each vs equity_master (reuses supply_chain._verify
                         / _implausible), drop implausible/blocklisted, flag watchlist hits, rank
         ▼  sorted: watchlist-hits → severity → #beneficiaries
-challenge   → tailwind_brief.build_tailwind_report() → 💨 section (each catalyst + SOURCE LINK +
-              numbered verified names 🟢 curated / 🟡 AI-verified / ⭐ watchlist)
+        →  tailwind_brief.build_tailwind_report() → 💨 section (each catalyst + SOURCE LINK +
+              verified names 🟢 curated / 🟡 AI-verified / ⭐ watchlist); catalyst keys → scan.add_tailwind_seen
         ▼
    💨 ONE "Tailwind" email (also on-demand via `tailwind`); week-marker advances only after a
-        successful send (or a clean empty result). Reply a number → that stock's deep report.
-        (An idea generator — every catalyst is source-cited; "no clean listed beneficiary" is a
-         valid, un-forced answer. Reddit is best-effort; Google News carries the sourcing.)
+        successful send (or a clean empty result). Reply with a symbol/name → that stock's deep report.
+
+URGENT  gate: trading day Mon–Fri, ≥18:00 IST, once/day (scan.already_tailwind_urgent_today);
+        Saturday skipped (weekly covers it). email_bot.maybe_tailwind_urgent
+        │
+        ▼  tailwind.run_tailwind_urgent() — the LIGHTER pass: Scout + Analyst only (cheap), keep just
+              FRESH, high-severity, in-effect/proposed disruptions NOT in scan.tailwind_seen_keys, then
+              map+audit only those; keep only catalysts with ≥1 verified beneficiary
+        ▼
+   💨 "Fresh supply shock" email ONLY when a big new shock lands (most days: nothing → silent). Runs
+        the ~1–2 min pipeline at most once/trading-evening (marks done regardless); the seen-set
+        (scan.add_tailwind_seen, ~2-wk TTL) stops it re-alerting a shock the weekly or a prior day showed.
+
+   (An idea generator — every catalyst is source-cited; "no clean listed beneficiary" is a valid,
+    un-forced answer. Reddit is best-effort; Google News carries global sourcing, Federal Register the US leg.)
 ```
 
 ## Component → file map

@@ -8,6 +8,7 @@ generates a deep report for any 'results filed' alert.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -342,6 +343,74 @@ def mark_tailwind(con: duckdb.DuckDBPyConnection | None = None) -> None:
     con = con or connect()
     try:
         _set_meta(con, "last_tailwind_week", _iso_week(datetime.now(_IST)))
+    finally:
+        if own:
+            con.close()
+
+
+def already_tailwind_urgent_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True if the mid-week urgent-Tailwind check already ran today (the pipeline is ~1–2 min, so
+    it runs at most once per trading evening regardless of whether it found anything)."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_tailwind_urgent_date") == datetime.now(_IST).date().isoformat()
+    finally:
+        if own:
+            con.close()
+
+
+def mark_tailwind_urgent(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_tailwind_urgent_date", datetime.now(_IST).date().isoformat())
+    finally:
+        if own:
+            con.close()
+
+
+_TAILWIND_SEEN_TTL_DAYS = 14
+
+
+def tailwind_seen_keys(con: duckdb.DuckDBPyConnection | None = None) -> set[str]:
+    """Catalyst keys (material|action) surfaced recently by the weekly push OR the urgent break-in,
+    so the mid-week alert doesn't repeat a shock already shown. Auto-expires after ~2 weeks."""
+    own = con is None
+    con = con or connect()
+    try:
+        raw = _meta(con, "tailwind_seen")
+        if not raw:
+            return set()
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return set()
+        cutoff = (datetime.now(_IST).date() - timedelta(days=_TAILWIND_SEEN_TTL_DAYS)).isoformat()
+        return {k for k, d in data.items() if d >= cutoff}
+    finally:
+        if own:
+            con.close()
+
+
+def add_tailwind_seen(keys: list[str], con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Record catalyst keys as surfaced-today (pruning entries older than the TTL)."""
+    if not keys:
+        return
+    own = con is None
+    con = con or connect()
+    try:
+        raw = _meta(con, "tailwind_seen")
+        try:
+            data = json.loads(raw) if raw else {}
+        except (ValueError, TypeError):
+            data = {}
+        today = datetime.now(_IST).date().isoformat()
+        cutoff = (datetime.now(_IST).date() - timedelta(days=_TAILWIND_SEEN_TTL_DAYS)).isoformat()
+        data = {k: d for k, d in data.items() if d >= cutoff}   # prune stale
+        for k in keys:
+            data[k] = today
+        _set_meta(con, "tailwind_seen", json.dumps(data))
     finally:
         if own:
             con.close()
