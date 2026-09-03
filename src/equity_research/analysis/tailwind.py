@@ -1,0 +1,163 @@
+"""💨 Tailwind — global policy / supply-shock → Indian listed beneficiaries.
+
+The thesis is **chokepoint arbitrage**: when a dominant supplier (usually China) restricts a
+critical material — an export ban, quota, tariff, production cut — the downstream sectors that
+*must* keep buying (defence, semiconductors, EV batteries, specialty chemicals) scramble for
+alternate sources, and the listed players elsewhere who make that thing get a tailwind. This
+module finds those moves **autonomously** and maps them to Indian listed names, so ideas surface
+without you naming a material first.
+
+A four-tier agent pipeline, each tier one job, chained:
+
+  ① SCOUT   (``scrapers/social.py::scout``)      — cast the net: Google News + Reddit → raw signals
+  ② ANALYST (``synthesize.tailwind_analyst``)     — real disruption vs noise; DEMANDS a source URL
+  ③ MAPPER  (``synthesize.tailwind_beneficiaries``)— grounded search → candidate Indian beneficiaries
+  ④ AUDITOR (``auditor`` below)                    — verify each vs equity_master, kill hallucinations,
+                                                     flag watchlist hits, rank
+
+The verification spine is shared with ``analysis/supply_chain.py`` (``_verify`` / ``_implausible``):
+no company reaches you unless it resolves to a real NSE symbol AND its actual business is plausible.
+Every disruption ships with its **source link**. This is an idea *generator* — leads worth your own
+10-minute check — never a confirmed call; when there is no clean listed beneficiary it says so.
+"""
+
+from __future__ import annotations
+
+import logging
+
+import duckdb
+
+from equity_research.analysis import supply_chain
+from equity_research.reports import synthesize
+from equity_research.scrapers import social
+
+log = logging.getLogger("equity-research.tailwind")
+
+# ── the one bit of curation: the critical-material chokepoint catalog ──
+# Anchors the Analyst (so it reasons from real chokepoints, not thin air) and drives the Scout's
+# targeted queries. Small, reliable, grows over time — same philosophy as the sector _CATALOG.
+# ``share`` = the dominant supplier's rough share of world supply (context, not a live figure).
+_CHOKEPOINTS: list[dict] = [
+    {"material": "tungsten", "supplier": "China", "share": "~80%",
+     "sectors": ["defence", "cutting tools", "semiconductors"]},
+    {"material": "gallium", "supplier": "China", "share": "~98%",
+     "sectors": ["semiconductors", "defence radar", "LED / solar"]},
+    {"material": "germanium", "supplier": "China", "share": "~60%",
+     "sectors": ["semiconductors", "fibre optics", "night-vision / defence"]},
+    {"material": "antimony", "supplier": "China", "share": "~50%",
+     "sectors": ["defence / ammunition", "flame retardants", "batteries"]},
+    {"material": "graphite anode", "supplier": "China", "share": "~90%",
+     "sectors": ["EV batteries", "energy storage"]},
+    {"material": "rare-earth magnets (NdFeB)", "supplier": "China", "share": "~90%",
+     "sectors": ["EV / auto", "defence", "wind turbines", "electronics"]},
+    {"material": "rare earths (NdPr / dysprosium)", "supplier": "China", "share": "~70%",
+     "sectors": ["magnets", "defence", "EV motors"]},
+    {"material": "lithium", "supplier": "China / Chile / Australia", "share": "China ~60% refining",
+     "sectors": ["EV batteries", "energy storage"]},
+    {"material": "cobalt", "supplier": "DRC / China", "share": "China ~70% refining",
+     "sectors": ["batteries", "superalloys"]},
+    {"material": "silicon metal", "supplier": "China", "share": "~70%",
+     "sectors": ["semiconductors", "solar", "aluminium alloys"]},
+    {"material": "fluorspar", "supplier": "China / Mexico", "share": "China ~60%",
+     "sectors": ["specialty chemicals", "refrigerants", "steel"]},
+    {"material": "molybdenum", "supplier": "China", "share": "~40%",
+     "sectors": ["steel alloys", "defence", "energy"]},
+    {"material": "titanium sponge", "supplier": "China / Japan", "share": "China ~50%",
+     "sectors": ["aerospace", "defence"]},
+    {"material": "yellow phosphorus", "supplier": "China", "share": "~80%",
+     "sectors": ["specialty chemicals", "semiconductors", "agrochemicals"]},
+    {"material": "vanadium", "supplier": "China / Russia", "share": "China ~60%",
+     "sectors": ["steel alloys", "grid-scale batteries"]},
+]
+
+# Generic supply-shock probes so the Scout catches moves on materials NOT yet in the catalog.
+_GENERIC_QUERIES = [
+    "China export ban critical minerals",
+    "China export controls rare earth this week",
+    "US tariff critical minerals",
+    "export restriction semiconductor materials",
+    "India alternative supplier critical minerals",
+    "mineral export quota shortage",
+]
+
+
+def _scout_queries() -> list[str]:
+    """Targeted Scout queries: one per catalogued chokepoint + the generic supply-shock probes."""
+    per_mat = [f"{c['material']} export ban OR curb OR quota OR tariff OR shortage"
+               for c in _CHOKEPOINTS]
+    return per_mat + _GENERIC_QUERIES
+
+
+# ── Tier ④ — the Auditor ──
+def _tier(source: str, on_watch: bool) -> str:
+    if on_watch:
+        return "⭐ watchlist"
+    return "🟢 curated" if source == "curated" else "🟡 AI-verified"
+
+
+def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
+            watch: set[str]) -> list[dict]:
+    """Verify Mapper candidates against the NSE master, kill hallucinations, flag watchlist hits.
+    Reuses the ``supply_chain`` spine: ``_verify`` (real symbol + name-consistency) and
+    ``_implausible`` (a media/FMCG/finance name can't be a material producer). Returns deduped
+    ``[{symbol, name, role, why, industry, on_watchlist, tier}]`` — watchlist first, then verified."""
+    seen: dict[str, dict] = {}
+    for c in candidates:
+        v = supply_chain._verify(con, c.get("name", ""), c.get("ticker") or "")
+        if not v or v["symbol"] in seen:
+            continue
+        if v["symbol"] in supply_chain._BLOCKLIST or supply_chain._implausible(con, v["symbol"]):
+            log.info("tailwind: dropped implausible pick %s", v["symbol"])
+            continue
+        ind = con.execute("SELECT industry FROM sector_map WHERE symbol = ?",
+                          [v["symbol"]]).fetchone()
+        on_watch = v["symbol"] in watch
+        seen[v["symbol"]] = {
+            "symbol": v["symbol"], "name": v["name"],
+            "role": c.get("role", ""), "why": c.get("why", ""),
+            "industry": ind[0] if ind else None,
+            "on_watchlist": on_watch,
+            "tier": _tier(c.get("source", "ai"), on_watch),
+        }
+    return sorted(seen.values(), key=lambda d: (not d["on_watchlist"], d["name"]))
+
+
+# ── orchestration ──
+_SEV_RANK = {"high": 0, "medium": 1, "low": 2, "": 3}
+
+
+def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
+                 max_catalysts: int = 8) -> dict:
+    """Run the full 4-tier pipeline. Returns
+    ``{catalysts: [{material, imposer, action, status, severity, sectors, headline, source_url,
+    source_name, date, beneficiaries: [...]}], n_signals, n_catalysts}``.
+    Catalysts with a watchlist hit rank first, then by severity, then by #beneficiaries.
+    Best-effort throughout — an empty ``catalysts`` list is a valid, honest result."""
+    signals = social.scout(_scout_queries(), days=days)
+    if not signals:
+        log.info("tailwind: no signals scouted")
+        return {"catalysts": [], "n_signals": 0, "n_catalysts": 0}
+
+    disruptions = synthesize.tailwind_analyst(
+        signals, chokepoints=[c["material"] for c in _CHOKEPOINTS])
+    if not disruptions:
+        log.info("tailwind: analyst found no genuine disruptions in %d signals", len(signals))
+        return {"catalysts": [], "n_signals": len(signals), "n_catalysts": 0}
+
+    watch = {s for (s,) in con.execute("SELECT symbol FROM watchlist").fetchall()}
+    out = []
+    for d in disruptions:
+        if not d.get("source_url"):                        # unsourced → never surface
+            continue
+        cands = synthesize.tailwind_beneficiaries(d)
+        bens = auditor(con, cands, watch=watch)
+        d["beneficiaries"] = bens
+        d["n_watch"] = sum(1 for b in bens if b["on_watchlist"])
+        out.append(d)
+
+    out.sort(key=lambda d: (-d["n_watch"], _SEV_RANK.get(d.get("severity", ""), 3),
+                            -len(d["beneficiaries"])))
+    out = out[:max_catalysts]
+    log.info("tailwind: %d catalysts (from %d signals, %d disruptions)",
+             len(out), len(signals), len(disruptions))
+    return {"catalysts": out, "n_signals": len(signals), "n_catalysts": len(out)}

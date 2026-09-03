@@ -704,6 +704,146 @@ def supply_chain_suppliers(target: str, *, context: str = "", model: str = MODEL
     return out
 
 
+_TAILWIND_ANALYST_SYS = """You are a global macro / supply-chain analyst. You are given a numbered \
+list of recent GLOBAL news / social signals, plus a reference list of critical-material chokepoints. \
+Your job: find the signals that describe a GENUINE recent (last ~2 weeks) or imminent \
+policy / supply DISRUPTION that would hand a TAILWIND to alternative producers — especially \
+Indian listed ones. That means: an export ban / quota / licence curb, a tariff or sanction, a \
+production cut or mine/smelter halt, a sharp shortage or price spike, or a new subsidy/incentive \
+that redirects demand. IGNORE generic market commentary, price-target/broker chatter, opinion \
+pieces with no concrete action, and anything not tied to a real supply/policy move.
+
+Reply with ONLY a JSON array (no markdown, no prose). One object per DISTINCT disruption \
+(merge duplicate coverage of the same event into one, citing the single best source):
+[{"material":"<the material / good affected, e.g. 'tungsten','gallium','rare-earth magnets','graphite anode'>",
+  "imposer":"<who acted — country / body, e.g. 'China (MOFCOM)','US (BIS)','EU'>",
+  "action":"export-ban|export-quota|licence-curb|tariff|sanction|production-cut|shortage|price-spike|subsidy",
+  "status":"in-effect|proposed|rumored",
+  "severity":"high|medium|low",
+  "sectors":["<downstream sectors that MUST keep buying — e.g. 'defence','semiconductors','EV batteries'>"],
+  "headline":"<one crisp plain-English line: what happened and why it matters>",
+  "source_idx":<the NUMBER of the single best signal above that evidences this — integer>,
+  "date":"<the approx date / recency if stated, else ''>"}]
+
+HARD RULES: include a disruption ONLY if a numbered signal actually evidences it — set \
+"source_idx" to that signal's number (never invent a URL; the caller maps the index to the real \
+link). Prefer chokepoints where one country dominates supply and a downstream sector cannot stop \
+buying (that is where the alternate-producer tailwind is real). 3-8 items max, best first. If \
+nothing qualifies, reply exactly []."""
+
+
+def tailwind_analyst(signals: list[dict], *, chokepoints: list[str],
+                     model: str = MODEL) -> list[dict]:
+    """Tier ② — triage raw Scout signals into genuine supply/policy DISRUPTIONS. ``signals`` is
+    ``[{title, url, source, published}, …]``; ``chokepoints`` is the reference material list.
+    Returns ``[{material, imposer, action, status, severity, sectors, headline, source_url, date}]``
+    — ``source_url`` resolved back to the real signal link. ``[]`` on nothing / failure. Never raises."""
+    if not signals:
+        return []
+    numbered = "\n".join(f"{i}. [{s.get('source', '')}] {s.get('title', '')}"
+                         for i, s in enumerate(signals, 1))
+    prompt = (f"CRITICAL-MATERIAL CHOKEPOINTS (reference): {', '.join(chokepoints)}\n\n"
+              f"SIGNALS:\n{numbered}")
+    try:
+        resp = _client().models.generate_content(
+            model=model, contents=[types.Part.from_text(text=prompt)],
+            config=types.GenerateContentConfig(
+                system_instruction=_TAILWIND_ANALYST_SYS, response_mime_type="application/json"))
+        text = (resp.text or "").strip()
+    except Exception:  # noqa: BLE001 — best-effort, never break the pipeline
+        return []
+    m = re.search(r"\[.*\]", text, re.S)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return []
+    out = []
+    for d in data if isinstance(data, list) else []:
+        if not (isinstance(d, dict) and d.get("material")):
+            continue
+        idx = d.get("source_idx")
+        try:
+            src = signals[int(idx) - 1]                    # map index → the real fetched URL
+        except (TypeError, ValueError, IndexError):
+            continue                                       # no valid source → drop (anti-hallucination)
+        out.append({
+            "material": str(d.get("material", "")).strip(),
+            "imposer": str(d.get("imposer", "")).strip(),
+            "action": str(d.get("action", "")).strip(),
+            "status": str(d.get("status", "")).strip(),
+            "severity": str(d.get("severity", "")).strip().lower(),
+            "sectors": [str(s).strip() for s in (d.get("sectors") or []) if str(s).strip()],
+            "headline": str(d.get("headline", "")).strip(),
+            "source_url": src.get("url", ""),
+            "source_name": src.get("source", ""),
+            "date": str(d.get("date", "")).strip(),
+        })
+    return out
+
+
+_TAILWIND_BEN_SYS = """You map a specific GLOBAL supply / policy disruption to the Indian LISTED \
+companies that stand to BENEFIT from it — the alternate producers, suppliers or substitutes who \
+gain when a dominant supplier (usually China) restricts a critical material and downstream sectors \
+scramble for other sources.
+
+You are given a DISRUPTION (a material, who restricted it, and the downstream sectors that need it). \
+Using Google Search, list the Indian companies that genuinely benefit. For each return: "name" (the \
+company), "ticker" (its NSE symbol if you are confident, else ""), "role" (WHAT it makes/does that \
+benefits — e.g. 'tungsten carbide tooling', 'rare-earth magnet maker', 'graphite anode', 'ferro-alloy \
+smelter', 'specialty-chemicals substitute'), and "why" (one line: the specific link to THIS disruption).
+
+HARD RULES:
+- ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, established** business \
+in this material / substitute. If unsure it's listed AND the link is real, OMIT it — a short correct \
+list beats a padded one.
+- **Never include a company just because its NAME contains a relevant-sounding word** (e.g. a firm \
+with "Metals" or "Minerals" in its name that doesn't actually produce this). Match on the REAL \
+business, verified via search — not the name or a guessed ticker.
+- The benefit must be plausible and reasonably direct (produces the material, a close substitute, or a \
+key input/tooling for the starved sector). Prefer non-obvious mid/small-caps over the giant everyone \
+names. Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
+- If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — that is a \
+valid, honest answer. 0-8 names. Return ONLY a JSON array of {name, ticker, role, why}. No prose."""
+
+
+def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict]:
+    """Tier ③ — Google-Search-grounded map from ONE disruption to Indian listed beneficiaries.
+    Returns ``[{name, ticker, role, why}]`` (the caller verifies each vs the NSE master and drops
+    unlisted / implausible names). ``[]`` on any failure. Never raises."""
+    sectors = ", ".join(disruption.get("sectors") or [])
+    prompt = (f"DISRUPTION: {disruption.get('imposer', '')} — {disruption.get('action', '')} on "
+              f"{disruption.get('material', '')} ({disruption.get('status', '')}). "
+              f"Downstream sectors that need it: {sectors}. "
+              f"Context: {disruption.get('headline', '')}\n\n"
+              f"List the Indian LISTED companies that benefit.")
+    try:
+        r = _client().models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_TAILWIND_BEN_SYS,
+                tools=[types.Tool(google_search=types.GoogleSearch())]))
+        text = (r.text or "").strip()
+    except Exception:  # noqa: BLE001
+        return []
+    m = re.search(r"\[.*\]", text, re.DOTALL)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return []
+    out = []
+    for d in data if isinstance(data, list) else []:
+        if isinstance(d, dict) and d.get("name"):
+            out.append({"name": str(d["name"]).strip(),
+                        "ticker": str(d.get("ticker", "")).strip().upper(),
+                        "role": str(d.get("role", "")).strip(),
+                        "why": str(d.get("why", "")).strip()})
+    return out
+
+
 _FILING_SYS = """You are a forensic equity analyst. You are given ONE company \
 filing/disclosure for an Indian listed company — e.g. quarterly results, a concall \
 transcript, an investor presentation, an annual report, an order/contract win, an \

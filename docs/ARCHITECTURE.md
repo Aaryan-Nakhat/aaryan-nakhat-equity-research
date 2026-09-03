@@ -163,6 +163,31 @@ heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.sector_rotation_due);
         only after a successful send. Reply `sector: <name>` for the full read on any one.
 ```
 
+## Flow G — Push: weekly 💨 Tailwind global supply-shock radar (Sat ≥18:00 IST)
+
+```
+heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
+        │
+        ▼  tailwind.run_tailwind() — a FOUR-TIER agent pipeline, each tier one job, chained:
+              ① SCOUT   scrapers/social.py::scout — Google News RSS (+ Reddit best-effort) fanned
+                        over the chokepoint catalog + generic supply-shock probes → raw signals
+              ② ANALYST synthesize.tailwind_analyst — triage signals → genuine disruptions
+                        (export ban/quota/tariff/cut/shortage); DEMANDS a real source index (drops
+                        anything it can't tie to a fetched URL — the anti-hallucination gate)
+              ③ MAPPER  synthesize.tailwind_beneficiaries — Google-Search-grounded → candidate
+                        Indian listed beneficiaries (alternate producers / substitutes), per disruption
+              ④ AUDITOR tailwind.auditor — verify each vs equity_master (reuses supply_chain._verify
+                        / _implausible), drop implausible/blocklisted, flag watchlist hits, rank
+        ▼  sorted: watchlist-hits → severity → #beneficiaries
+challenge   → tailwind_brief.build_tailwind_report() → 💨 section (each catalyst + SOURCE LINK +
+              numbered verified names 🟢 curated / 🟡 AI-verified / ⭐ watchlist)
+        ▼
+   💨 ONE "Tailwind" email (also on-demand via `tailwind`); week-marker advances only after a
+        successful send (or a clean empty result). Reply a number → that stock's deep report.
+        (An idea generator — every catalyst is source-cited; "no clean listed beneficiary" is a
+         valid, un-forced answer. Reddit is best-effort; Google News carries the sourcing.)
+```
+
 ## Component → file map
 
 | Layer | Does | Files |
