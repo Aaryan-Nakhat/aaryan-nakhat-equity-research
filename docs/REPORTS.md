@@ -765,10 +765,13 @@ material. On-demand **`tailwind`** (aliases `catalysts`, `supply shock`) and **p
 ≥18:00 IST**, once/ISO-week via `scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`).
 
 A **four-tier agent pipeline**, each tier one job, chained:
-1. **① Scout** (`scrapers/social.py::scout`) — fans **Google News RSS** (+ Reddit best-effort; Reddit now
-   403s unauthenticated, so a per-process circuit-breaker skips it fast and News carries the sourcing)
-   over the `_CHOKEPOINTS` catalog (~15 materials: tungsten, gallium, germanium, antimony, graphite,
-   rare-earth magnets, …) + generic supply-shock probes → raw signals.
+1. **① Scout** (`tailwind._scout_signals`) — **global breadth** from **Google News RSS**
+   (`scrapers/social.py`; + Reddit best-effort — Reddit now 403s unauthenticated, so a per-process
+   circuit-breaker skips it fast and News carries the sourcing) fanned over the `_CHOKEPOINTS` catalog
+   (~15 materials: tungsten, gallium, germanium, antimony, graphite, rare-earth magnets, …) + generic
+   supply-shock probes, **merged with the US Federal Register** (`scrapers/fedregister.py` — the official
+   US daily journal via its free JSON API, including **proposed / upcoming rules**; **US-only**, so it's
+   the authoritative US leg while News covers China/EU/DRC/global) → raw signals.
 2. **② Analyst** (`synthesize.tailwind_analyst`) — triages signals into **genuine disruptions**
    (ban/quota/tariff/cut/shortage/subsidy), each tagged material/imposer/status/severity/sectors. It
    returns the **index of the evidencing signal**, not a free-text URL — so the source link is always a
@@ -779,13 +782,24 @@ A **four-tier agent pipeline**, each tier one job, chained:
    `supply_chain._verify` name-consistency + `_implausible` industry guard + `_BLOCKLIST`), drops what
    doesn't resolve or can't plausibly make the material, **flags watchlist hits ⭐**, ranks.
 
-Output: a 💨 section, each catalyst carrying its **source link**, downstream sectors, and a **numbered**
-table of verified names (🟢 curated / 🟡 **AI-verified, confirm** / ⭐ on your watchlist) — reply a number
-→ that stock's deep report. Catalysts rank watchlist-hits → severity → #beneficiaries. **Honest by
-design:** an idea *generator*, not a call — every claim is source-cited, and "**no clean listed
-beneficiary**" is a valid, un-forced answer. **Later:** Twitter/X (login-walled, best-effort), US Federal
-Register API as a hard-primary anchor for *upcoming* rules, and a mid-week urgent break-in into the daily
-digest for a big fresh shock.
+Output: a 💨 section, each catalyst carrying its **source link**, downstream sectors, and a table of
+verified names (🟢 curated / 🟡 **AI-verified, confirm** / ⭐ on your watchlist) — reply with a symbol/name
+→ that stock's deep report. Catalysts rank watchlist-hits → severity → #beneficiaries.
+
+**Delivery — weekly + mid-week urgent break-in:** the full pipeline pushes **weekly (Saturday ≥18:00 IST**,
+`scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`). On **trading days Mon–Fri ≥18:00**, a
+**lighter urgent pass** (`tailwind.run_tailwind_urgent`, `email_bot.maybe_tailwind_urgent`) runs Scout +
+Analyst only, keeps just **fresh, high-severity, in-effect/proposed** shocks **not already surfaced**
+(a ~2-week `scan.tailwind_seen_keys` set that both the weekly and prior urgents feed via
+`add_tailwind_seen`), maps+audits only those, and sends a compact **"💨 Fresh supply shock"** email
+alongside the daily digest **only when something big actually lands** (most days: nothing → silent). It
+marks done once/evening so the ~1–2 min pipeline runs at most once per trading day. On-demand **`tailwind`**
+works any time.
+
+**Honest by design:** an idea *generator*, not a call — every claim is source-cited, and "**no clean listed
+beneficiary**" is a valid, un-forced answer; the Mapper can still over-reach (e.g. tag a giant that merely
+*bid* into a space), which is why AI names are 🟡-flagged to verify. **Later:** Twitter/X (login-walled,
+best-effort); tighten the Mapper toward non-obvious small/mid-caps.
 
 **Known limits:** constituent depth = names with financials ingested. Supply-chain covers **listed**
 vendors only (many suppliers are private). Newer sub-indices (NBFC / Insurance / Capital Goods) have

@@ -87,7 +87,8 @@ def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
     today = datetime.now(_IST).date()
     parts = [f"# 💨 Tailwind — {today:%a %d-%b-%Y}",
              "_Global supply / policy moves that hand a tailwind to Indian listed producers. "
-             "Reply a number for that stock's full deep report. Not a call — see the legend._"]
+             "Reply with a stock's symbol or name for its full deep report. Not a call — see the "
+             "legend._"]
     picks: list = []
     for c in cats:
         block, block_picks = _catalyst_block(c, len(picks) + 1)
@@ -99,4 +100,29 @@ def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
                    + (f" · **{n_watch} on your watchlist** ⭐" if n_watch else ""))
     parts.insert(2, header_note)
 
-    return {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks, "n_catalysts": len(cats)}
+    return {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks,
+            "keys": res.get("keys", []), "n_catalysts": len(cats)}
+
+
+def build_tailwind_urgent(con: duckdb.DuckDBPyConnection, seen_keys: set[str], *,
+                          days: int = 7) -> dict | None:
+    """Compact mid-week break-in for the daily digest: only a FRESH, high-severity shock (not in
+    ``seen_keys``) with a verified beneficiary. Returns ``{markdown, picks, keys, n_catalysts}`` or
+    ``None`` (the usual quiet-day result). The markdown is a short block, not a full report."""
+    res = tailwind.run_tailwind_urgent(con, seen_keys=seen_keys, days=days)
+    cats = res.get("catalysts") or []
+    if not cats:
+        return None
+
+    parts = ["## 💨 Fresh supply shock (mid-week)",
+             "_A big global supply/policy move just landed — with Indian names that benefit. "
+             "Reply with a stock's symbol or name for its deep report. The full weekly 💨 Tailwind "
+             "still runs Saturday._"]
+    picks: list = []
+    for c in cats:
+        block, block_picks = _catalyst_block(c, len(picks) + 1)
+        parts.append(block)
+        picks.extend(block_picks)
+
+    return {"markdown": "\n\n".join(parts) + _LEGEND, "picks": picks,
+            "keys": res.get("keys", []), "n_catalysts": len(cats)}
