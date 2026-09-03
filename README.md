@@ -8,6 +8,69 @@ help with actual buy/sell decisions.
 
 Personal use. Not a hosted product.
 
+## 📖 What you can ask it (email commands)
+
+You drive the whole workbench by **emailing a command in the Subject line** from an allowlisted
+address; the bot replies in-thread (many replies are a **numbered list — reply a number to drill
+into that item**). Email **`help`** any time to get this same menu in your inbox.
+
+**📊 Stock deep report** — the core.
+
+| Email this | You get |
+|---|---|
+| `Adani Power` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk** — inline **and as a PDF**. |
+| `Reliance consolidated` / `Reliance standalone` | Same, forced to that financials basis (default auto-picks). |
+| reply `1` after a report | **Growth-triggers 1-pager** — forward catalysts, each with an estimated ₹cr / % business impact. |
+
+**💰 Your portfolio & holdings** — reads your tagged watchlist holdings.
+
+| Email this | You get |
+|---|---|
+| `booking` | Where the tracked institutions on **your** holdings sit on big gains → profit-booking (selling) risk, ranked. |
+| `sell` *(or `raise` / `trim`)* | Ranks your holdings **weakest-hand-first** — which to sell first if you need cash. |
+
+**🔎 Idea screeners** — find new names; each replies a numbered list → deep report.
+
+| Email this | You get |
+|---|---|
+| `screen: value` *(or bare `screen`)* | Nifty-500 ranked on quality (Piotroski) + forensic + cheap-vs-own-history. |
+| `screen: holdco` | The **Elcid trade, generalised** — listed holdcos trading below their listed-stake NAV. |
+| `screen: investors` | Where ~25 tracked **marquee HNIs** just entered / added / trimmed / exited. |
+| `screen: smallcap` | **Capex-led small-cap** hunt (structural capex boom before the P&L re-rates), traps gated out. |
+| `screen: technical` | Strongest **chart setups to buy** — entry / stop / target. |
+| `screen: policy` *(or `policy`)* | **Govt policy radar** — latest PIB schemes/policies → likely listed beneficiaries. |
+
+**🧭 Sector analysis** — top-down, one sectoral index at a time.
+
+| Email this | You get |
+|---|---|
+| `sector: <name>` *(e.g. `sector: defence`, `sector: pharma`)* | Trend + relative strength + valuation vs its **own history** + smart-money proxy + **best & most-undervalued names** + 🔗 supply chain. |
+| `sector: list` | The ~20 sectors covered. |
+| `sector: rotation` | **All** sectors ranked — leaders / laggards / turning-up-from-cheap *(also pushed weekly Sat ≥18:00)*. |
+
+**👤 Marquee investors · 🔗 supply chain · 💨 global shocks**
+
+| Email this | You get |
+|---|---|
+| `investor: <name>` *(e.g. `investor: Mukul Agrawal`)* | That HNI's disclosed book + latest-quarter moves + their **cost vs current price**. |
+| `suppliers: <company>` *(e.g. `suppliers: BEL`)* | The smaller **listed** suppliers / ancillaries feeding that name. |
+| `tailwind` *(or `catalysts`)* | **💨 Tailwind** — global commodity shocks (export bans / quotas / tariffs across metals, agri, pharma, chemicals, energy…) → **verified Indian beneficiaries**, with the supplier's world-share and each firm's revenue-share & production share. **Cached 24h.** |
+| `tailwind --latest` *(or `fresh`)* | Same, but forces a brand-new live scan instead of the 24h-cached result. |
+
+**📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
+
+| Email this | You get |
+|---|---|
+| `levels: <name>` *(or `chart:` / `setup:`)* | Quick **computed** (no-LLM, ~30s) support/resistance zones, structure, entry/stop/target + annotated chart. |
+| `ipo: ongoing` / `ipo: upcoming` / `ipo: <name>` | Live / forthcoming IPOs (band · dates · subscription) → note with **APPLY / AVOID / NEUTRAL**. |
+| `fund: <name>` *(or `mf: <name>`)* | Mutual-fund deep report — returns, rolling consistency, risk, SIP/XIRR, holdings — with a PDF. |
+| `help` *(or `commands` / `menu`)* | This whole menu, section by section, in your inbox. |
+
+**📬 Arrives automatically** (no command): 🌅 **pre-market** (08:30, GIFT Nifty implied open) · 🔔
+**midday** (12:30, live) · 📊 **full digest** (18:00) · 📡 **screener movements** (Sat) · 🔄 **sector
+rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a big shock lands).
+*Tip: add **consolidated** / **standalone** to a stock to force the basis; numbered menus stay live 24h.*
+
 ## What it does
 
 - **Scrape** primary sources for prices, filings, financials, corporate actions,
@@ -100,13 +163,20 @@ Personal use. Not a hosted product.
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
   **midday "same-day" digest at 12:30** with the same sections on **live** intraday data
   (live indices/VIX/commodities, Upcoming, live movers, today's filings/insider), and a
-  **💨 Tailwind global supply-shock radar pushed weekly (Sat ≥18:00 IST**, on-demand
-  **`tailwind`**) — a four-tier agent pipeline (news scout → LLM analyst → Google-Search-grounded
-  mapper → NSE-master auditor) that finds global policy/supply moves (China export bans, quotas,
-  tariffs, production cuts) and maps them to **verified Indian listed beneficiaries** — alternate
-  producers of the choked material — each catalyst **source-cited**, each name checked against the
-  master (reply a number → deep report). An idea generator, not a call; "no clean listed
-  beneficiary" is a valid answer.
+  **💨 Tailwind global supply-shock radar pushed weekly (Sat ≥18:00 IST**, plus a **mid-week
+  urgent break-in** when a big shock lands, and on-demand **`tailwind`** — **cached 24h**,
+  `--latest` forces fresh) — a **four-tier agent pipeline** (Scout: Google News + **US Federal
+  Register** → LLM Analyst → Google-Search-grounded Mapper → NSE-master Auditor) that finds global
+  policy/supply moves across **all commodity categories** (metals, **agri**, **pharma inputs**,
+  chemicals, fertiliser, energy) and maps them to **verified Indian listed beneficiaries** —
+  alternate producers or export-share gainers — with the **supplier's world-share** and each firm's
+  **revenue-share & production share**, each catalyst **source-cited**, each name checked against
+  the master (reply → deep report). An idea generator, not a call; "no clean listed beneficiary" is
+  a valid answer.
+- **Housekeeping** — the bot keeps its own (server) mailbox tidy: processed **workbench** mail
+  (requests it handled + reports it sent, matched by the `X-EquityBot` header) is moved to Trash
+  **~30 min after sending**, scoped strictly to the client address so personal mail is untouched.
+  Email **`help`** any time for the full command menu.
 
 ## Status
 

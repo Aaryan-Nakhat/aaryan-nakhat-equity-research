@@ -374,6 +374,23 @@ with zero).
   NSE symbols + **readable company names** via `equity_master`/`sector_map` (norm-name match); watchlist
   names flagged; sorted watchlist-hits then #listed first. **Standalone screen — no effect on reports,
   the watchlist or the digests.** Catches policy at the pre-launch official stage.
+- **`tailwind` — 💨 global supply-shock radar (`analysis/tailwind.py`; `scrapers/social.py` + `fedregister.py`)** —
+  a **four-tier agent pipeline**. **① Scout:** Google News RSS (global) + **US Federal Register** (official
+  US, incl. *proposed/upcoming* rules) fanned over a ~30-good chokepoint catalog (metals · **agri** ·
+  **pharma inputs** · chemicals · fertiliser · energy) + broad generic probes; Reddit/X best-effort. **②
+  Analyst — 🤖 LLM (`synthesize.tailwind_analyst`, JSON):** triages signals → genuine disruptions (export
+  ban/quota/tariff/cut/crop-failure), returning the **source SIGNAL INDEX** (not a free-text URL) so every
+  citation maps to a real fetched link — the anti-hallucination gate — plus a **`supplier_share`** estimate
+  (dominant supplier's world share) and **`mechanism`** (import-substitution / export-share-gain). **③
+  Mapper — 🤖 LLM (`synthesize.tailwind_beneficiaries`, Google-Search-grounded):** disruption → Indian
+  listed beneficiaries, each with best-effort **`revenue_share`** (% of the firm's revenue from the good) +
+  **`market_share`** (its production/export share). **④ Auditor (deterministic):** verify every name vs
+  `equity_master` (reuses `supply_chain._verify`/`_implausible`), drop implausible/blocklisted, tag
+  market-cap tier (via `valuation.snapshot`) + **⚠ intent-only** language, rank watchlist→severity→count.
+  **Cached 24h** (`scan.tailwind_cache_get/put`; `--latest` forces fresh). Weekly Sat push +
+  **mid-week urgent break-in** (fresh high-severity only, `run_tailwind_urgent`, `tailwind_seen_keys` dedup).
+  **Honest:** an idea *generator* — `supplier_share`/`revenue_share`/`market_share` are LLM/grounded
+  estimates (shown 🟡 verify; honest `n/a` when unknown); every catalyst is source-cited.
 - **Weekly "Screener movements"** (`screen_digest.py`) — Saturday email with **trigger-based deltas
   only** across the three screens (fingerprints in `alert_state`). Each section is **self-explaining**:
   holdco rows carry company name + a plain-English discount reading (**positive % = trades below its
@@ -403,6 +420,8 @@ The LLM (**Gemini 2.5 Pro / Vertex AI**) is used **only** here — everything el
 | Fund thesis | `synthesize.fund_thesis` | fund report | qualitative fund read + verdict |
 | Sector top-down read | `synthesize.sector_thesis` | sector brief (tech/val/flows/news) | enter/accumulate/hold verdict |
 | Supply-chain suggest | `synthesize.supply_chain_suppliers` | company/sector (+ Google Search) | listed ancillaries (verified vs master) |
+| Tailwind Analyst | `synthesize.tailwind_analyst` | Scout signals + chokepoint list | disruptions + supplier_share + source index (JSON) |
+| Tailwind Mapper | `synthesize.tailwind_beneficiaries` | one disruption (+ Google Search) | Indian beneficiaries + revenue/market share |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
 
@@ -438,6 +457,12 @@ The LLM (**Gemini 2.5 Pro / Vertex AI**) is used **only** here — everything el
   and labelled — a discovery aid, not a confirmed supplier ledger.
 - **Peer set** is the granular `basic_industry`; a name outside the ingested universe is skipped, not
   wrong.
+- **Tailwind is a news-grounded idea generator, not primary data** — unlike everything else here it
+  reads *news/signals* (Google News + Federal Register + best-effort social), so it's a lead to verify,
+  not a fact landed in DuckDB. Every catalyst is **source-cited** and every company **verified vs
+  `equity_master`**; but the three headline numbers — the **supplier's world-share** and each firm's
+  **revenue-share / production-share** — are **LLM/grounded estimates** (shown 🟡, honest `n/a` when not
+  confidently known, never fabricated). "No clean listed beneficiary" is a valid, un-forced answer.
 - **The LLM can be wrong** — it reads primary filings but is a language model; the verdict is a
   starting point, and the deterministic numbers above are the ground truth to check it against.
 

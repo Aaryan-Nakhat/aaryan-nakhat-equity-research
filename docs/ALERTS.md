@@ -10,6 +10,23 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 (CM) holiday calendar fetched from NSE's `holiday-master` and cached in
 `alert_state` (refreshed monthly). Manual `/scan` ignores the gate (always runs).
 
+## The full push schedule (all heartbeat-gated in `email_bot`)
+
+The watchlist scan (this doc) is one of several scheduled pushes. All fire from the same IMAP-IDLE
+heartbeat, each gated once per its window via an `alert_state` `__meta__` marker; each degrades
+independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](REPORTS.md) /
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+| Push | When (IST) | Gate | What |
+|---|---|---|---|
+| 🌅 **Pre-market** | first wake **08:30–12:00**, once/trading-day | `maybe_premarket` / `already_premarket_today` | GIFT Nifty implied Nifty open + overnight global + VIX/FII + headlines. **Catch-up by design** — the laptop is asleep at 08:30, so it fires on first wake (usually the ~09:25 login) and self-relabels to a "gap so far" snapshot past the 09:15 open. |
+| 🔔 **Midday** | **12:30–14:00**, once/trading-day | `maybe_intraday` | Same-day live digest (below). |
+| 📊 **Full digest** | first wake **≥18:00**, once/trading-day | `maybe_scan` | The watchlist scan (this doc). |
+| 📡 **Screener movements** | **Sat ≥18:00**, once/ISO-week | `maybe_screen_digest` | Trigger-based deltas across the screens (nothing crossed → no email). |
+| 🔄 **Sector rotation** | **Sat ≥18:00**, once/ISO-week | `maybe_sector_rotation` | All sectors ranked — leaders/laggards/value-turning. |
+| 💨 **Tailwind** | **Sat ≥18:00** weekly + **Mon–Fri ≥18:00** urgent break-in | `maybe_tailwind` / `maybe_tailwind_urgent` | Global supply-shock → verified Indian beneficiaries; the urgent pass only sends when a fresh high-severity shock lands. |
+| 🧹 **Mailbox housekeeping** | every heartbeat (≤ every 15 min) | `maybe_mail_housekeeping` | Moves processed **workbench** mail (requests handled + reports sent, matched by the `X-EquityBot` header) on the bot's own Gmail to Trash **~30 min after sending**, scoped to the client address so personal mail is untouched. `mail_cleanup.sweep_server_mailbox`. |
+
 ## Pieces
 
 | Piece | Where |

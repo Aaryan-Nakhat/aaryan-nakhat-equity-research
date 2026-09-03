@@ -829,6 +829,25 @@ instead of a misleading vs-history read); their within-sector ranking still work
 (life-insurance accounting doesn't fit the ROA/NIM model). Capital Goods has no NSE constituent CSV, so it
 ranks the broad macro-industry set rather than the ~15-name index.
 
+## `help` — the command menu (`email_bot._send_help`)
+
+Email **`help`** (aliases `commands` / `menu` / `?` / `what can you do`) → the **complete command
+surface, section by section, each as a table** (Subject → what you get): stock deep report, portfolio
+(`booking`/`sell`), the six screeners, sector (`<name>`/`list`/`rotation`), `investor:`, `suppliers:`,
+`tailwind` (+`--latest`), `policy`, `levels:`, IPOs, funds — plus the scheduled auto-pushes and usage
+tips. The content lives in `_HELP_SECTIONS` right next to the dispatch so it can't drift; the parser is
+anchored so `help` never shadows a real stock (e.g. "helping hand ltd" still resolves as a company).
+
+## Mailbox housekeeping (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`)
+
+The bot's own Gmail (`IMAP_USER`) is also a personal account, so it keeps itself tidy **without touching
+personal mail**: on the heartbeat (≤ every 15 min) it moves processed **workbench** mail to Trash once
+older than **30 min** — Inbox `SEEN FROM <client>` (handled requests) + Sent matched by the **`X-EquityBot`
+header** (every report type the bot sent: stock reports, screeners, sector, Tailwind, the digests, acks),
+scoped strictly to the client correspondence. Bin = Gmail **Trash** (recoverable ~30 days). `dry_run=True`
+supported; moves batched (200). `INTERNALDATE` is read tz-aware (`normalise_times=False`) so recent mail
+ages correctly. The client `.invest` account is intentionally left alone.
+
 ## Status / follow-ups
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.

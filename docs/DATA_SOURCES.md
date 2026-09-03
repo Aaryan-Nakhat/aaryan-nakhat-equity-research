@@ -169,6 +169,21 @@ bodies → LLM classifies the economic ones into sector + mechanism + likely lis
 resolved to NSE symbols against `equity_master`/`sector_map`, watchlist names flagged. **No
 news-portal / social-media rumor** — that would break the primary-only rule.
 
+## 10. Global supply-shock sources — the 💨 Tailwind Scout (`scrapers/social.py`, `scrapers/fedregister.py`)
+
+> **Analysis/LLM-grounded layer, NOT the primary DB.** These feed the Tailwind radar (global export
+> bans / quotas / tariffs / crop failures → Indian beneficiaries). Unlike everything above, this is
+> *news/signal* input, not government-primary data landed in DuckDB — so every catalyst it produces
+> **carries its source link** and every company is verified against `equity_master` downstream. It's a
+> lead generator to check, not authoritative data. See [`REPORTS.md`](REPORTS.md) → 💨 Tailwind.
+
+| Data | Access | Notes |
+|---|---|---|
+| **Google News RSS** (global breadth) | 🟢 | `news.google.com/rss/search?q=<query>+when:<N>d` — recency-scoped, plain HTTP, no auth. The workhorse: catches China/EU/DRC/global commodity & policy moves and government/ministry announcements for any targeted query. Fanned over the `_CHOKEPOINTS` catalog + generic probes. |
+| **US Federal Register** (official US) | 🟢 | `federalregister.gov/api/v1/documents.json` — free JSON, no auth; RULE + **PRORULE (proposed/upcoming rules)** + NOTICE, date/agency filtered. The authoritative **US leg** and a forward look at rules *before* they're news. **US-only** (does not see China/EU) — complements Google News, doesn't replace it. |
+| **Reddit** (early speculation) | 🟡→🔴 | `old.reddit.com/search.json` — now 403s unauthenticated from datacenter IPs; a per-process circuit-breaker skips it fast. Best-effort bonus; News carries the load. |
+| **Twitter / X** (fastest chatter) | 🔴 | No usable no-auth API; tried via nitter RSS mirrors (`xcancel.com`, `nitter.poast.org`) which are largely down → returns nothing gracefully (circuit-breaker). A paid X API key would make it reliable (deferred). |
+
 ## Practical takeaways for the scraping plan
 
 1. **BSE is the friendlier primary** for fundamentals/filings/actions; **NSE for
