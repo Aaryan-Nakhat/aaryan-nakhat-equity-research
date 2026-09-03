@@ -412,7 +412,8 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
 
 
 def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) -> None:
-    """Pre-listing IPO note — email body + PDF, in-thread — then the deeper-cut menu."""
+    """Pre-listing IPO note — email body + PDF, in-thread. No deeper-cut/growth-triggers
+    follow-up for IPOs (the note already carries the forward view)."""
     log.info("generating IPO note for %s (req from %s)", symbol, req.sender)
     _reply_text(req, f"🧾 Building the pre-listing IPO analysis for **{symbol}**"
                      + (f" ({name})" if name else "")
@@ -439,7 +440,8 @@ def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) ->
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
     log.info("sent IPO note for %s to %s", symbol, req.sender)
-    _send_followup_menu(symbol, req, name, ipo_mode=True)   # IPO growth-triggers follow-up
+    # (No growth-triggers follow-up for IPOs — the IPO note already covers the forward
+    # view; per the user's ask, don't prompt for a deeper cut here.)
 
 
 def _handle_ipo(kind: str, val: str, req: EmailRequest) -> None:
