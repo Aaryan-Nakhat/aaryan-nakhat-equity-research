@@ -232,10 +232,20 @@ uv run python scripts/email_bot.py                        # the always-on bot (o
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.
 
+## Data sources & terms
+
+This tool ships **no data** — it fetches from public sources **on your own machine** when you
+run it, under **their** terms. Several (the exchanges especially) restrict automated access and
+**prohibit redistribution**. Please review **[SOURCES.md](SOURCES.md)** before running: it lists
+every source, its terms, attribution, and the **NSE browser-tier opt-in** (`NSE_SCRAPING_ENABLED`,
+off by default). Intended for **personal, self-hosted, non-commercial** use — don't run it as a
+hosted service that scrapes exchanges for others, and don't redistribute fetched data.
+
 ## Disclaimer
 
 Personal research tooling, **not investment advice**. It reads only primary/official sources
 and can still be wrong; verify anything before you act on it. No warranty — see the license.
+Every emailed report and PDF carries the same disclaimer (`REPORT_DISCLAIMER`).
 
 ## License
 

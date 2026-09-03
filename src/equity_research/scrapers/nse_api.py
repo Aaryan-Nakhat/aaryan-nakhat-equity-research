@@ -14,6 +14,8 @@ WAF-blocked even here; use BSE for per-scrip quotes instead.
 from __future__ import annotations
 
 import json
+import logging
+import os
 from typing import Any
 from urllib.parse import quote
 
@@ -21,7 +23,51 @@ from scrapling.fetchers import StealthyFetcher
 
 from equity_research.common.http import ScrapeError
 
+log = logging.getLogger("equity-research.nse")
+
 _HOME = "https://www.nseindia.com/"
+
+
+class NseScrapingDisabled(RuntimeError):
+    """Raised when the NSE browser tier is used without an explicit opt-in.
+
+    NSE's Terms of Use restrict automated access to and redistribution of its
+    data. This tier loads a real page to clear NSE's bot challenge, so it is
+    OFF by default: an operator must consciously accept responsibility for
+    complying with NSE's terms by setting ``NSE_SCRAPING_ENABLED=true``.
+    Callers already degrade gracefully (empty result) when this is raised.
+    """
+
+
+_TOS_WARNED = False
+
+
+def _nse_scraping_enabled() -> bool:
+    return os.environ.get("NSE_SCRAPING_ENABLED", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _stealth_fetch(url: str, **kwargs: Any):
+    """Single choke-point for the NSE browser tier: enforce the ToS opt-in and
+    warn once, then delegate to the stealth fetcher. Every NSE ``/api`` call in
+    this module goes through here so the gate can't be bypassed by accident."""
+    global _TOS_WARNED
+    if not _nse_scraping_enabled():
+        raise NseScrapingDisabled(
+            "NSE browser-tier scraping is disabled. NSE's Terms of Use restrict "
+            "automated access and redistribution of NSE data. If you have reviewed "
+            "them and accept responsibility for complying, set NSE_SCRAPING_ENABLED=true "
+            "in your environment (e.g. your .env) to enable this tier."
+        )
+    if not _TOS_WARNED:
+        log.warning(
+            "NSE /api browser tier is enabled (NSE_SCRAPING_ENABLED). You are responsible "
+            "for complying with NSE's Terms of Use: automated access is restricted and NSE "
+            "data must not be redistributed."
+        )
+        _TOS_WARNED = True
+    return StealthyFetcher.fetch(url, **kwargs)
 
 
 def q(symbol: str) -> str:
@@ -72,7 +118,7 @@ def fetch_api(
         )
         return page
 
-    StealthyFetcher.fetch(warm_url, headless=headless, network_idle=True, page_action=_action)
+    _stealth_fetch(warm_url, headless=headless, network_idle=True, page_action=_action)
 
     if captured.get("status") != 200:
         raise ScrapeError(warm_url.rstrip("/") + path, captured.get("status"))
@@ -137,7 +183,7 @@ def fetch_api_multi(paths: dict[str, str], *, retries: int = 3, delay_ms: int = 
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": retries, "delay": delay_ms}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, Any] = {}
     for k, body in captured.items():
         try:
@@ -213,7 +259,7 @@ def corporate_announcements_batch(symbols: list[str]) -> dict[str, Any]:
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, Any] = {}
     for sym, body in captured.items():
         try:
@@ -294,7 +340,7 @@ def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, dict | None] = {}
     for sym, body in captured.items():
         try:
@@ -354,7 +400,7 @@ def insider_trades_batch(symbols: list[str]) -> dict[str, list[dict]]:
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, list[dict]] = {}
     for sym, body in captured.items():
         try:
@@ -452,7 +498,7 @@ def live_quotes_batch(symbols: list[str]) -> dict[str, dict]:
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, dict] = {}
     for sym, body in captured.items():
         try:
@@ -491,7 +537,7 @@ def sec_info_batch(symbols: list[str]) -> dict[str, dict]:
         captured.update(page.evaluate(_BATCH_ANN, {"paths": paths, "retries": 3, "delay": 1200}))
         return page
 
-    StealthyFetcher.fetch(_HOME, headless=True, network_idle=True, page_action=_action)
+    _stealth_fetch(_HOME, headless=True, network_idle=True, page_action=_action)
     out: dict[str, dict] = {}
     for sym, body in captured.items():
         try:
