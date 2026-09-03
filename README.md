@@ -74,28 +74,98 @@ rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a b
 ## How it works
 
 Primary data → DuckDB → deterministic analysis + signals → an LLM writes the thesis → email/Telegram.
-Short version below; **full detail per area in [`docs/`](docs/)**.
+**Full detail per area in [`docs/`](docs/)** ([`METHODOLOGY.md`](docs/METHODOLOGY.md) traces every metric
+source → formula → model).
 
-**📥 Data** *(all primary/official, `scrapers/`)*
-- Prices, delivery %, F&O/participant OI, index closes — NSE archives (plain HTTP) + live intraday quotes.
-- Financials (XBRL), corporate actions, announcements, shareholding (holder-level SHP), insider/PIT, pledge.
-- **USD/INR** (FBIL) · **gold/silver/crude** (MCX) · **mutual-fund NAVs** (AMFI) · **PIB** policy releases.
-- Anti-bot `/api/*` handled via `scrapling` (Camoufox browser tier).
+### 📥 Data — primary / official only (`scrapers/`)
 
-**🧮 Analysis** *(deterministic Python, `analysis/`)*
-- **Fundamental** — multi-year statements, ratios, FCFF/FCFE, CFO-quality; **forensic** scores (Piotroski, Altman Z, Beneish M, accruals).
-- **Valuation** — sector-appropriate lens (P/B-on-ROE for lenders, EV/EBITDA for cyclicals, P/E else), current multiple as an **own-history percentile**, **reverse-DCF + Monte-Carlo** centrepiece, a forward multiple from management guidance.
-- **Technicals** — trend/momentum, delivery-% conviction, and computed support/resistance **levels** with an R:R entry/stop/target.
+- **Market** — prices, **delivery %**, F&O + participant OI, index closes (with PE/PB per index) from
+  NSE archives (plain HTTP); **live intraday quotes** via NSE NextApi.
+- **Filings & ownership** — financials (XBRL; ~6y P&L, balance-sheet + cash-flow from FY23), corporate
+  actions, announcements, **holder-level shareholding** (every promoter + public >1% holder from the SHP
+  XBRL), **insider / promoter (SEBI PIT)** trades, promoter pledge.
+- **Macro & funds** — **USD/INR** (FBIL) · near-month **gold / silver / crude** futures (MCX) ·
+  **mutual-fund NAVs** (AMFI, ~14.5k schemes) · **PIB** government-policy releases.
+- Anti-bot `/api/*` solved with `scrapling` (Camoufox browser tier); everything else is plain HTTP.
 
-**📡 Signals** — FII F&O positioning (smart-money sentiment) · insider/promoter (SEBI PIT) trades · promoter pledge · bulk/block deals · **smart-money cost zones** (each institution's inferred cost from SHP add-quarters → profit-booking risk).
+### 🧮 Analysis — deterministic Python (`analysis/`)
 
-**🔎 Discovery** — screeners that *find* ideas, not just analyse named ones: value/quality+forensic, holdco-discount (Elcid), marquee-investor moves, capex-led small-caps, policy radar, top-down **sector** analysis + rotation, supply-chain mapping, and the **💨 Tailwind** global supply-shock → Indian-beneficiary radar. *(See the command table above for how to call each.)*
+- **Fundamental** — multi-year income statement / balance sheet / cash flow, the full ratio set,
+  FCFF/FCFE, **CFO-quality** (CFO vs PAT), growth & margin trends.
+- **Forensic** — Piotroski F (0–9), **Altman Z**, **Beneish M**, accruals, pledge — plus statistical
+  forensics (Benford / Sloan).
+- **Valuation, sector-appropriate** — P/B-on-ROE for financials, EV/EBITDA + mid-cycle for cyclicals,
+  P/E elsewhere; the current multiple as an **own-history percentile** (cheap/rich vs itself);
+  **reverse-DCF + Monte-Carlo DCF** as the centrepiece; a **forward multiple** from management guidance.
+- **Technical** — trend / momentum (SMA · RSI · MACD · BB · ATR), **delivery-% conviction**, 52-wk
+  position, relative strength vs Nifty; computed support/resistance **zones** (swing pivots + MAs + 52-wk
+  extremes + volume-by-price + round numbers) → a **reward:risk entry / stop / target** that defers to the
+  fundamental verdict.
 
-**📤 Reports & delivery**
-- **On-demand** deep reports (styled PDF + inline forensic thesis; every section has a plain-English "how to read this").
-- **Pushed** digests — pre-market (08:30), midday (12:30), full (18:00), weekly screener-movements / sector-rotation / Tailwind (Sat), + a mid-week urgent Tailwind break-in.
-- Channel via the `CHANNELS` flag (email and/or Telegram); the bot also **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending, personal mail untouched).
-- **LLM** (Gemini via Vertex) is used *only* for synthesis / filing-reading / name-resolution — every number above is deterministic.
+### 📡 Signals
+
+- **FII F&O positioning** — net-long % in index futures vs retail (a smart-money sentiment read).
+- **Insider / promoter (SEBI PIT)** trades · **promoter pledge** changes · **bulk / block deals** (each
+  counterparty classified: listed co / MF / FPI / individual…).
+- **💰 Smart-money cost zones** — each institution's *inferred* cost from the price range of the quarters
+  it added in (~4y of SHP) vs the current price → a **profit-booking-risk** read; positions built before
+  our earliest snapshot are honestly marked *cost-unknown*, not guessed.
+
+### 🔎 Discovery — screeners that *find* ideas, not just analyse named ones
+
+- **`screen: value`** — the Nifty-500 ranked on quality (Piotroski) + forensic
+  (Altman / Beneish / accruals / no-pledge) + **cheap-vs-own-history**.
+- **`screen: holdco`** — the **Elcid trade, generalised**: listed holding companies whose disclosed
+  listed-stake NAV exceeds their own market cap, ranked by discount.
+- **`screen: investors` / `investor: <name>`** — ~25 tracked **marquee HNIs** (Jhunjhunwala, Mukul
+  Agrawal, Kedia…): each one's disclosed book + what they entered / added / trimmed / exited last quarter.
+- **`screen: smallcap`** — the **capex-led small-cap hunt** (₹1,000–10,000 cr) on a capex-cycle composite
+  (capex vs its 3y base · capex ÷ depreciation · self-funded · ROCE & trend · cash quality · smart-money),
+  with distress / manipulation / heavy-pledge / shrinking-revenue traps **gated out** — catches a capex
+  boom *before* the P&L re-rates.
+- **`screen: policy`** — the **government policy radar**: scans the latest **PIB** releases (often at the
+  cabinet-approved / **draft** / consultation stage, before launch) → an LLM maps each to the sector(s) it
+  hits and the **listed companies** likely to benefit. Primary sources only — no news/social rumor.
+- **`sector: <name>` / `sector: rotation`** — a **top-down read** on a sectoral index (trend + RS vs
+  Nifty + **valuation vs its own ~5y history** + a smart-money proxy + the best & most-undervalued names +
+  a **🔗 supply-chain** section). Rotation ranks **all** sectors — leaders / laggards /
+  turning-up-from-cheap. Lenders (banks/NBFCs/insurers) are ranked on **ROA/ROE/NIM/P-B**.
+- **`suppliers: <company>`** — the smaller **listed** suppliers / ancillaries feeding a marquee name
+  (curated + AI, every name verified against the NSE master).
+- **💨 `tailwind`** — the **global supply-shock radar**: a four-tier agent pipeline (Scout = Google News +
+  **US Federal Register** → LLM Analyst → Google-Search-grounded Mapper → NSE-master Auditor) finds global
+  **export bans / quotas / tariffs / cuts** across **all commodity categories** (metals · agri · pharma
+  inputs · chemicals · fertiliser · energy) and maps them to **verified Indian beneficiaries** — with the
+  supplier's world-share and each firm's revenue-share & production share. Cached 24h; `--latest` forces fresh.
+- **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
+  (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
+  alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI
+  monthly **holdings** are covered (PPFAS / HDFC / Nippon): concentration · **watchlist overlap** ·
+  month-over-month churn.
+- **IPOs — `ipo: ongoing / upcoming / <name>`** — a pre-listing note: business, **fresh-issue vs OFS** and
+  what it signals, restated financials, **valuation at the band vs listed peers**, use of proceeds, RHP
+  risks, demand (subscription + anchor book), and an **APPLY / AVOID / NEUTRAL** verdict. Primary NSE docs
+  only — no grey-market / GMP.
+
+### 📤 Reports & delivery
+
+- **Deep report** — the LLM reads the quant brief + filing PDFs → a **forensic thesis + verdict**, inline
+  **and as a styled PDF**. It leads with a **filing-grounded business overview** (what it does, segment
+  revenue-mix %, market cap / TAM / penetration, order book for order-driven names), carries a
+  **holder-level shareholding** section + a **quarter-over-quarter ownership diff** (who entered / added /
+  trimmed / exited) and the **💰 smart-money cost & profit-booking-risk** block, and gives every
+  valuation / forensic / technical section a plain-English **"how to read this."** Opt-in
+  **growth-triggers 1-pager** (reply `1`) — forward catalysts, each with an estimated **₹cr / % impact**.
+- **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
+  FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·
+  movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on
+  live data), and the **weekly** screener-movements / sector-rotation / **💨 Tailwind** (Sat) + a
+  **mid-week urgent** Tailwind break-in when a big shock lands.
+- **Delivery** — email and/or Telegram via the `CHANNELS` flag; **`help`** returns the whole command menu;
+  the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
+  mail untouched).
+- **LLM** (Gemini via Vertex) is used **only** for synthesis / filing-reading / name-resolution — every
+  number above is **deterministic**.
 
 ## Status
 
