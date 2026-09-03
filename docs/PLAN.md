@@ -310,7 +310,21 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS
   headlines + an LLM "overnight read" (`synthesize.premarket_brief`). GIFT Nifty is plain-HTTP JSON from
   NSE IX (`scrapers/nseix.py`) — no browser. A setup briefing, not a trade call. *Next:* F&O layer
-  (OI build-up / PCR); an on-demand `premarket` command (currently push-only).
+  (OI build-up / PCR); an on-demand `premarket` command (currently push-only). *(Delivery fixed
+  2026-09: the laptop is asleep at 08:30 so it never auto-fired — cutoff widened 09:00→12:00 to
+  fire on first wake, self-relabelling to a "gap so far" snapshot past the 09:15 open.)*
+- **💨 Tailwind — global supply-shock → Indian beneficiaries — ✅ shipped** (`analysis/tailwind.py`,
+  `scrapers/social.py`, `reports/tailwind_brief.py`, `synthesize.tailwind_analyst`/`tailwind_beneficiaries`,
+  `email_bot.maybe_tailwind` + on-demand **`tailwind`**; pushed weekly Sat ≥18:00 via
+  `scan.tailwind_due`/`mark_tailwind`). The **chokepoint-arbitrage** lens: a **four-tier agent pipeline**
+  — ① Scout (Google News RSS + best-effort Reddit over a ~15-material `_CHOKEPOINTS` catalog) → ② Analyst
+  (LLM triage → genuine export-ban/quota/tariff/cut disruptions, source-index-gated so every link is real)
+  → ③ Mapper (Google-Search-grounded → Indian listed beneficiaries) → ④ Auditor (verify vs `equity_master`,
+  reusing `supply_chain._verify`/`_implausible`, watchlist-flag, rank). Autonomous (you never name a
+  material); each catalyst **source-cited**; reply a number → deep report. Verified live: DRC cobalt ban →
+  HINDCOPPER/HINDALCO, US tungsten-scrap curb → KENNAMET/MIDHANI, China Ge/Ga curb → HINDZINC/NATIONALUM.
+  *Next:* Twitter/X (login-walled), US Federal Register API hard-anchor for upcoming rules, mid-week urgent
+  break-in into the daily digest.
 - Mutual-fund analytics — see the **Mutual-fund module** track above (Phase 1 shipped;
   holdings/overlap/reports/forensic-look-through are Phases 3–5). Personal MF portfolio
   tracking (overlap, XIRR, concentration) was scoped but deprioritised vs signal + research.

@@ -404,7 +404,9 @@ PULL  you email a stock name (Subject) from an allowlisted address
         │  `investor: <name>` (one HNI's disclosed book + moves) ·
         │  `sell` | `raise` | `trim` (rank YOUR holdings weakest-hand-first — which
         │  to sell if you need cash) · `booking` (YOUR holdings where institutions sit
-        │  on big gains → profit-booking risk) — each a numbered list; reply → deep report
+        │  on big gains → profit-booking risk) · `tailwind` (global supply/policy
+        │  shocks — export bans/quotas/tariffs — → verified Indian beneficiaries; also
+        │  pushed weekly Sat ≥18:00) — each a numbered list; reply → deep report
 PUSH  08:30–09:00 IST, once per trading day → premarket.build_premarket → ONE
         "🌅 Pre-market" email: GIFT Nifty implied open (vs Nifty-50 prev close),
         overnight US/Asia indices, India VIX + FII index-futures stance, latest
@@ -752,6 +754,38 @@ lender sectors to a lender-appropriate composite — **ROA + ROE + NIM (proxy) +
 rank-normalised within the set, tried on both standalone & consolidated. So a `sector: bank` /
 `sector: nbfc` report still gets a proper Top (and Undervalued where P/B is available; some banks don't
 report a usable equity element, so they rank on ROA/NIM).
+
+## 💨 Tailwind — global supply-shock → Indian beneficiaries (`analysis/tailwind.py`, `reports/tailwind_brief.py`)
+
+The **chokepoint-arbitrage** lens: when a dominant supplier (usually China) restricts a critical material
+— an **export ban / quota / tariff / production cut** — the downstream sectors that *must* keep buying
+(defence, semiconductors, EV batteries, specialty chemicals) hunt for alternates, and the **Indian listed
+players who make that thing get a tailwind**. It surfaces these **autonomously** — you never name a
+material. On-demand **`tailwind`** (aliases `catalysts`, `supply shock`) and **pushed weekly (Saturday
+≥18:00 IST**, once/ISO-week via `scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`).
+
+A **four-tier agent pipeline**, each tier one job, chained:
+1. **① Scout** (`scrapers/social.py::scout`) — fans **Google News RSS** (+ Reddit best-effort; Reddit now
+   403s unauthenticated, so a per-process circuit-breaker skips it fast and News carries the sourcing)
+   over the `_CHOKEPOINTS` catalog (~15 materials: tungsten, gallium, germanium, antimony, graphite,
+   rare-earth magnets, …) + generic supply-shock probes → raw signals.
+2. **② Analyst** (`synthesize.tailwind_analyst`) — triages signals into **genuine disruptions**
+   (ban/quota/tariff/cut/shortage/subsidy), each tagged material/imposer/status/severity/sectors. It
+   returns the **index of the evidencing signal**, not a free-text URL — so the source link is always a
+   real fetched one (the anti-hallucination gate; unsourced items are dropped).
+3. **③ Mapper** (`synthesize.tailwind_beneficiaries`) — **Google-Search-grounded** per disruption →
+   candidate Indian listed beneficiaries (alternate producers / substitutes), with role + why.
+4. **④ Auditor** (`tailwind.auditor`) — verifies every name against `equity_master` (reuses
+   `supply_chain._verify` name-consistency + `_implausible` industry guard + `_BLOCKLIST`), drops what
+   doesn't resolve or can't plausibly make the material, **flags watchlist hits ⭐**, ranks.
+
+Output: a 💨 section, each catalyst carrying its **source link**, downstream sectors, and a **numbered**
+table of verified names (🟢 curated / 🟡 **AI-verified, confirm** / ⭐ on your watchlist) — reply a number
+→ that stock's deep report. Catalysts rank watchlist-hits → severity → #beneficiaries. **Honest by
+design:** an idea *generator*, not a call — every claim is source-cited, and "**no clean listed
+beneficiary**" is a valid, un-forced answer. **Later:** Twitter/X (login-walled, best-effort), US Federal
+Register API as a hard-primary anchor for *upcoming* rules, and a mid-week urgent break-in into the daily
+digest for a big fresh shock.
 
 **Known limits:** constituent depth = names with financials ingested. Supply-chain covers **listed**
 vendors only (many suppliers are private). Newer sub-indices (NBFC / Insurance / Capital Goods) have

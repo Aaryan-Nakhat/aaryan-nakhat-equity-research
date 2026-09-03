@@ -44,6 +44,7 @@ from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import md  # noqa: E402
 from equity_research.reports import premarket  # noqa: E402
 from equity_research.reports import sector_brief  # noqa: E402
+from equity_research.reports import tailwind_brief  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
@@ -539,6 +540,13 @@ def _policy_query(subject: str) -> bool:
                          r"govt schemes?|government schemes?)\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _tailwind_query(subject: str) -> bool:
+    """True for a global supply-shock / Tailwind request ('tailwind', 'tailwind:', 'catalysts',
+    'global catalysts', 'supply shock')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:tailwind|tailwinds|global\s*catalyst(?:s)?|"
+                         r"catalyst(?:s)?|supply\s*shock(?:s)?)\s*[:\-]?\s*$", subject, flags=re.I))
+
+
 def _investor_query(subject: str) -> str | None:
     """Parse 'investor: <name>' / 'hni: <name>' → the free-text name, or None."""
     m = re.match(r"^\s*(?:re:\s*)?(?:investor|hni)\s*[:\-]\s*(.+)$", subject, flags=re.I)
@@ -733,6 +741,31 @@ def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
                         html=emailer.body_html(body, f"Sector — {report['sector_name']}"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent sector analysis '%s' (%d picks) to %s", canonical, len(cands), req.sender)
+
+
+def _send_tailwind(req: EmailRequest) -> None:
+    """💨 Tailwind — global supply/policy shocks → verified Indian beneficiaries; reply → deep report."""
+    log.info("running Tailwind (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scouting global policy & supply moves (export bans, quotas, "
+                     "tariffs, cuts) and mapping the Indian listed names that benefit. This runs a "
+                     "few agents end-to-end (~2–4 min); the report lands in this thread.")
+    con = connect()
+    try:
+        rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con), timeout=420)
+    finally:
+        con.close()
+    if not rep:
+        _reply_text(req, "No clean global supply-shock → Indian-beneficiary setup surfaced right now "
+                         "(nothing fresh crossed the bar, or no verifiable listed name). That's a "
+                         "valid answer — I don't force one. Try again in a day or two.")
+        return
+    body = rep["markdown"]
+    _set_pending(req, "tailwind", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Tailwind"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent Tailwind (%d catalysts, %d picks) to %s",
+             rep["n_catalysts"], len(rep["picks"]), req.sender)
 
 
 def _send_suppliers(req: EmailRequest, query: str) -> None:
@@ -1411,6 +1444,11 @@ def handle_request(req: EmailRequest) -> None:
         _send_policy_screen(req)
         return
 
+    # 1e-sext) 💨 Tailwind — global supply-shock → Indian beneficiaries ('tailwind', 'catalysts')
+    if _tailwind_query(req.subject):
+        _send_tailwind(req)
+        return
+
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
     lq = _levels_query(req.subject)
     if lq:
@@ -1635,6 +1673,41 @@ def maybe_sector_rotation() -> None:
     log.info("weekly sector-rotation push sent to %s", to)
 
 
+def maybe_tailwind() -> None:
+    """Fire the weekly 💨 Tailwind push once per ISO week (Saturday ≥18:00 IST): scout global
+    policy/supply shocks → verified Indian beneficiaries. Runs the full 4-tier agent pipeline
+    (news scout → analyst → grounded mapper → auditor), so it's slow (~2–4 min) but weekly. No
+    email if nothing genuine surfaced; the week-marker advances only after a successful send (or a
+    clean empty result), so a delivery failure re-surfaces it next heartbeat."""
+    now = datetime.now(IST)
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening, weekly
+        return
+    if not scan.tailwind_due():
+        return
+    log.info("weekly Tailwind push firing")
+    con = connect()
+    try:
+        rep = tailwind_brief.build_tailwind_report(con)
+    except Exception:  # noqa: BLE001
+        log.exception("tailwind build failed")              # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    if not rep:
+        scan.mark_tailwind()                                # nothing genuine this week — don't retry
+        log.info("tailwind: nothing surfaced this week — no email")
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send Tailwind")
+        return
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"💨 Tailwind — {today}", rep["markdown"], to=to,
+                        html=emailer.body_html(rep["markdown"], "Tailwind"))
+    scan.mark_tailwind()                                    # advance week-marker ONLY after send
+    log.info("weekly Tailwind push sent to %s (%d catalysts)", to, rep["n_catalysts"])
+
+
 # ----------------- main loop -----------------
 def main() -> None:
     channels = os.environ.get("CHANNELS", "email").lower()
@@ -1667,7 +1740,8 @@ def main() -> None:
                 maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
                 maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
                 maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)
-                maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sun ≥18:00)
+                maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
+                maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
             log.exception("inbox session error — reconnecting in 15s")

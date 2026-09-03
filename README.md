@@ -99,7 +99,14 @@ Personal use. Not a hosted product.
   18:00 IST** (rich market-context header: sectoral indices · VIX · FII/DII · FII futures ·
   USD/INR · commodities; movers; events with inline filing analysis; insider trades) and a
   **midday "same-day" digest at 12:30** with the same sections on **live** intraday data
-  (live indices/VIX/commodities, Upcoming, live movers, today's filings/insider).
+  (live indices/VIX/commodities, Upcoming, live movers, today's filings/insider), and a
+  **💨 Tailwind global supply-shock radar pushed weekly (Sat ≥18:00 IST**, on-demand
+  **`tailwind`**) — a four-tier agent pipeline (news scout → LLM analyst → Google-Search-grounded
+  mapper → NSE-master auditor) that finds global policy/supply moves (China export bans, quotas,
+  tariffs, production cuts) and maps them to **verified Indian listed beneficiaries** — alternate
+  producers of the choked material — each catalyst **source-cited**, each name checked against the
+  master (reply a number → deep report). An idea generator, not a call; "no clean listed
+  beneficiary" is a valid answer.
 
 ## Status
 

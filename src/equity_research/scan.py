@@ -326,6 +326,27 @@ def mark_sector_rotation(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
+def tailwind_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True once per ISO week — the weekly 💨 Tailwind global-shock push hasn't fired this week."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_tailwind_week") != _iso_week(datetime.now(_IST))
+    finally:
+        if own:
+            con.close()
+
+
+def mark_tailwind(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_tailwind_week", _iso_week(datetime.now(_IST)))
+    finally:
+        if own:
+            con.close()
+
+
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
     """Ingest the latest available trading day's full EOD set (idempotent)."""
     today = date.today()
