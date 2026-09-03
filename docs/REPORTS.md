@@ -808,7 +808,10 @@ Analyst only, keeps just **fresh, high-severity, in-effect/proposed** shocks **n
 `add_tailwind_seen`), maps+audits only those, and sends a compact **"💨 Fresh supply shock"** email
 alongside the daily digest **only when something big actually lands** (most days: nothing → silent). It
 marks done once/evening so the ~1–2 min pipeline runs at most once per trading day. On-demand **`tailwind`**
-works any time.
+works any time and is **cached for 24h** (`scan.tailwind_cache_get`/`put`; a re-run within a day returns the
+stored result instantly — no re-fetch, no token cost, since the news barely moves hour to hour) — **`tailwind
+--latest`** (or `fresh`) forces a live re-scan; every fresh run (on-demand-latest or the weekly push)
+refreshes the cache. A cached reply is banner-tagged with its timestamp.
 
 **Mapper quality:** the prompt requires an **existing producer** (not a mere announcement / bid / MoU) and
 **prefers non-obvious small/mid-caps** over crowded heavyweights; the Auditor reinforces this — it tags each
