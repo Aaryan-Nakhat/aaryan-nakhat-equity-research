@@ -704,32 +704,43 @@ def supply_chain_suppliers(target: str, *, context: str = "", model: str = MODEL
     return out
 
 
-_TAILWIND_ANALYST_SYS = """You are a global macro / supply-chain analyst. You are given a numbered \
-list of recent GLOBAL news / social signals, plus a reference list of critical-material chokepoints. \
-Your job: find the signals that describe a GENUINE recent (last ~2 weeks) or imminent \
-policy / supply DISRUPTION that would hand a TAILWIND to alternative producers — especially \
-Indian listed ones. That means: an export ban / quota / licence curb, a tariff or sanction, a \
-production cut or mine/smelter halt, a sharp shortage or price spike, or a new subsidy/incentive \
-that redirects demand. IGNORE generic market commentary, price-target/broker chatter, opinion \
-pieces with no concrete action, and anything not tied to a real supply/policy move.
+_TAILWIND_ANALYST_SYS = """You are a global macro / commodity supply-chain analyst. You are given a \
+numbered list of recent GLOBAL news / social signals, plus a reference list of commodity chokepoints. \
+Your job: find the signals that describe a GENUINE recent (last ~2 weeks) or imminent policy / supply \
+DISRUPTION in ANY tradeable commodity or input that would hand a TAILWIND to Indian listed producers.
+
+COVER ALL COMMODITY CATEGORIES — not just critical minerals: metals & minerals (tungsten, rare earths, \
+copper…), AGRI / soft commodities (sugar, cotton, tea, coffee, rice, wheat, edible/palm oil, rubber, \
+spices, onion…), PHARMA inputs (APIs, KSMs, vitamins), industrial CHEMICALS (TiO2, soda ash, \
+fluorochemicals…), FERTILISER (urea, DAP, potash), and ENERGY (crude, LNG, coal). A disruption = an \
+export ban / quota / licence curb, a tariff or sanction, a production cut / crop failure / mine-smelter \
+halt, a sharp shortage or price spike, or a new subsidy/incentive that redirects demand.
+
+The tailwind works TWO ways — capture both: (a) IMPORT-SUBSTITUTION — a dominant supplier (often China) \
+restricts a material India imports, so Indian producers of it gain; and (b) EXPORT-SHARE GAIN — a rival \
+exporting country restricts/loses supply, so Indian exporters of that same good gain share/pricing. \
+IGNORE generic market commentary, price-target/broker chatter, and opinion with no concrete action.
 
 Reply with ONLY a JSON array (no markdown, no prose). One object per DISTINCT disruption \
 (merge duplicate coverage of the same event into one, citing the single best source):
-[{"material":"<the material / good affected, e.g. 'tungsten','gallium','rare-earth magnets','graphite anode'>",
-  "imposer":"<who acted — country / body, e.g. 'China (MOFCOM)','US (BIS)','EU'>",
-  "action":"export-ban|export-quota|licence-curb|tariff|sanction|production-cut|shortage|price-spike|subsidy",
+[{"material":"<the commodity / good affected, e.g. 'tungsten','sugar','pharma APIs','palm oil','potash'>",
+  "imposer":"<who acted — country / body, e.g. 'China (MOFCOM)','Indonesia','India (DGFT)','US (BIS)'>",
+  "action":"export-ban|export-quota|licence-curb|tariff|sanction|production-cut|crop-failure|shortage|price-spike|subsidy",
   "status":"in-effect|proposed|rumored",
   "severity":"high|medium|low",
-  "sectors":["<downstream sectors that MUST keep buying — e.g. 'defence','semiconductors','EV batteries'>"],
+  "supplier_share":"<the dominant supplier's approx share of WORLD supply of this good, e.g. 'China ~80%', \
+'Indonesia+Malaysia ~85% of palm oil', or '' if genuinely unsure — do not invent a precise number>",
+  "mechanism":"import-substitution|export-share-gain",
+  "sectors":["<the industries that benefit / must keep buying — e.g. 'defence','pharma / APIs','textiles','sugar mills'>"],
   "headline":"<one crisp plain-English line: what happened and why it matters>",
   "source_idx":<the NUMBER of the single best signal above that evidences this — integer>,
   "date":"<the approx date / recency if stated, else ''>"}]
 
 HARD RULES: include a disruption ONLY if a numbered signal actually evidences it — set \
 "source_idx" to that signal's number (never invent a URL; the caller maps the index to the real \
-link). Prefer chokepoints where one country dominates supply and a downstream sector cannot stop \
-buying (that is where the alternate-producer tailwind is real). 3-8 items max, best first. If \
-nothing qualifies, reply exactly []."""
+link). Prefer chokepoints where one country/region dominates supply and buyers cannot easily switch \
+(that is where the Indian-producer tailwind is real). 3-8 items max, best first. If nothing \
+qualifies, reply exactly []."""
 
 
 def tailwind_analyst(signals: list[dict], *, chokepoints: list[str],
@@ -742,7 +753,7 @@ def tailwind_analyst(signals: list[dict], *, chokepoints: list[str],
         return []
     numbered = "\n".join(f"{i}. [{s.get('source', '')}] {s.get('title', '')}"
                          for i, s in enumerate(signals, 1))
-    prompt = (f"CRITICAL-MATERIAL CHOKEPOINTS (reference): {', '.join(chokepoints)}\n\n"
+    prompt = (f"COMMODITY CHOKEPOINTS (reference, not exhaustive): {', '.join(chokepoints)}\n\n"
               f"SIGNALS:\n{numbered}")
     try:
         resp = _client().models.generate_content(
@@ -774,6 +785,8 @@ def tailwind_analyst(signals: list[dict], *, chokepoints: list[str],
             "action": str(d.get("action", "")).strip(),
             "status": str(d.get("status", "")).strip(),
             "severity": str(d.get("severity", "")).strip().lower(),
+            "supplier_share": str(d.get("supplier_share", "")).strip(),
+            "mechanism": str(d.get("mechanism", "")).strip(),
             "sectors": [str(s).strip() for s in (d.get("sectors") or []) if str(s).strip()],
             "headline": str(d.get("headline", "")).strip(),
             "source_url": src.get("url", ""),
@@ -788,42 +801,51 @@ companies that stand to BENEFIT from it — the alternate producers, suppliers o
 gain when a dominant supplier (usually China) restricts a critical material and downstream sectors \
 scramble for other sources.
 
-You are given a DISRUPTION (a material, who restricted it, and the downstream sectors that need it). \
-Using Google Search, list the Indian companies that genuinely benefit. For each return: "name" (the \
-company), "ticker" (its NSE symbol if you are confident, else ""), "role" (WHAT it makes/does that \
-benefits — e.g. 'tungsten carbide tooling', 'rare-earth magnet maker', 'graphite anode', 'ferro-alloy \
-smelter', 'specialty-chemicals substitute'), and "why" (one line: the specific link to THIS disruption).
+You are given a DISRUPTION (a commodity/input, who restricted it, and the sectors it touches). \
+Benefit works TWO ways: (a) IMPORT-SUBSTITUTION — India imports this and a dominant supplier restricted \
+it, so Indian producers of it gain; or (b) EXPORT-SHARE GAIN — a rival exporting country restricted/lost \
+supply, so Indian exporters of the same good gain share/pricing. Using Google Search, list the Indian \
+companies that genuinely benefit. For each return: "name" (the company), "ticker" (its NSE symbol if \
+confident, else ""), "role" (WHAT it makes/does that benefits — e.g. 'tungsten carbide tooling', \
+'paracetamol API maker', 'sugar & ethanol', 'cotton-yarn spinner'), "why" (one line: the specific link \
+to THIS disruption), and — best-effort, grounded in the company's filings/annual report — \
+"revenue_share" and "market_share" (defined below).
 
 HARD RULES:
 - ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, established** business \
-in this material / substitute. If unsure it's listed AND the link is real, OMIT it — a short correct \
-list beats a padded one.
-- **Never include a company just because its NAME contains a relevant-sounding word** (e.g. a firm \
-with "Metals" or "Minerals" in its name that doesn't actually produce this). Match on the REAL \
+in this good / substitute. If unsure it's listed AND the link is real, OMIT it.
+- **Never include a company just because its NAME contains a relevant-sounding word.** Match on the REAL \
 business, verified via search — not the name or a guessed ticker.
-- **The company must ALREADY produce / process / mine / manufacture the material (or a close \
-substitute / key tooling) with real EXISTING capacity or revenue.** Do NOT include a company that has \
-merely *announced plans*, *bid* for a project, signed an *MoU*, or expressed *intent* to enter — an \
-aspiration is not a beneficiary. If the only link is a future plan, OMIT it.
-- **Strongly prefer NON-OBVIOUS small- and mid-cap pure-plays** where this material actually moves \
-earnings. **Avoid index heavyweights / large diversified conglomerates** where the material is a rounding \
-error to their revenue (e.g. a giant that has a tiny side-project in it) — name them ONLY if they are a \
-genuine, material pure-play in it. The value here is the name the market hasn't already crowded into.
+- **The company must ALREADY produce / process / manufacture / export the good** with real EXISTING \
+capacity or revenue. Do NOT include a company that merely *announced plans*, *bid*, signed an *MoU*, or \
+expressed *intent* — an aspiration is not a beneficiary. If the only link is a future plan, OMIT it.
+- **Strongly prefer NON-OBVIOUS small- and mid-cap pure-plays** where this good actually moves earnings. \
+**Avoid index heavyweights / large diversified conglomerates** where it's a rounding error — name them \
+ONLY if they are a genuine, material pure-play. The value is the name the market hasn't crowded into.
+- **"revenue_share"** = your best estimate of the % of THIS company's total revenue that comes from this \
+good/segment (e.g. "~15%", "~60%", ">80% pure-play"). **"market_share"** = its approx share or rank in \
+producing/exporting this good (e.g. "~30% of India output", "#2 in India", "largest domestic maker"). \
+These are hard — ground them in the company's own segment disclosures where possible; if you are not \
+reasonably confident, return "" (an honest blank is REQUIRED — never fabricate a number).
 - Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
-- If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — that is a \
-valid, honest answer. 0-8 names. Return ONLY a JSON array of {name, ticker, role, why}. No prose."""
+- If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — a valid, \
+honest answer. 0-8 names. Return ONLY a JSON array of \
+{name, ticker, role, why, revenue_share, market_share}. No prose."""
 
 
 def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict]:
     """Tier ③ — Google-Search-grounded map from ONE disruption to Indian listed beneficiaries.
-    Returns ``[{name, ticker, role, why}]`` (the caller verifies each vs the NSE master and drops
-    unlisted / implausible names). ``[]`` on any failure. Never raises."""
+    Returns ``[{name, ticker, role, why, revenue_share, market_share}]`` (the caller verifies each vs
+    the NSE master and drops unlisted / implausible names). ``[]`` on any failure. Never raises."""
     sectors = ", ".join(disruption.get("sectors") or [])
+    share = disruption.get("supplier_share", "")
     prompt = (f"DISRUPTION: {disruption.get('imposer', '')} — {disruption.get('action', '')} on "
               f"{disruption.get('material', '')} ({disruption.get('status', '')}). "
-              f"Downstream sectors that need it: {sectors}. "
+              + (f"Dominant supplier share: {share}. " if share else "")
+              + f"Mechanism: {disruption.get('mechanism', '')}. "
+              f"Sectors touched: {sectors}. "
               f"Context: {disruption.get('headline', '')}\n\n"
-              f"List the Indian LISTED companies that benefit.")
+              f"List the Indian LISTED companies that benefit, with revenue_share & market_share.")
     try:
         r = _client().models.generate_content(
             model=model, contents=prompt,
@@ -846,7 +868,9 @@ def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict
             out.append({"name": str(d["name"]).strip(),
                         "ticker": str(d.get("ticker", "")).strip().upper(),
                         "role": str(d.get("role", "")).strip(),
-                        "why": str(d.get("why", "")).strip()})
+                        "why": str(d.get("why", "")).strip(),
+                        "revenue_share": str(d.get("revenue_share", "")).strip(),
+                        "market_share": str(d.get("market_share", "")).strip()})
     return out
 
 

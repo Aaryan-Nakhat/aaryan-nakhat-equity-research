@@ -757,12 +757,24 @@ report a usable equity element, so they rank on ROA/NIM).
 
 ## 💨 Tailwind — global supply-shock → Indian beneficiaries (`analysis/tailwind.py`, `reports/tailwind_brief.py`)
 
-The **chokepoint-arbitrage** lens: when a dominant supplier (usually China) restricts a critical material
-— an **export ban / quota / tariff / production cut** — the downstream sectors that *must* keep buying
-(defence, semiconductors, EV batteries, specialty chemicals) hunt for alternates, and the **Indian listed
-players who make that thing get a tailwind**. It surfaces these **autonomously** — you never name a
-material. On-demand **`tailwind`** (aliases `catalysts`, `supply shock`) and **pushed weekly (Saturday
-≥18:00 IST**, once/ISO-week via `scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`).
+The **chokepoint-arbitrage** lens across **ALL commodity categories** — metals & minerals, **agri / soft
+commodities** (sugar, cotton, tea, coffee, rice, edible/palm oil, rubber, spices…), **pharma inputs**
+(APIs, KSMs, vitamins), **industrial chemicals** (TiO2, soda ash, fluorochemicals…), **fertiliser** (urea,
+DAP, potash) and **energy** (crude, LNG). When a dominant supplier restricts a good — an **export ban /
+quota / tariff / production cut / crop failure** — Indian listed players who make or export it get a
+**tailwind**, two ways: **import-substitution** (a supplier India relies on curbs it → Indian producers
+gain) or **export-share gain** (a rival exporter is knocked out → Indian exporters gain share). The
+`_CHOKEPOINTS` catalog (~30 goods across every category) anchors it, but coverage is **not limited to the
+list** — broad generic probes + the Analyst's open-ended detection catch the long tail (onion, wheat, coal,
+PVC…). It surfaces these **autonomously** — you never name a material. On-demand **`tailwind`** (aliases
+`catalysts`, `supply shock`) and **pushed weekly (Saturday ≥18:00 IST**, `scan.tailwind_due`/`mark_tailwind`,
+`email_bot.maybe_tailwind`) + a **mid-week urgent break-in** (below).
+
+**Three materiality reads on every catalyst** (all Analyst/Mapper estimates, grounded where possible, 🟡
+verify): **🌍 the dominant supplier's % of world supply** (bigger = harder to switch = stronger tailwind);
+per company, **Rev** = est. % of that company's revenue from the good (a ~60%+ pure-play benefits far more
+than a ~5% side-line), and **Its share** = the company's rough production/export share of it. Honest blanks
+('n/a') where not confidently known — never a fabricated number.
 
 A **four-tier agent pipeline**, each tier one job, chained:
 1. **① Scout** (`tailwind._scout_signals`) — **global breadth** from **Google News RSS**
