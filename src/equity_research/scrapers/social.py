@@ -110,17 +110,58 @@ def reddit_search(query: str, *, limit: int = 10) -> list[dict]:
     return out
 
 
+# --- Twitter/X (the fastest speculation layer) — best-effort via nitter RSS mirrors ---
+# X has no usable unauthenticated API; nitter forks are the only no-auth path and are themselves
+# flaky (many instances are down). We try a couple of the more-alive mirrors and, like Reddit, trip
+# a per-process circuit-breaker the moment they all fail so the Scout doesn't stall. When X yields
+# nothing (the common case now) News + Federal Register carry the pipeline. A paid X API key would
+# make this reliable — deferred.
+_NITTER_MIRRORS = ["https://xcancel.com", "https://nitter.poast.org"]
+_x_dead = False
+
+
+def twitter_search(query: str, *, limit: int = 6) -> list[dict]:
+    """Recent X/Twitter posts matching ``query`` via nitter RSS mirrors:
+    ``[{title, url, source, published}]``. Empty on any failure; trips a per-process circuit-breaker
+    once all mirrors fail so later calls short-circuit instantly."""
+    global _x_dead
+    if _x_dead:
+        return []
+    for base in _NITTER_MIRRORS:
+        url = f"{base}/search/rss?f=tweets&q={_q(query)}"
+        try:
+            root = ET.fromstring(fetch_text(url, headers=_UA, timeout=8))
+        except Exception:  # noqa: BLE001 — try the next mirror
+            continue
+        out = []
+        for item in root.iter("item"):
+            title = _clean(item.findtext("title") or "")
+            if not title:
+                continue
+            out.append({"title": title, "url": (item.findtext("link") or "").strip(),
+                        "source": "X/Twitter", "published": (item.findtext("pubDate") or "").strip()})
+            if len(out) >= limit:
+                break
+        if out:
+            return out
+    _x_dead = True                                          # every mirror failed → stop trying
+    log.info("scout: X/Twitter unavailable (all nitter mirrors down) — relying on News")
+    return []
+
+
 def scout(queries: list[str], *, days: int = 14, per_query: int = 8,
-          with_reddit: bool = True, max_signals: int = 70) -> list[dict]:
-    """Run the Scout: fan ``queries`` out over Google News (+ Reddit) and return a deduped,
-    recency-scoped list of raw signals ``[{title, url, source, published}]``. Best-effort —
-    a source that fails is simply skipped; the pipeline still runs on whatever came back."""
+          with_reddit: bool = True, with_x: bool = True, max_signals: int = 70) -> list[dict]:
+    """Run the Scout: fan ``queries`` out over Google News (+ Reddit + X/Twitter, both best-effort)
+    and return a deduped, recency-scoped list of raw signals ``[{title, url, source, published}]``.
+    Best-effort — a source that fails is simply skipped; the pipeline runs on whatever came back."""
     seen: set[str] = set()
     out: list[dict] = []
     for q in queries:
         rows = google_news(q, days=days, limit=per_query)
         if with_reddit:
             rows += reddit_search(q, limit=max(3, per_query // 2))
+        if with_x:
+            rows += twitter_search(q, limit=max(3, per_query // 2))
         for r in rows:
             key = re.sub(r"[^a-z0-9]+", "", r["title"].lower())[:80]
             if not key or key in seen:

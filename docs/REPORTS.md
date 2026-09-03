@@ -766,8 +766,9 @@ material. On-demand **`tailwind`** (aliases `catalysts`, `supply shock`) and **p
 
 A **four-tier agent pipeline**, each tier one job, chained:
 1. **① Scout** (`tailwind._scout_signals`) — **global breadth** from **Google News RSS**
-   (`scrapers/social.py`; + Reddit best-effort — Reddit now 403s unauthenticated, so a per-process
-   circuit-breaker skips it fast and News carries the sourcing) fanned over the `_CHOKEPOINTS` catalog
+   (`scrapers/social.py`; + Reddit and **X/Twitter** both best-effort — Reddit 403s unauthenticated and
+   X has no no-auth API (tried via nitter mirrors), so per-process circuit-breakers skip them fast and
+   News carries the sourcing) fanned over the `_CHOKEPOINTS` catalog
    (~15 materials: tungsten, gallium, germanium, antimony, graphite, rare-earth magnets, …) + generic
    supply-shock probes, **merged with the US Federal Register** (`scrapers/fedregister.py` — the official
    US daily journal via its free JSON API, including **proposed / upcoming rules**; **US-only**, so it's
@@ -796,10 +797,13 @@ alongside the daily digest **only when something big actually lands** (most days
 marks done once/evening so the ~1–2 min pipeline runs at most once per trading day. On-demand **`tailwind`**
 works any time.
 
-**Honest by design:** an idea *generator*, not a call — every claim is source-cited, and "**no clean listed
-beneficiary**" is a valid, un-forced answer; the Mapper can still over-reach (e.g. tag a giant that merely
-*bid* into a space), which is why AI names are 🟡-flagged to verify. **Later:** Twitter/X (login-walled,
-best-effort); tighten the Mapper toward non-obvious small/mid-caps.
+**Mapper quality:** the prompt requires an **existing producer** (not a mere announcement / bid / MoU) and
+**prefers non-obvious small/mid-caps** over crowded heavyweights; the Auditor reinforces this — it tags each
+name's **market-cap tier** (via `valuation.snapshot`) and sorts smaller-first, and flags **⚠ intent-only**
+rows (aspirational language) and sorts them below actual producers. **Honest by design:** an idea
+*generator*, not a call — every claim is source-cited, "**no clean listed beneficiary**" is a valid
+un-forced answer, and AI names stay 🟡-flagged to verify. **Later:** a paid X API key would make the X leg
+reliable (nitter mirrors are flaky); US Federal Register already anchors the US leg.
 
 **Known limits:** constituent depth = names with financials ingested. Supply-chain covers **listed**
 vendors only (many suppliers are private). Newer sub-indices (NBFC / Insurance / Capital Goods) have
