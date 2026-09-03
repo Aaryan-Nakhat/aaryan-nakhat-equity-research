@@ -89,18 +89,50 @@ def _scout_queries() -> list[str]:
 
 
 # ── Tier ④ — the Auditor ──
+# Market-cap tiers (₹ cr) — the radar prefers non-obvious small/mid-caps over crowded heavyweights.
+_SIZE_BANDS = [(5_000, "small-cap"), (25_000, "mid-cap"), (75_000, "large-cap")]
+# Language that betrays an ASPIRATION rather than an existing producer (deprioritised, not dropped —
+# an early entrant can still be a real theme play, but it shouldn't outrank an actual producer).
+_ASPIRATIONAL = ("bid", "bidder", "plans to", "planning", "to set up", "will set up", "mou",
+                 "foray", "intends", "intent", "proposed", "aspir", "eyeing", "to enter",
+                 "announced plans", "in talks", "to build")
+
+
 def _tier(source: str, on_watch: bool) -> str:
     if on_watch:
         return "⭐ watchlist"
     return "🟢 curated" if source == "curated" else "🟡 AI-verified"
 
 
+def _size_word(con: duckdb.DuckDBPyConnection, symbol: str) -> tuple[str | None, float]:
+    """(size word, market-cap ₹cr) for a symbol, best-effort via valuation.snapshot. ``(None, inf)``
+    when unknown — unknowns sort last so a name we can't size doesn't crowd out a real small-cap."""
+    try:
+        from equity_research.analysis import valuation
+        snap = valuation.snapshot(con, symbol)
+        mcap = snap.get("market_cap_cr") if isinstance(snap, dict) else None
+    except Exception:  # noqa: BLE001 — size is a nicety, never break the audit
+        mcap = None
+    if not mcap or mcap != mcap:                            # None / NaN
+        return None, float("inf")
+    for hi, word in _SIZE_BANDS:
+        if mcap < hi:
+            return word, mcap
+    return "mega-cap", mcap
+
+
+def _is_aspirational(c: dict) -> bool:
+    text = f"{c.get('role', '')} {c.get('why', '')}".lower()
+    return any(k in text for k in _ASPIRATIONAL)
+
+
 def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
             watch: set[str]) -> list[dict]:
-    """Verify Mapper candidates against the NSE master, kill hallucinations, flag watchlist hits.
-    Reuses the ``supply_chain`` spine: ``_verify`` (real symbol + name-consistency) and
-    ``_implausible`` (a media/FMCG/finance name can't be a material producer). Returns deduped
-    ``[{symbol, name, role, why, industry, on_watchlist, tier}]`` — watchlist first, then verified."""
+    """Verify Mapper candidates against the NSE master, kill hallucinations, flag watchlist hits, and
+    rank toward non-obvious small/mid-caps. Reuses the ``supply_chain`` spine: ``_verify`` (real
+    symbol + name-consistency) and ``_implausible`` (a media/FMCG/finance name can't be a material
+    producer). Sort: watchlist → actual-producer-before-aspirant → smaller-cap-first → name. Returns
+    ``[{symbol, name, role, why, industry, mcap_cr, on_watchlist, aspirational, tier}]``."""
     seen: dict[str, dict] = {}
     for c in candidates:
         v = supply_chain._verify(con, c.get("name", ""), c.get("ticker") or "")
@@ -112,14 +144,25 @@ def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
         ind = con.execute("SELECT industry FROM sector_map WHERE symbol = ?",
                           [v["symbol"]]).fetchone()
         on_watch = v["symbol"] in watch
+        size_word, mcap = _size_word(con, v["symbol"])
+        aspirational = _is_aspirational(c)
+        tier = _tier(c.get("source", "ai"), on_watch)
+        if size_word and not on_watch:                     # surface the size on AI/curated rows
+            tier += f" · {size_word}"
+        if aspirational:
+            tier += " · ⚠ intent-only"
         seen[v["symbol"]] = {
             "symbol": v["symbol"], "name": v["name"],
             "role": c.get("role", ""), "why": c.get("why", ""),
-            "industry": ind[0] if ind else None,
-            "on_watchlist": on_watch,
-            "tier": _tier(c.get("source", "ai"), on_watch),
+            "industry": ind[0] if ind else None, "mcap_cr": mcap if mcap != float("inf") else None,
+            "on_watchlist": on_watch, "aspirational": aspirational, "tier": tier,
+            "_sort_mcap": mcap,
         }
-    return sorted(seen.values(), key=lambda d: (not d["on_watchlist"], d["name"]))
+    ranked = sorted(seen.values(),
+                    key=lambda d: (not d["on_watchlist"], d["aspirational"], d["_sort_mcap"], d["name"]))
+    for d in ranked:                                        # drop the private sort key
+        d.pop("_sort_mcap", None)
+    return ranked
 
 
 # ── orchestration ──

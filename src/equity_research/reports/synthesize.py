@@ -801,9 +801,15 @@ list beats a padded one.
 - **Never include a company just because its NAME contains a relevant-sounding word** (e.g. a firm \
 with "Metals" or "Minerals" in its name that doesn't actually produce this). Match on the REAL \
 business, verified via search — not the name or a guessed ticker.
-- The benefit must be plausible and reasonably direct (produces the material, a close substitute, or a \
-key input/tooling for the starved sector). Prefer non-obvious mid/small-caps over the giant everyone \
-names. Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
+- **The company must ALREADY produce / process / mine / manufacture the material (or a close \
+substitute / key tooling) with real EXISTING capacity or revenue.** Do NOT include a company that has \
+merely *announced plans*, *bid* for a project, signed an *MoU*, or expressed *intent* to enter — an \
+aspiration is not a beneficiary. If the only link is a future plan, OMIT it.
+- **Strongly prefer NON-OBVIOUS small- and mid-cap pure-plays** where this material actually moves \
+earnings. **Avoid index heavyweights / large diversified conglomerates** where the material is a rounding \
+error to their revenue (e.g. a giant that has a tiny side-project in it) — name them ONLY if they are a \
+genuine, material pure-play in it. The value here is the name the market hasn't already crowded into.
+- Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
 - If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — that is a \
 valid, honest answer. 0-8 names. Return ONLY a JSON array of {name, ticker, role, why}. No prose."""
 
