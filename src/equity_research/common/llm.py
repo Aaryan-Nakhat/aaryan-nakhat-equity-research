@@ -47,6 +47,17 @@ def _messages(system: str, user_text: str, files) -> list[dict]:
     return [{"role": "system", "content": system}, {"role": "user", "content": content}]
 
 
+_DOC_ERR_HINTS = ("no pages", "has no pages", "unable to process", "failed to process",
+                  "cannot process", "invalid pdf", "corrupt", "unable to read",
+                  "could not process", "unsupported document")
+
+
+def _is_document_error(exc: Exception) -> bool:
+    """True if a provider error looks like it was caused by an attached document the
+    backend couldn't read (so the call can be retried without the files)."""
+    return any(h in str(exc).lower() for h in _DOC_ERR_HINTS)
+
+
 def _search_tool() -> list | None:
     """The web-search tool spec to attach for grounded calls, taken verbatim from the environment
     (``LLM_SEARCH_TOOL``, a JSON object). ``None`` when unset — grounded calls then run un-grounded."""
@@ -78,5 +89,17 @@ def generate(system: str, user_text: str, *, files: list[tuple[str, bytes]] | No
         kwargs["max_tokens"] = max_tokens
     if grounded and (tool := _search_tool()):
         kwargs["tools"] = tool
-    resp = litellm.completion(**kwargs)
-    return (resp.choices[0].message.content or "").strip()
+    try:
+        resp = litellm.completion(**kwargs)
+    except Exception as e:  # noqa: BLE001
+        if files and _is_document_error(e):   # a bad attachment shouldn't sink the whole call —
+            log.warning("LLM rejected an attached document (%s); retrying text-only",
+                        str(e).splitlines()[0][:200])
+            kwargs["messages"] = _messages(system, user_text, None)
+            resp = litellm.completion(**kwargs)
+        else:
+            raise
+    choices = getattr(resp, "choices", None) or []         # empty when the provider returns no
+    if not choices:                                        # candidate (safety block / empty reply)
+        return ""
+    return (choices[0].message.content or "").strip()

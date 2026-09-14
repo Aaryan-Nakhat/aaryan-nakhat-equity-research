@@ -75,6 +75,25 @@ def _doc_score(title: str, blob: str, is_result: bool) -> int:
     return 1
 
 
+def _pdf_pages(data: bytes) -> int | None:
+    """Number of pages in a PDF, or ``None`` if it can't be parsed. Used to drop
+    structurally-broken filings before they reach the LLM: some NSE PDFs (notably
+    a few digitally-signed board/AGM outcomes) carry a bad xref, and a single
+    un-parseable document fails the *whole* multi-document request ("The document
+    has no pages"). Best-effort — if no PDF parser is installed, returns ``-1`` so
+    the caller keeps the doc (the LLM layer still has a text-only fallback)."""
+    try:
+        import io
+
+        from pypdf import PdfReader
+    except Exception:  # noqa: BLE001 — parser optional; skip local validation if absent
+        return -1
+    try:
+        return len(PdfReader(io.BytesIO(data)).pages)
+    except Exception:  # noqa: BLE001 — corrupt / broken-xref / unreadable PDF
+        return None
+
+
 def _filings_for_analysis(symbol: str, *, max_docs: int = 12,
                           max_bytes: int = 15_000_000) -> list[tuple[str, bytes]]:
     """All meaningful filing PDFs for ``symbol`` since the last fiscal year-end
@@ -130,6 +149,10 @@ def _filings_for_analysis(symbol: str, *, max_docs: int = 12,
         except Exception:  # noqa: BLE001
             continue
         if total + len(data) > max_bytes:                 # stay under the LLM's inline request limit
+            continue
+        n_pages = _pdf_pages(data)                         # drop un-parseable PDFs (see _pdf_pages):
+        if n_pages is None or n_pages == 0:                # one bad doc would fail the whole LLM call
+            log.warning("skipping un-parseable filing (no readable pages): %s", label)
             continue
         out.append((label, data))
         total += len(data)

@@ -19,6 +19,7 @@ dependencies = [
     "matplotlib>=3.9",
     "openpyxl>=3.1.5",
     "cryptography>=50.0.1",
+    "pypdf>=5.0",             # validate filing PDFs before the LLM reads them (drop broken docs)
 ]
 
 [project.optional-dependencies]
