@@ -838,7 +838,7 @@ the company that **supplies the boom** — the picks and shovels — rides the s
 earnings and is usually still off the mainstream radar. An egg/poultry boom is cyclical for egg producers,
 but the listed maker of **poultry vaccines / feed additives** benefits with far less cyclicality. It
 surfaces these **autonomously** — you never name a theme. On-demand **`pickaxe`** (aliases `demand`,
-`buy trends`) and **pushed weekly (Saturday ≥18:00 IST**, `scan.pickaxe_due`/`mark_pickaxe`,
+`buy trends`) and **pushed monthly (first Saturday ≥18:00 IST**, `scan.pickaxe_due`/`mark_pickaxe`,
 `email_bot.maybe_pickaxe`).
 
 A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tailwind):
@@ -884,7 +884,7 @@ beneficiaries as **readable per-stock blocks** (quant · revenue-from-theme now�
 why) — ⛏️ pickaxe-first, then 🎯 direct; reply a number → that stock's full deep report. **Delivery is
 async:** the full build (ingest + a grounded read per name + charts) is ~10-15 min, so the on-demand
 `pickaxe` **acks instantly and delivers the report + PDF from a background thread** (`email_bot._pickaxe_worker`,
-a single-build lock) when ready; likewise the **weekly Saturday push** (`maybe_pickaxe`) runs off-heartbeat.
+a single-build lock) when ready; likewise the **monthly push** (first Saturday, `maybe_pickaxe`) runs off-heartbeat.
 **Cached 24h** (`scan.pickaxe_cache_get`/`put`); **`pickaxe --latest`** forces fresh. **Honest by design:**
 an idea *generator*, not a call — every theme source-cited, AI names 🟡-flagged, and a **genuine demand
 theme always has listed beneficiaries** (the mapper is required to name them; an empty theme is never

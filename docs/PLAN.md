@@ -333,7 +333,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   *Next:* a paid X API key for reliable Twitter.
 - **⛏️ Pickaxe — surging Indian demand → the indirect beneficiary — ✅ shipped** (`analysis/pickaxe.py`,
   `scrapers/trends.py`, `reports/pickaxe_brief.py`, `synthesize.pickaxe_analyst`/`pickaxe_beneficiaries`,
-  `email_bot._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed weekly Sat ≥18:00 via
+  `email_bot._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed monthly (1st Sat ≥18:00) via
   `scan.pickaxe_due`/`mark_pickaxe`, `email_bot.maybe_pickaxe`). The **demand-side mirror of Tailwind** on
   the **gold-rush "sell the pickaxes"** principle: a **four-tier agent pipeline** — ① Scout (Google Trends
   rising "buy" queries by consumer category via `scrapers/trends.py` — the **browser tier** (Camoufox

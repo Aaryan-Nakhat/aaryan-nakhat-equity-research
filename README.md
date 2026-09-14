@@ -71,7 +71,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 **📬 Arrives automatically** (no command): 🌅 **pre-market** (08:30, GIFT Nifty implied open) · 🔔
 **midday** (12:30, live) · 📊 **full digest** (18:00) · 📡 **screener movements** (Sat) · 🔄 **sector
 rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a big shock lands) · ⛏️
-**Pickaxe** (Sat, surging demand → indirect beneficiaries).
+**Pickaxe** (monthly, 1st Sat — surging demand → indirect beneficiaries).
 *Tip: add **consolidated** / **standalone** to a stock to force the basis; numbered menus stay live 24h.*
 
 ## How it works
@@ -173,8 +173,8 @@ source → formula → model).
 - **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
   FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on
-  live data), and the **weekly** screener-movements / sector-rotation / **💨 Tailwind** / **⛏️ Pickaxe**
-  (Sat) + a **mid-week urgent** Tailwind break-in when a big shock lands.
+  live data), the **weekly** screener-movements / sector-rotation / **💨 Tailwind** (Sat), the **monthly**
+  **⛏️ Pickaxe** (1st Sat) + a **mid-week urgent** Tailwind break-in when a big shock lands.
 - **Delivery** — email and/or Telegram via the `CHANNELS` flag; **`help`** returns the whole command menu;
   the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
   mail untouched).

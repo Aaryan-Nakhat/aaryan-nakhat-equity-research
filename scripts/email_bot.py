@@ -766,7 +766,7 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["📡 Screener movements (Sat 18:00)", "What newly crossed the screens this week."],
         ["🔄 Sector rotation (Sat 18:00)", "Sector leaders / laggards / value-turning."],
         ["💨 Tailwind (Sat + mid-week urgent)", "Global supply-shock → Indian beneficiaries."],
-        ["⛏️ Pickaxe (Sat 18:00)", "Surging Indian demand → indirect 'sell the pickaxes' beneficiaries."],
+        ["⛏️ Pickaxe (monthly, 1st Sat 18:00)", "Surging Indian demand → indirect 'sell the pickaxes' beneficiaries."],
     ]),
 ]
 
@@ -2015,13 +2015,13 @@ def maybe_tailwind_urgent() -> None:
 
 
 def maybe_pickaxe() -> None:
-    """Fire the weekly ⛏️ Pickaxe push once per ISO week (Saturday ≥18:00 IST): scout India's rising
-    demand → the indirect 'sell the pickaxes' beneficiaries, deep-enriched with charts. The full
-    build is ~10-15 min, so it runs in a BACKGROUND thread (never blocks the heartbeat); the
-    week-marker advances only inside the worker after a successful send (or a clean empty result),
-    so a delivery failure re-surfaces it next heartbeat."""
+    """Fire the ⛏️ Pickaxe push once per calendar MONTH (first Saturday ≥18:00 IST): scout India's
+    rising demand → the indirect 'sell the pickaxes' beneficiaries, deep-enriched with charts. The
+    full build is ~10-15 min, so it runs in a BACKGROUND thread (never blocks the heartbeat); the
+    month-marker advances only inside the worker after a successful send (or a clean empty result),
+    so a delivery failure re-surfaces it next heartbeat. On-demand `pickaxe` runs any time."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening, weekly
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening (monthly due-gate below)
         return
     if not scan.pickaxe_due() or _pickaxe_lock.locked():
         return
@@ -2030,7 +2030,7 @@ def maybe_pickaxe() -> None:
         log.error("no REPORT_TO / allowlist — cannot send Pickaxe")
         return
     today = datetime.now(IST).date().isoformat()
-    log.info("weekly Pickaxe push firing (background)")
+    log.info("monthly Pickaxe push firing (background)")
     threading.Thread(
         target=_pickaxe_worker,
         kwargs={"req": None, "to": to, "subject": f"⛏️ Pickaxe — {today}",
@@ -2101,7 +2101,7 @@ def main() -> None:
                 maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
                 maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
                 maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
-                maybe_pickaxe()      # heartbeat: weekly surging-demand → indirect beneficiaries (Sat ≥18:00)
+                maybe_pickaxe()      # heartbeat: monthly surging-demand → indirect beneficiaries (1st Sat ≥18:00)
                 maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired

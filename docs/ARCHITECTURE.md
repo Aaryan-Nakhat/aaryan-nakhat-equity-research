@@ -202,10 +202,10 @@ URGENT  gate: trading day Mon–Fri, ≥18:00 IST, once/day (scan.already_tailwi
     un-forced answer. Reddit is best-effort; Google News carries global sourcing, Federal Register the US leg.)
 ```
 
-## Flow H — Push: ⛏️ Pickaxe surging-demand radar (weekly Sat) + on-demand `pickaxe`
+## Flow H — Push: ⛏️ Pickaxe surging-demand radar (monthly, 1st Sat) + on-demand `pickaxe`
 
 ```
-WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.pickaxe_due) — email_bot.maybe_pickaxe
+MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due) — email_bot.maybe_pickaxe
         │
         ▼  pickaxe.run_pickaxe() — the DEMAND-SIDE mirror of Tailwind, a FOUR-TIER agent pipeline:
               ① SCOUT   pickaxe._scout_signals — Google Trends rising "buy" queries by consumer
@@ -235,7 +235,7 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.pickaxe_due) — email_
         ▼
    ⛏️ ONE "Pickaxe" email + charted PDF. The full build is ~10-15 min, so it runs in a BACKGROUND thread
         (email_bot._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
-        ready; the weekly push runs off-heartbeat. `--latest` forces fresh; reply a number → deep report.
+        ready; the monthly push runs off-heartbeat. `--latest` forces fresh; reply a number → deep report.
 
    (An idea generator — every theme is source-cited; a genuine demand theme ALWAYS has beneficiaries.
     Google Trends is best-effort — when throttled, the LLM/Search Analyst+Mapper carry the pipeline.)
@@ -251,4 +251,4 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.pickaxe_due) — email_
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,investors,tailwind,pickaxe}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **the provider** (service account) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Pickaxe, mid-week urgent Tailwind; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·holdco·investors·smallcap·technical·policy`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in growth-triggers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·holdco·investors·smallcap·technical·policy`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in growth-triggers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

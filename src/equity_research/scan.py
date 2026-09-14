@@ -459,12 +459,17 @@ def tailwind_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = Non
             con.close()
 
 
+def _year_month(dt: datetime) -> str:
+    return f"{dt.year}-{dt.month:02d}"
+
+
 def pickaxe_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly ⛏️ Pickaxe demand-theme push hasn't fired this week."""
+    """True once per calendar month — the monthly ⛏️ Pickaxe demand-theme push hasn't fired this
+    month yet (the heavy deep-enrichment build only warrants a monthly cadence + on-demand)."""
     own = con is None
     con = con or connect()
     try:
-        return _meta(con, "last_pickaxe_week") != _iso_week(datetime.now(_IST))
+        return _meta(con, "last_pickaxe_month") != _year_month(datetime.now(_IST))
     finally:
         if own:
             con.close()
@@ -474,7 +479,7 @@ def mark_pickaxe(con: duckdb.DuckDBPyConnection | None = None) -> None:
     own = con is None
     con = con or connect()
     try:
-        _set_meta(con, "last_pickaxe_week", _iso_week(datetime.now(_IST)))
+        _set_meta(con, "last_pickaxe_month", _year_month(datetime.now(_IST)))
     finally:
         if own:
             con.close()
