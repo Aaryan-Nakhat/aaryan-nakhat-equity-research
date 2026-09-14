@@ -197,6 +197,17 @@ news-portal / social-media rumor** — that would break the primary-only rule.
 | **Google News RSS** (demand-surge news) | 🟢 | `news.google.com/rss/search?q=<query>+when:<N>d` (via `social.py::google_news`) — demand-surge / sales-jump / price-hike / fastest-growing-category queries for India. The reliable leg that carries Pickaxe when Trends is throttled. |
 | **Reddit** (consumer chatter) | 🟡→🔴 | `social.py::reddit_search` — "everyone's buying", rising-price consumer chatter; same best-effort circuit-breaker as in Tailwind. |
 
+## 12. Employer-review sentiment — the 🏢 inside view (`scrapers/ambitionbox.py`)
+
+> **Third-party review signal, NOT primary DB data.** Feeds the deep report's employee/management
+> sentiment section. Self-reported employee reviews — a culture/governance *signal*, not a fact. **Opt-in**
+> (`EMPLOYER_REVIEWS_ENABLED`). See [`METHODOLOGY.md`](METHODOLOGY.md) → 🏢 inside view.
+
+| Data | Access | Notes |
+|---|---|---|
+| **AmbitionBox** (India's #1 employer-review site) | 🟡 | Company page's embedded `__NEXT_DATA__` JSON via the **browser tier** (Camoufox): overall rating, 7 sub-ratings, 1-5★ distribution, review count, **industry average** (peer benchmark), CEO. Far deeper Indian-listed coverage than Glassdoor. Entity resolution (name→right company) is guarded against namesakes. |
+| **Glassdoor** (secondary, later) | 🔴 | Thinner Indian coverage + Cloudflare/login walls; planned as a secondary cross-check only. |
+
 ## Practical takeaways for the scraping plan
 
 1. **BSE is the friendlier primary** for fundamentals/filings/actions; **NSE for

@@ -103,6 +103,17 @@ filings to read. It also renders for symbols with **no XBRL financials** (REITs 
 newly listed / renamed): the report leads with the overview + a technical snapshot instead
 of a bare "no financials" message.
 
+The report also carries a **`## 🏢 Inside view — employee & management sentiment`** section
+(`analysis/employer_sentiment.py`, after the smart-money block) — a culture/governance read from
+**AmbitionBox** employee reviews (browser tier → the page's `__NEXT_DATA__`). Two scores on a fixed
+**A→E** scale, each **45% absolute / 55% peer-relative** (leaning on the gap vs the company's own
+industry): **Employee Sentiment** (morale) and **Management Quality** (culture / job-security /
+career-growth / satisfaction composite), with the overall rating, sub-ratings, %positive/%detractor,
+review-count **confidence tier** and CEO. Entity resolution is guarded (verified slug map → name-slug →
+name-matched search) so a namesake isn't mis-attributed; `<20` reviews shows "n/a — too few reviews" and
+an unresolved name shows "no coverage". Cached ~30d in `alert_state`; **opt-in** via
+`EMPLOYER_REVIEWS_ENABLED` (off → the section is omitted). A *signal*, not a financial metric.
+
 `--shares <crore>` corrects the current share count for a post-filing
 bonus/split (see [`FUNDAMENTALS.md`](FUNDAMENTALS.md)).
 

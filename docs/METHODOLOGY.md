@@ -34,6 +34,10 @@ Scraping uses `scrapling`, in two tiers:
 | **PIB** (pib.gov.in) | government press releases — schemes/policies/reforms (the policy radar) | 🟢 RSS + HTML | `pib.py` |
 | **FBIL** | USD/INR reference rate | 🟢 JSON | `fbil.py` |
 | **MCX** | gold / silver / crude futures | 🟡 header-gated | `mcx.py` |
+| **Google Trends** | rising "buy" demand queries + interest-over-time (the ⛏️ Pickaxe scout) | 🟡 browser intercept | `trends.py` |
+| **AmbitionBox** | employee reviews → employee/management sentiment (the 🏢 inside view) | 🟡 browser tier, opt-in | `ambitionbox.py` |
+
+*(Google News / Reddit / US Federal Register feed the 💨 Tailwind & ⛏️ Pickaxe idea radars — signal, not primary DB. Trends & AmbitionBox are third-party signals too, not government-primary.)*
 
 **The financials path in detail** (`nse_financials.py`, `ingest.ingest_financials`):
 1. **Catalog** (browser): `/api/corporates-financial-results` lists every result filing for a
@@ -187,6 +191,19 @@ with zero).
   never faked. Stake-weighted across holders for a symbol-level read. Same maths powers the marquee-HNI
   view (`investors._holding_cost`) and the portfolio heads-up (`analysis/booking_risk.py`, email
   `booking`). **Model:** none (deterministic price-zone inference).
+- **🏢 Inside view — employee & management sentiment** (`analysis/employer_sentiment.py`,
+  `scrapers/ambitionbox.py`) — a culture/governance read from **AmbitionBox** employee reviews (India's
+  largest employer-review site). **Source:** the company page's embedded `__NEXT_DATA__` JSON via the
+  **browser tier** (Camoufox) — overall rating, 7 category sub-ratings, a 1-5★ distribution (→ %positive
+  / %detractor), review count, the **industry average**, and CEO. **Entity resolution** (a stock's name →
+  the right AmbitionBox company, not a namesake) is the hard part: verified `_SLUG_MAP` → direct
+  name-slug → search API with a strict brand-token name-guard; unresolved → honest "no coverage".
+  **Scale — two banded scores, A→E, each 45% absolute + 55% peer-relative** (a rating *vs its own
+  industry* matters more than the raw stars): **① Employee Sentiment** (overall + %detractor) and **②
+  Management Quality** (`0.40·culture + 0.30·job-security + 0.15·career-growth + 0.15·work-satisfaction`,
+  career-growth down-weighted since appraisals are rated harshly everywhere). A **confidence gate** on
+  review count (<20 → not scored). Cached ~30 days in `alert_state`; **opt-in** (`EMPLOYER_REVIEWS_ENABLED`).
+  **Model:** none (deterministic scoring of scraped ratings).
 - *Contingent liabilities & RPTs* live only in the notes to accounts (not the XBRL), so the
   **Analysis section (LLM)** extracts them from the filing PDFs and flags anything material.
 
@@ -504,6 +521,13 @@ The LLM (**the configured LLM / the provider AI**) is used **only** here — eve
   shown with **source links to verify** (honest blank when not confidently found). The Mapper is required to
   always name real listed beneficiaries; empty themes are dropped rather than shown. Cadence is **monthly +
   on-demand** (the build is deep, ~10-15 min).
+- **The 🏢 inside view is third-party review data, not primary filings** — AmbitionBox employee reviews
+  are self-selected and self-reported, so it's a **culture/management *signal*, not a fact**; it's a
+  *supplement* to the financial verdict, never a substitute. Two calibrated risks: **entity resolution**
+  (a wrong name→company mapping mis-attributes a namesake's reviews — guarded by a brand-token name match +
+  a verified slug map, and unresolved names honestly say "no coverage"), and **thin samples** (grade
+  inflation is real, so <20 reviews isn't scored and the confidence tier is always shown). Scores lean on
+  the **gap vs the company's own industry**, so they compare like-for-like. Opt-in and best-effort.
 - **The LLM can be wrong** — it reads primary filings but is a language model; the verdict is a
   starting point, and the deterministic numbers above are the ground truth to check it against.
 

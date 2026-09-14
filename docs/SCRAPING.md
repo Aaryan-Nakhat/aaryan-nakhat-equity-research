@@ -174,6 +174,14 @@ verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
 - **Reddit** (`social.py::reddit_search`) — `old.reddit.com/search.json`; now 403s unauth → a
   process-lifetime circuit-breaker (`_reddit_dead`) skips it after the first block. **Twitter/X**
   (`social.py::twitter_search`) via nitter mirrors is similarly best-effort (mirrors mostly down).
+- **AmbitionBox** (`scrapers/ambitionbox.py`) — employee-review sentiment for the deep report's 🏢
+  inside view. A Next.js site behind bot protection → the **browser tier** (Camoufox) loads the company
+  page and reads the structured ratings straight out of the embedded **`__NEXT_DATA__`** JSON (overall +
+  7 sub-ratings + 1-5★ distribution + review count + industry average + CEO). Entity resolution (stock
+  name → right company) is the hard part: verified `_SLUG_MAP` → direct name-slug → search API
+  (`/api/v2/search?category=company` — its `url` field is the authoritative slug) with a strict
+  brand-token name-guard against namesakes. **Opt-in** (`EMPLOYER_REVIEWS_ENABLED`); a *signal*, not
+  primary DB data.
 - **Google Trends** (`scrapers/trends.py`) — feeds the ⛏️ Pickaxe demand radar (rising **"buy"**
   queries by consumer category + interest-over-time). Google Trends has **no official API** and
   plain-HTTP `pytrends` is **429-blocked instantly**, so this uses the **browser tier**, NSE-style:

@@ -364,6 +364,19 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   24h-cached sweep is far more likely to land clean than back-to-back runs. *Phase 2 (deferred):* mid-week
   urgent break-in (like Tailwind's); a curated seed of known demand→pickaxe chains for flagship reliability;
   a paid Trends/SerpApi source only if the browser tier proves too rate-limited in practice.
+- **🏢 Inside view — employee & management sentiment — ✅ shipped** (`scrapers/ambitionbox.py`,
+  `analysis/employer_sentiment.py`, wired into `deep_brief.build_deep_brief` after the smart-money block).
+  A new deep-report section scoring **employee morale + management quality** from **AmbitionBox** reviews
+  (India's #1 employer-review site). Browser tier (Camoufox) → the page's embedded `__NEXT_DATA__` JSON
+  (overall + 7 sub-ratings + 1-5★ distribution + review count + **industry average** + CEO). **Scale:**
+  two banded scores **A→E**, each **45% absolute / 55% peer-relative** (leans on the gap vs the company's
+  own industry, per the user); **Employee Sentiment** (overall + %detractor) + **Management Quality**
+  (`0.40·culture + 0.30·job-sec + 0.15·career + 0.15·satisfaction`); a **confidence gate** on review count
+  (<20 → not scored). **Entity resolution** (the hard part — name→right company, not a namesake): verified
+  `_SLUG_MAP` → direct name-slug → search API with a strict brand-token name-guard; unresolved → honest
+  "no coverage". Cached ~30d in `alert_state`; **opt-in** `EMPLOYER_REVIEWS_ENABLED`. Verified live
+  (example pharma 🟢🟢A/🟢B +0.20; a turnaround airline 🔴E/🔴E −0.44). *Next:* Glassdoor secondary cross-check; a
+  bot-stopped `backfill_employer_sentiment.py` to warm the whole watchlist.
 - **`help` command — ✅ shipped** (`email_bot._send_help`/`_HELP_SECTIONS`): email `help` → the full
   command menu, section by section as tables (Subject → what you get) + the auto-pushes + tips.
 - **Mailbox housekeeping — ✅ shipped** (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`): the

@@ -12,6 +12,7 @@ balance sheet and cash flow are present FY2023+ (older result XBRLs omit them).
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 
@@ -24,6 +25,7 @@ from equity_research.analysis import (forensic, fundamentals, ownership, quant, 
 from equity_research.analysis.fundamentals import load_annual
 from equity_research.reports import glossary
 
+log = logging.getLogger("equity-research.deep_brief")
 CR = 1e7
 
 
@@ -816,6 +818,11 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     L += _shp_block(con, symbol)                        # who owns it, classified (SHP)
     L += _ownership_changes_block(con, symbol)          # QoQ diff — who entered / exited / moved
     L += _smart_money_cost_block(con, symbol)           # their cost zone vs price → booking risk
+    try:                                                # 🏢 inside view — employee/management sentiment
+        from equity_research.analysis import employer_sentiment
+        L += employer_sentiment.section_lines(con, symbol)
+    except Exception:  # noqa: BLE001 — a best-effort signal must never break the report
+        log.debug("employer sentiment section skipped for %s", symbol, exc_info=True)
 
     # ===================== VALUATION + TECHNICAL (summary) =====================
     snap = valuation.snapshot(con, symbol, consolidated, shares_override=target_shares)

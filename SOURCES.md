@@ -37,6 +37,8 @@ machine, from the public sources below when **you** run it.
 | **PIB** (`pib.gov.in`) | Government press releases (policy radar) | Plain HTTP | Government of India content — generally free to use **with attribution** |
 | **US Federal Register** (`federalregister.gov`) | US rules/notices (Tailwind engine) | Official API | **Public domain** (US Government work) |
 | **Google News RSS** (`news.google.com`) | Headlines / links | RSS | For headlines and linking; do **not** republish full article text |
+| **Google Trends** (`trends.google.com`) | Rising "buy" demand queries + interest-over-time (Pickaxe) | Browser intercept | No official API; automated access restricted — best-effort, rate-limited |
+| **AmbitionBox** (`ambitionbox.com`) | Employee reviews → employee/management sentiment (inside view) | Browser tier (**opt-in**) | Terms restrict automated access. **OFF by default** — see *Employer-reviews opt-in* below |
 | **Reddit / X mirrors** (`reddit.com`, nitter mirrors) | Best-effort social signal | Plain HTTP | Reddit restricts scraping; mirrors are unofficial. Off / degraded by default |
 | **XBRL** (`xbrl.org`) | Taxonomy / spec for parsing filings | Plain HTTP | Open standard |
 
@@ -51,6 +53,18 @@ Because of that, this tier is **disabled by default**:
 # responsibility for complying with them (no redistribution of NSE data).
 NSE_SCRAPING_ENABLED=false
 ```
+
+## Employer-reviews opt-in (`EMPLOYER_REVIEWS_ENABLED`)
+
+The deep report's **🏢 inside view** (employee & management sentiment) reads AmbitionBox via the browser
+tier. Automated access is subject to AmbitionBox's Terms of Service, so this is **off by default**:
+
+```env
+# .env — set true ONLY for personal research, having reviewed AmbitionBox's terms.
+EMPLOYER_REVIEWS_ENABLED=false
+```
+
+Left `false`, `ambitionbox.fetch_company` returns `disabled` and the deep report simply omits the section.
 
 With it left `false`, NSE `/api` calls raise `NseScrapingDisabled` and the
 affected features degrade gracefully (empty result) rather than scraping. The

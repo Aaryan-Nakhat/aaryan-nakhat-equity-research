@@ -18,7 +18,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 
 | Email this | You get |
 |---|---|
-| `example power` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk** — inline **and as a PDF**. |
+| `example power` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk**, and a **🏢 inside view** (employee & management sentiment from AmbitionBox, graded A→E vs the company's own industry) — inline **and as a PDF**. |
 | `Reliance consolidated` / `Reliance standalone` | Same, forced to that financials basis (default auto-picks). |
 | reply `1` after a report | **Growth-triggers 1-pager** — forward catalysts, each with an estimated ₹cr / % business impact. |
 
