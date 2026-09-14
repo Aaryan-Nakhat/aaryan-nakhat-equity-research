@@ -684,7 +684,8 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
     ("📊 Stock deep report", "Just put a company name or NSE symbol in the Subject — the core report.", [
         ["`Infosys` (any company name or symbol)",
          "Full deep report: fundamentals, forensics (Altman / Beneish / Piotroski), sector-lens "
-         "valuation, technicals, shareholding + smart-money cost & profit-booking risk — with a PDF."],
+         "valuation, technicals, shareholding + smart-money cost & profit-booking risk, and an "
+         "employee & management sentiment read (🏢 inside view) — with a PDF."],
         ["`Reliance consolidated` / `Reliance standalone`",
          "Same report, forced to that financials basis (default auto-picks)."],
         ["reply `1` after a report",
