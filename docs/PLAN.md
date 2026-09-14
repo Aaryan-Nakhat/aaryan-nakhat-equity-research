@@ -331,6 +331,30 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   import-substitution / export-share mechanism); **three materiality reads** (supplier world-share +
   per-firm revenue-share & production-share, LLM estimates, 🟡 verify); **24h result cache** + `--latest`.
   *Next:* a paid X API key for reliable Twitter.
+- **⛏️ Pickaxe — surging Indian demand → the indirect beneficiary — ✅ shipped** (`analysis/pickaxe.py`,
+  `scrapers/trends.py`, `reports/pickaxe_brief.py`, `synthesize.pickaxe_analyst`/`pickaxe_beneficiaries`,
+  `email_bot._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed weekly Sat ≥18:00 via
+  `scan.pickaxe_due`/`mark_pickaxe`, `email_bot.maybe_pickaxe`). The **demand-side mirror of Tailwind** on
+  the **gold-rush "sell the pickaxes"** principle: a **four-tier agent pipeline** — ① Scout (Google Trends
+  rising "buy" queries by consumer category via `scrapers/trends.py` — the **browser tier** (Camoufox
+  loads the real explore page and **intercepts the widgetdata XHRs it fires**, like `nse_api`),
+  **best-effort + circuit-breaker**, merged with demand-surge Google News + Reddit) → ② Demand Analyst (LLM
+  triage → genuine **durable** demand themes, not fads; source-index-gated + co-trending confirmation) → ③
+  Value-Chain Mapper (Google-Search-grounded → Indian listed names in **direct + indirect "pickaxe"**
+  layers) → ④ Auditor (verify vs `equity_master` reusing `supply_chain._verify`/`_implausible`, attach
+  market-cap tier + **smart-money read** via `ownership.ownership_changes` + cyclicality tag, **rank
+  indirect-pickaxes-first**). Autonomous (you never name a theme); each theme **source-cited**; reply a
+  number → deep report; **24h cache** + `--latest`. Verified live end-to-end (LLM spine): premium-beer boom
+  → glass-bottle/crown-cap/keg makers (not the brewery); premium-smartphone surge → packaging/EMS; EV
+  demand → charging/powertrain/battery-chemicals; housing premiumisation → tiles/sanitaryware/glass.
+  **Honest caveat:** Google Trends has **no official API**. pytrends (plain HTTP) 429s immediately, so we
+  use the **browser tier** instead — Camoufox reaches it (proven: it pulls real interest-over-time +
+  rising "buy" queries with % change that pytrends never got past the bot wall for). But Google
+  **rate-limits by IP**, so a burst of sweeps trips the circuit-breaker and Trends degrades to `[]`; then
+  the **LLM/Search legs carry the pipeline** — a qualitative demand read, no hard % change. One weekly,
+  24h-cached sweep is far more likely to land clean than back-to-back runs. *Phase 2 (deferred):* mid-week
+  urgent break-in (like Tailwind's); a curated seed of known demand→pickaxe chains for flagship reliability;
+  a paid Trends/SerpApi source only if the browser tier proves too rate-limited in practice.
 - **`help` command — ✅ shipped** (`email_bot._send_help`/`_HELP_SECTIONS`): email `help` → the full
   command menu, section by section as tables (Subject → what you get) + the auto-pushes + tips.
 - **Mailbox housekeeping — ✅ shipped** (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`): the

@@ -56,6 +56,8 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `suppliers: <company>` *(e.g. `suppliers: BEL`)* | The smaller **listed** suppliers / ancillaries feeding that name. |
 | `tailwind` *(or `catalysts`)* | **💨 Tailwind** — global commodity shocks (export bans / quotas / tariffs across metals, agri, pharma, chemicals, energy…) → **verified Indian beneficiaries**, with the supplier's world-share and each firm's revenue-share & production share. **Cached 24h.** |
 | `tailwind --latest` *(or `fresh`)* | Same, but forces a brand-new live scan instead of the 24h-cached result. |
+| `pickaxe` *(or `demand`)* | **⛏️ Pickaxe** — surging Indian demand (Google-Trends 'buy' searches + demand-surge news) → the indirect **"sell the pickaxes"** listed beneficiaries (the feed/vaccine/ingredient/equipment/packaging names that ride a boom with less cyclicality), tagged ⛏️ indirect / 🎯 direct + cyclicality + who's accumulating. **Cached 24h.** |
+| `pickaxe --latest` | Same, but forces a brand-new live scan instead of the 24h-cached result. |
 
 **📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
 
@@ -68,7 +70,8 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 
 **📬 Arrives automatically** (no command): 🌅 **pre-market** (08:30, GIFT Nifty implied open) · 🔔
 **midday** (12:30, live) · 📊 **full digest** (18:00) · 📡 **screener movements** (Sat) · 🔄 **sector
-rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a big shock lands).
+rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a big shock lands) · ⛏️
+**Pickaxe** (Sat, surging demand → indirect beneficiaries).
 *Tip: add **consolidated** / **standalone** to a stock to force the basis; numbered menus stay live 24h.*
 
 ## How it works
@@ -137,6 +140,13 @@ source → formula → model).
   **export bans / quotas / tariffs / cuts** across **all commodity categories** (metals · agri · pharma
   inputs · chemicals · fertiliser · energy) and maps them to **verified Indian beneficiaries** — with the
   supplier's world-share and each firm's revenue-share & production share. Cached 24h; `--latest` forces fresh.
+- **⛏️ `pickaxe`** — the **demand-side mirror of Tailwind**: a four-tier agent pipeline (Scout = Google
+  Trends rising 'buy' searches + demand-surge news → LLM Demand-Analyst → Google-Search-grounded Value-Chain
+  Mapper → NSE-master Auditor) finds **surging Indian consumer/industrial demand** and maps each theme to the
+  **indirect "sell the pickaxes" beneficiaries** — the feed/vaccine/ingredient/equipment/packaging names that
+  ride a boom with **less cyclicality** than the crowded end-product — tagged ⛏️ indirect / 🎯 direct +
+  cyclicality + who's accumulating. Google Trends is best-effort (no official API); when it's blocked the read
+  is LLM/Search-driven. Cached 24h; `--latest` forces fresh.
 - **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
   (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
   alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI
@@ -159,8 +169,8 @@ source → formula → model).
 - **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
   FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on
-  live data), and the **weekly** screener-movements / sector-rotation / **💨 Tailwind** (Sat) + a
-  **mid-week urgent** Tailwind break-in when a big shock lands.
+  live data), and the **weekly** screener-movements / sector-rotation / **💨 Tailwind** / **⛏️ Pickaxe**
+  (Sat) + a **mid-week urgent** Tailwind break-in when a big shock lands.
 - **Delivery** — email and/or Telegram via the `CHANNELS` flag; **`help`** returns the whole command menu;
   the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
   mail untouched).

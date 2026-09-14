@@ -874,6 +874,180 @@ def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict
     return out
 
 
+# ── ⛏️ Pickaxe — demand-side idea engine (see analysis/pickaxe.py) ──
+_PICKAXE_ANALYST_SYS = """You are a consumer / demand-trend analyst for INDIAN equities. You are \
+given a numbered list of recent demand signals — rising "buy <product>" search queries (with their \
+Google-Trends rise %), trending searches, Reddit / news chatter about products whose demand or \
+prices are surging in India — plus a reference list of consumer categories. Your job: pick out the \
+signals that describe a GENUINE, DURABLE, INVESTABLE surge in Indian consumer/industrial demand — a \
+rising secular theme, not a passing fad.
+
+A real theme = demand that is structurally growing (rising incomes, health/fitness wave, \
+premiumisation, electrification, formalisation, import-substitution pull) and broad enough that \
+LISTED companies ride it. RUTHLESSLY REJECT: one-off news spikes, festival / seasonal / exam / \
+election / cricket-event bumps, a single viral product, celebrity/scam/controversy searches, and \
+anything with no plausible listed-equity angle in India.
+
+For each theme, also list the CO-TRENDING terms that CONFIRM it (e.g. a "protein" surge is \
+corroborated by "whey", "creatine", "protein bar"; a "treadmill" surge by "home gym", "dumbbells"). \
+A theme backed by several co-rising terms is a stronger signal than a lone query.
+
+Reply with ONLY a JSON array (no markdown, no prose). One object per DISTINCT theme (merge duplicate \
+signals of the same theme into one, citing the single best source):
+[{"theme":"<the demand theme in a few words, e.g. 'home fitness equipment','protein / sports \
+nutrition','pet care','solar rooftop'>",
+  "category":"<the consumer category it sits in, e.g. 'Health & Fitness','Food & Drink'>",
+  "driver":"<one line: WHY demand is rising — the structural reason>",
+  "cotrends":["<co-rising term 1>","<term 2>"],
+  "india_supply":"imported|domestic|mixed",
+  "durability":"structural|emerging|faddish",
+  "headline":"<one crisp plain-English line: what is surging and why it matters>",
+  "source_idx":<the NUMBER of the single best signal above that evidences this — integer>}]
+
+HARD RULES: include a theme ONLY if a numbered signal actually evidences it — set "source_idx" to \
+that signal's number (never invent one; the caller maps the index to the real source). Prefer \
+"structural"/"emerging" over "faddish" (drop pure fads). 3-7 themes max, strongest first. If \
+nothing genuine qualifies, reply exactly []."""
+
+
+def pickaxe_analyst(signals: list[dict], *, categories: list[str],
+                    model: str = MODEL) -> list[dict]:
+    """Tier ② — triage raw demand signals into genuine, durable India demand THEMES. ``signals`` is
+    ``[{title, url, source, published}, …]`` (news/Reddit/Trends rows normalised to a title + url);
+    ``categories`` is the reference consumer-category list. Returns
+    ``[{theme, category, driver, cotrends, india_supply, durability, headline, source_url,
+    source_name}]`` — ``source_url`` resolved back to the real signal. ``[]`` on nothing/failure.
+    Never raises."""
+    if not signals:
+        return []
+    numbered = "\n".join(f"{i}. [{s.get('source', '')}] {s.get('title', '')}"
+                         for i, s in enumerate(signals, 1))
+    prompt = (f"CONSUMER CATEGORIES (reference, not exhaustive): {', '.join(categories)}\n\n"
+              f"DEMAND SIGNALS:\n{numbered}")
+    try:
+        resp = _client().models.generate_content(
+            model=model, contents=[types.Part.from_text(text=prompt)],
+            config=types.GenerateContentConfig(
+                system_instruction=_PICKAXE_ANALYST_SYS, response_mime_type="application/json"))
+        text = (resp.text or "").strip()
+    except Exception:  # noqa: BLE001 — best-effort, never break the pipeline
+        return []
+    m = re.search(r"\[.*\]", text, re.S)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return []
+    out = []
+    for d in data if isinstance(data, list) else []:
+        if not (isinstance(d, dict) and d.get("theme")):
+            continue
+        try:
+            src = signals[int(d.get("source_idx")) - 1]        # map index → the real fetched URL
+        except (TypeError, ValueError, IndexError):
+            continue                                            # no valid source → drop (anti-hallucination)
+        out.append({
+            "theme": str(d.get("theme", "")).strip(),
+            "category": str(d.get("category", "")).strip(),
+            "driver": str(d.get("driver", "")).strip(),
+            "cotrends": [str(t).strip() for t in (d.get("cotrends") or []) if str(t).strip()],
+            "india_supply": str(d.get("india_supply", "")).strip(),
+            "durability": str(d.get("durability", "")).strip().lower(),
+            "headline": str(d.get("headline", "")).strip(),
+            "source_url": src.get("url", ""),
+            "source_name": src.get("source", ""),
+        })
+    return out
+
+
+_PICKAXE_BEN_SYS = """You map a surging INDIAN consumer/industrial demand THEME to the Indian LISTED \
+companies that stand to benefit — and, crucially, you find the NON-OBVIOUS "sell-the-pickaxes" plays, \
+not just the obvious brand.
+
+The gold-rush principle: when demand for a product booms, the maker of the product is often the \
+crowded, cyclical, low-margin bet (in a gold rush, digging for gold is risky) — while the company \
+that supplies the BOOM (the picks, shovels and jeans) has steadier, higher-quality earnings. \
+Example: an EGG / poultry demand boom is cyclical and margin-volatile for egg producers, but the \
+listed maker of POULTRY VACCINES / animal-feed / feed-additives rides the same wave with far less \
+cyclicality. ALWAYS hunt for that indirect beneficiary.
+
+You are given a DEMAND THEME. Using Google Search, return the Indian LISTED companies in TWO layers:
+- layer "direct" — companies that make/sell the product itself (tag their cyclicality honestly); and
+- layer "indirect" — the arms-dealers to the boom: makers of the ingredients, inputs, equipment, \
+packaging, cold-chain/logistics, vaccines/feed, enabling tech, or distribution that GROW WITH the \
+theme but are a step removed from the volatile end-product. Find AT LEAST as many indirect as direct.
+
+For each return: "name" (the company), "ticker" (its NSE symbol if confident, else ""), "role" (WHAT \
+it makes/does — e.g. 'whey-protein & nutraceutical ingredients', 'poultry vaccines', 'home-fitness \
+equipment brand'), "why" (one line: the specific link to THIS theme), "layer" ("direct"|"indirect"), \
+"cyclicality" ("low"|"medium"|"high" — how volatile/cyclical this business's earnings are), and — \
+best-effort, grounded in filings — "revenue_share" (% of the company's revenue from this) and \
+"market_share" (its rough share/rank in it).
+
+HARD RULES:
+- ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, established** business \
+in this good/input. If unsure it's listed AND the link is real, OMIT it.
+- **Never include a company just because its NAME sounds relevant.** Match on the REAL business, \
+verified via search — not the name or a guessed ticker.
+- **The company must ALREADY produce/sell the good/input** with real existing revenue. Do NOT include \
+a company that merely *announced plans*, *bid*, signed an *MoU*, or expressed *intent*. If the only \
+link is a future plan, OMIT it.
+- **Strongly prefer NON-OBVIOUS small- and mid-cap pure-plays** where this theme actually moves \
+earnings; AVOID index heavyweights / large conglomerates where it's a rounding error. The value is \
+the name the market hasn't crowded into.
+- "revenue_share"/"market_share" are hard — ground them in segment disclosures; if not reasonably \
+confident, return "" (an honest blank is REQUIRED — never fabricate a number).
+- Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
+- If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — a valid, \
+honest answer. 0-8 names. Return ONLY a JSON array of \
+{name, ticker, role, why, layer, cyclicality, revenue_share, market_share}. No prose."""
+
+
+def pickaxe_beneficiaries(theme: dict, *, model: str = MODEL) -> list[dict]:
+    """Tier ③ — Google-Search-grounded map from ONE demand theme to Indian listed beneficiaries,
+    in a direct + indirect ("sell the pickaxes") split. Returns
+    ``[{name, ticker, role, why, layer, cyclicality, revenue_share, market_share}]`` (the caller
+    verifies each vs the NSE master and drops unlisted/implausible names). ``[]`` on any failure.
+    Never raises."""
+    cotrends = ", ".join(theme.get("cotrends") or [])
+    prompt = (f"DEMAND THEME: {theme.get('theme', '')} (category: {theme.get('category', '')}). "
+              f"Driver: {theme.get('driver', '')}. "
+              + (f"Corroborating co-trending terms: {cotrends}. " if cotrends else "")
+              + f"India supply: {theme.get('india_supply', '')}. "
+              f"Context: {theme.get('headline', '')}\n\n"
+              f"List the Indian LISTED beneficiaries in BOTH layers (direct AND the indirect "
+              f"'pickaxe' plays), with layer, cyclicality, revenue_share & market_share.")
+    try:
+        r = _client().models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_PICKAXE_BEN_SYS,
+                tools=[types.Tool(google_search=types.GoogleSearch())]))
+        text = (r.text or "").strip()
+    except Exception:  # noqa: BLE001
+        return []
+    m = re.search(r"\[.*\]", text, re.DOTALL)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return []
+    out = []
+    for d in data if isinstance(data, list) else []:
+        if isinstance(d, dict) and d.get("name"):
+            out.append({"name": str(d["name"]).strip(),
+                        "ticker": str(d.get("ticker", "")).strip().upper(),
+                        "role": str(d.get("role", "")).strip(),
+                        "why": str(d.get("why", "")).strip(),
+                        "layer": str(d.get("layer", "")).strip().lower(),
+                        "cyclicality": str(d.get("cyclicality", "")).strip().lower(),
+                        "revenue_share": str(d.get("revenue_share", "")).strip(),
+                        "market_share": str(d.get("market_share", "")).strip()})
+    return out
+
+
 _FILING_SYS = """You are a forensic equity analyst writing the INLINE read of ONE company \
 filing/disclosure for an Indian listed company — quarterly results, a concall transcript, an \
 investor presentation, an annual report, an order/contract win, an acquisition, a credit-rating \

@@ -202,14 +202,45 @@ URGENT  gate: trading day Mon–Fri, ≥18:00 IST, once/day (scan.already_tailwi
     un-forced answer. Reddit is best-effort; Google News carries global sourcing, Federal Register the US leg.)
 ```
 
+## Flow H — Push: ⛏️ Pickaxe surging-demand radar (weekly Sat) + on-demand `pickaxe`
+
+```
+WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.pickaxe_due) — email_bot.maybe_pickaxe
+        │
+        ▼  pickaxe.run_pickaxe() — the DEMAND-SIDE mirror of Tailwind, a FOUR-TIER agent pipeline:
+              ① SCOUT   pickaxe._scout_signals — Google Trends rising "buy" queries by consumer
+                        category (scrapers/trends.py — the BROWSER TIER: Camoufox loads the real
+                        explore page and INTERCEPTS the widgetdata XHRs it fires, like nse_api;
+                        BEST-EFFORT + circuit-broken, Google rate-limits by IP → LLM path carries it),
+                        MERGED with demand-surge / price-hike Google News (+ Reddit) via scrapers/social.py
+              ② ANALYST synthesize.pickaxe_analyst — triage signals → genuine, DURABLE demand THEMES
+                        (reject fads/seasonal); returns the source SIGNAL INDEX not a free URL (anti-
+                        hallucination), with co-trending confirmation terms + india_supply + durability
+              ③ MAPPER  synthesize.pickaxe_beneficiaries — Google-Search-grounded → Indian listed names
+                        in TWO layers: direct (makes the product) + INDIRECT "pickaxe" (the arms-dealer
+                        to the boom — feed/vaccine/ingredient/equipment/packaging/logistics)
+              ④ AUDITOR pickaxe.auditor — verify each vs equity_master (reuses supply_chain._verify /
+                        _implausible), attach market-cap tier + a smart-money read (ownership.ownership_
+                        changes) + cyclicality tag, flag watchlist, RANK so indirect pickaxes surface first
+        ▼  sorted: watchlist → indirect-before-direct → lower-cyclicality → accumulating → smaller-cap
+        →  pickaxe_brief.build_pickaxe_report() → ⛏️ section (each theme + SOURCE LINK + verified names
+              tagged ⛏️ pickaxe / 🎯 direct / cyclicality / 📈 accumulating / ⭐ watchlist). Cached 24h.
+        ▼
+   ⛏️ ONE "Pickaxe" email (also on-demand via `pickaxe`, `--latest` forces fresh); week-marker advances
+        only after a successful send (or a clean empty result). Reply a number → that stock's deep report.
+
+   (An idea generator — every theme is source-cited; "no clean listed beneficiary" is a valid, un-forced
+    answer. Google Trends is best-effort — when blocked, the LLM/Search Analyst+Mapper carry the pipeline.)
+```
+
 ## Component → file map
 
 | Layer | Does | Files |
 |---|---|---|
-| **Scrape** | pull primary data (anti-bot handled) + Tailwind signals | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,nseix,markets_global,fbil,mcx,amfi,mf_holdings,ipo,social,fedregister}.py`, `common/http.py` |
+| **Scrape** | pull primary data (anti-bot handled) + Tailwind signals + Pickaxe Google-Trends demand signals | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,nseix,markets_global,fbil,mcx,amfi,mf_holdings,ipo,social,fedregister,trends}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
-| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,investors,tailwind}.py` |
-| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
+| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,investors,tailwind,pickaxe}.py` |
+| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **the provider** (service account) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind, mid-week urgent Tailwind; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·holdco·investors·smallcap·technical·policy`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`levels:`/`help`; opt-in growth-triggers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Pickaxe, mid-week urgent Tailwind; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·holdco·investors·smallcap·technical·policy`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in growth-triggers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

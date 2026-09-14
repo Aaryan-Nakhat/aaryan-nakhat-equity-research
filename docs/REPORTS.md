@@ -829,12 +829,58 @@ instead of a misleading vs-history read); their within-sector ranking still work
 (life-insurance accounting doesn't fit the ROA/NIM model). Capital Goods has no NSE constituent CSV, so it
 ranks the broad macro-industry set rather than the ~15-name index.
 
+## ⛏️ Pickaxe — surging demand → indirect beneficiary (`analysis/pickaxe.py`, `reports/pickaxe_brief.py`)
+
+The **demand-side mirror of 💨 Tailwind**. Tailwind works the *supply* side (a supplier restricts a
+material → who must keep buying); Pickaxe works the *demand* side on the **gold-rush principle**: when
+demand for a product booms, the maker of the product is often the crowded, cyclical, low-margin bet, while
+the company that **supplies the boom** — the picks and shovels — rides the same wave with steadier
+earnings and is usually still off the mainstream radar. An egg/poultry boom is cyclical for egg producers,
+but the listed maker of **poultry vaccines / feed additives** benefits with far less cyclicality. It
+surfaces these **autonomously** — you never name a theme. On-demand **`pickaxe`** (aliases `demand`,
+`buy trends`) and **pushed weekly (Saturday ≥18:00 IST**, `scan.pickaxe_due`/`mark_pickaxe`,
+`email_bot.maybe_pickaxe`).
+
+A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tailwind):
+1. **① Scout** (`pickaxe._scout_signals`) — **Google Trends** rising **"buy"** queries by consumer
+   category (`scrapers/trends.py`) **merged with** demand-surge / price-hike **Google News** (+ Reddit, both
+   via `scrapers/social.py`). Google Trends has **no official API** and plain-HTTP pytrends 429s instantly,
+   so trends.py uses the project's **browser tier** (scrapling `StealthyFetcher` / Camoufox) exactly like
+   `nse_api`: it loads the real *explore* page for a query and **intercepts the `widgetdata` XHR responses
+   the page fires itself** to render its charts (real tokens/cookies/timing) — which reaches data pytrends
+   never got past the bot wall for (proven: interest-over-time + rising "buy" queries with % change).
+   Google still **rate-limits by IP**, so it's **best-effort with a per-process circuit-breaker** (like
+   Reddit/X in Tailwind) — when throttled the pipeline runs on the LLM/Search legs alone (a qualitative
+   demand read, no hard % change). One weekly, 24h-cached sweep lands clean far more often than bursts.
+2. **② Demand Analyst** (`synthesize.pickaxe_analyst`) — triages signals into **genuine, durable,
+   investable demand THEMES**, rejecting fads/seasonal/one-off spikes; each tagged
+   category/driver/**co-trending confirmation terms**/india_supply/durability. Returns the **index of the
+   evidencing signal**, not a free URL (the anti-hallucination gate; unsourced themes dropped).
+3. **③ Value-Chain Mapper** (`synthesize.pickaxe_beneficiaries`) — **Google-Search-grounded** per theme →
+   Indian listed names in **two layers**: **direct** (makes the product, cyclicality tagged) and
+   **indirect "pickaxe"** (the arms-dealer to the boom — ingredient/feed/vaccine/equipment/packaging/
+   logistics), asked for at least as many indirect as direct.
+4. **④ Auditor** (`pickaxe.auditor`) — verifies every name against `equity_master` (reuses
+   `supply_chain._verify`/`_implausible`/`_BLOCKLIST`), attaches a **market-cap tier** (`tailwind._size_word`),
+   a **smart-money read** (`ownership.ownership_changes` → 📈 accumulating / 📉 distributing) and the
+   direct/indirect + cyclicality tags, flags watchlist hits ⭐, and **ranks so the non-obvious indirect
+   pickaxes surface first**: watchlist → indirect-before-direct → lower-cyclicality → accumulating →
+   smaller-cap → name.
+
+Output: an ⛏️ section, each theme carrying its **source link**, co-trending terms, and a numbered table of
+verified names (⛏️ pickaxe / 🎯 direct · cyclicality · smart-money · size · ⭐ watchlist) — reply a number
+→ that stock's deep report. On-demand `pickaxe` is **cached 24h** (`scan.pickaxe_cache_get`/`put`);
+**`pickaxe --latest`** forces a fresh live scan. **Honest by design:** an idea *generator*, not a call —
+every theme source-cited, "no clean listed beneficiary" is a valid un-forced answer, AI names stay
+🟡-flagged. **Phase 2 (deferred):** a mid-week urgent break-in (like Tailwind's), a curated seed of known
+demand→pickaxe chains, and a paid Trends/SerpApi source only if the browser tier proves too rate-limited.
+
 ## `help` — the command menu (`email_bot._send_help`)
 
 Email **`help`** (aliases `commands` / `menu` / `?` / `what can you do`) → the **complete command
 surface, section by section, each as a table** (Subject → what you get): stock deep report, portfolio
 (`booking`/`sell`), the six screeners, sector (`<name>`/`list`/`rotation`), `investor:`, `suppliers:`,
-`tailwind` (+`--latest`), `policy`, `levels:`, IPOs, funds — plus the scheduled auto-pushes and usage
+`tailwind` (+`--latest`), `pickaxe` (+`--latest`), `policy`, `levels:`, IPOs, funds — plus the scheduled auto-pushes and usage
 tips. The content lives in `_HELP_SECTIONS` right next to the dispatch so it can't drift; the parser is
 anchored so `help` never shadows a real stock (e.g. "helping hand ltd" still resolves as a company).
 

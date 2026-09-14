@@ -459,6 +459,70 @@ def tailwind_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = Non
             con.close()
 
 
+def pickaxe_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True once per ISO week — the weekly ⛏️ Pickaxe demand-theme push hasn't fired this week."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_pickaxe_week") != _iso_week(datetime.now(_IST))
+    finally:
+        if own:
+            con.close()
+
+
+def mark_pickaxe(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_pickaxe_week", _iso_week(datetime.now(_IST)))
+    finally:
+        if own:
+            con.close()
+
+
+_PICKAXE_CACHE_TTL_H = 24
+
+
+def pickaxe_cache_get(con: duckdb.DuckDBPyConnection | None = None) -> dict | None:
+    """Return the last full Pickaxe report if it's younger than 24h (so a re-run within a day reuses
+    it — same data, no re-fetch, no token cost), else None. ``{report, cached_at}``."""
+    own = con is None
+    con = con or connect()
+    try:
+        raw = _meta(con, "pickaxe_cache")
+        if not raw:
+            return None
+        try:
+            blob = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+        ts = blob.get("ts")
+        if not ts:
+            return None
+        try:
+            age_h = (datetime.now(_IST) - datetime.fromisoformat(ts)).total_seconds() / 3600
+        except (ValueError, TypeError):
+            return None
+        if age_h > _PICKAXE_CACHE_TTL_H:
+            return None
+        return {"report": blob.get("report"), "cached_at": ts}
+    finally:
+        if own:
+            con.close()
+
+
+def pickaxe_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Store a freshly-built Pickaxe report (markdown + picks + keys) with a timestamp."""
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "pickaxe_cache",
+                  json.dumps({"ts": datetime.now(_IST).isoformat(), "report": report}))
+    finally:
+        if own:
+            con.close()
+
+
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
     """Ingest the latest available trading day's full EOD set (idempotent)."""
     today = date.today()

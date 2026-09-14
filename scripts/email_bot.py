@@ -43,6 +43,7 @@ from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
 from equity_research.reports import md  # noqa: E402
+from equity_research.reports import pickaxe_brief  # noqa: E402
 from equity_research.reports import premarket  # noqa: E402
 from equity_research.reports import sector_brief  # noqa: E402
 from equity_research.reports import tailwind_brief  # noqa: E402
@@ -553,8 +554,16 @@ def _tailwind_query(subject: str) -> bool:
                          r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
 
 
+def _pickaxe_query(subject: str) -> bool:
+    """True for a demand-side / Pickaxe request ('pickaxe', 'demand', 'demand:', 'demand surge',
+    'trends', 'buy trends'), optionally with a trailing '--latest' / 'fresh' flag."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:pickaxe|pickaxes|demand(?:\s*surge(?:s)?)?|"
+                         r"buy\s*trends?|trends?)\s*[:\-]?\s*"
+                         r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
+
+
 def _wants_latest(subject: str) -> bool:
-    """True if a Tailwind request asks to bypass the 24h cache ('--latest' / 'latest' / 'fresh')."""
+    """True if a Tailwind / Pickaxe request asks to bypass the 24h cache ('--latest' / 'fresh')."""
     return bool(re.search(r"(?:--?\s*)?\b(?:latest|fresh|refresh)\b", subject or "", flags=re.I))
 
 
@@ -718,6 +727,15 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`tailwind --latest` (or `tailwind fresh`)",
          "Same, but forces a brand-new live scan instead of the 24h-cached result."],
     ]),
+    ("⛏️ Surging demand (Pickaxe)", "Cached for 24h — add `--latest` to force a fresh scan.", [
+        ["`pickaxe` (or `demand`)",
+         "India's rising demand (Google-Trends 'buy' searches + demand-surge news) → the indirect "
+         "**'sell the pickaxes'** listed beneficiaries — the feed/vaccine/ingredient/equipment names "
+         "that ride a boom with less cyclicality, not the crowded end-product. Tagged ⛏️ indirect / "
+         "🎯 direct + cyclicality + who's accumulating. Reply a number → deep report."],
+        ["`pickaxe --latest`",
+         "Same, but forces a brand-new live scan instead of the 24h-cached result."],
+    ]),
     ("🏛️ Government policy radar", "", [
         ["`policy` (or `schemes`)",
          "Recent official (PIB) schemes / policies → likely listed beneficiaries (watchlist flagged). "
@@ -744,6 +762,7 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["📡 Screener movements (Sat 18:00)", "What newly crossed the screens this week."],
         ["🔄 Sector rotation (Sat 18:00)", "Sector leaders / laggards / value-turning."],
         ["💨 Tailwind (Sat + mid-week urgent)", "Global supply-shock → Indian beneficiaries."],
+        ["⛏️ Pickaxe (Sat 18:00)", "Surging Indian demand → indirect 'sell the pickaxes' beneficiaries."],
     ]),
 ]
 
@@ -907,6 +926,46 @@ def _send_tailwind(req: EmailRequest) -> None:
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent Tailwind (%d catalysts, %d picks, cache=%s) to %s",
              rep["n_catalysts"], len(rep["picks"]), rep.get("from_cache", False), req.sender)
+
+
+def _send_pickaxe(req: EmailRequest) -> None:
+    """⛏️ Pickaxe — surging Indian demand → the indirect 'sell the pickaxes' listed beneficiary;
+    reply → deep report. Serves the 24h cache by default; `pickaxe --latest` forces a live re-scan."""
+    latest = _wants_latest(req.subject)
+    log.info("running Pickaxe (req from %s, latest=%s)", req.sender, latest)
+    _reply_text(req, "📩 Got it — scanning India's rising demand and the indirect names that ride it. "
+                     "Forcing a fresh live scan (~2–4 min); it lands in this thread."
+                     if latest else
+                     "📩 Got it — pulling the demand-surge scan (cached for 24h, so this is quick "
+                     "unless it's stale; add `--latest` to force a fresh live scan). Lands in this "
+                     "thread shortly.")
+    con = connect()
+    try:
+        rep = _screen_run(lambda: pickaxe_brief.build_pickaxe_report(con, use_cache=not latest),
+                          timeout=420)
+    finally:
+        con.close()
+    if not rep:
+        _reply_text(req, "No clean surging-demand → Indian-beneficiary setup surfaced right now "
+                         "(nothing durable crossed the bar, or no verifiable listed name). That's a "
+                         "valid answer — I don't force one. Try again in a day or two.")
+        return
+    body = rep["markdown"]
+    if rep.get("from_cache"):                                  # note that this is a reused (not live) scan
+        stamp = ""
+        try:
+            ca = datetime.fromisoformat(rep["cached_at"]).astimezone(IST)
+            stamp = f" from {ca:%d-%b %H:%M}"
+        except Exception:  # noqa: BLE001
+            pass
+        body = (f"> ♻️ _Cached scan{stamp} (within 24h — same data as the last run). Reply "
+                f"`pickaxe --latest` for a fresh live scan._\n\n" + body)
+    _set_pending(req, "pickaxe", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Pickaxe"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent Pickaxe (%d themes, %d picks, cache=%s) to %s",
+             rep["n_themes"], len(rep["picks"]), rep.get("from_cache", False), req.sender)
 
 
 def _send_suppliers(req: EmailRequest, query: str) -> None:
@@ -1595,6 +1654,11 @@ def handle_request(req: EmailRequest) -> None:
         _send_tailwind(req)
         return
 
+    # 1e-sept) ⛏️ Pickaxe — surging Indian demand → indirect beneficiary ('pickaxe', 'demand')
+    if _pickaxe_query(req.subject):
+        _send_pickaxe(req)
+        return
+
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
     lq = _levels_query(req.subject)
     if lq:
@@ -1890,6 +1954,41 @@ def maybe_tailwind_urgent() -> None:
     log.info("urgent Tailwind break-in sent to %s (%d catalysts)", to, rep["n_catalysts"])
 
 
+def maybe_pickaxe() -> None:
+    """Fire the weekly ⛏️ Pickaxe push once per ISO week (Saturday ≥18:00 IST): scout India's rising
+    demand → the indirect 'sell the pickaxes' beneficiaries. Runs the full 4-tier pipeline (demand
+    scout → analyst → grounded mapper → auditor), so it's slow (~2–4 min) but weekly. No email if
+    nothing durable surfaced; the week-marker advances only after a successful send (or a clean empty
+    result), so a delivery failure re-surfaces it next heartbeat."""
+    now = datetime.now(IST)
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening, weekly
+        return
+    if not scan.pickaxe_due():
+        return
+    log.info("weekly Pickaxe push firing")
+    con = connect()
+    try:
+        rep = pickaxe_brief.build_pickaxe_report(con)
+    except Exception:  # noqa: BLE001
+        log.exception("pickaxe build failed")               # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    if not rep:
+        scan.mark_pickaxe()                                 # nothing durable this week — don't retry
+        log.info("pickaxe: nothing surfaced this week — no email")
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send Pickaxe")
+        return
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"⛏️ Pickaxe — {today}", rep["markdown"], to=to,
+                        html=emailer.body_html(rep["markdown"], "Pickaxe"))
+    scan.mark_pickaxe()                                     # advance week-marker ONLY after send
+    log.info("weekly Pickaxe push sent to %s (%d themes)", to, rep["n_themes"])
+
+
 _last_mail_sweep: datetime | None = None
 
 
@@ -1953,6 +2052,7 @@ def main() -> None:
                 maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
                 maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
                 maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
+                maybe_pickaxe()      # heartbeat: weekly surging-demand → indirect beneficiaries (Sat ≥18:00)
                 maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
