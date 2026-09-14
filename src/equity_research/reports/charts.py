@@ -35,6 +35,36 @@ def _png(fig) -> bytes:
     return buf.getvalue()
 
 
+def pickaxe_trend_chart(term: str, detail: dict) -> tuple[str, bytes] | None:
+    """A Google-Trends interest-over-time line for ⛏️ Pickaxe: search interest (0-100) over the last
+    ~12 months for ``term`` in India, with the rise annotated. ``detail`` is a
+    ``scrapers.trends`` summary ({series, slope_pct, latest, avg, ...}). ``None`` if the series is
+    too thin. Caption names the term + the % rise."""
+    series = (detail or {}).get("series") or []
+    if len(series) < 6:
+        return None
+    x = list(range(len(series)))
+    fig, ax = plt.subplots(figsize=(7.2, 2.6))
+    ax.plot(x, series, color=_BLUE, lw=1.8)
+    ax.fill_between(x, series, color=_BLUE, alpha=0.10)
+    avg = detail.get("avg")
+    if avg is not None:
+        ax.axhline(avg, color=_GREY, lw=0.9, ls="--", label=f"12-mo avg {avg:g}")
+    ax.set_ylim(0, 105)
+    ax.set_ylabel("search interest")
+    ax.set_xticks([0, len(series) - 1])
+    ax.set_xticklabels(["~12 mo ago", "now"])
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    slope = detail.get("slope_pct")
+    rise = f"  ·  recent vs prior: {'+' if (slope or 0) >= 0 else ''}{slope}%" if slope is not None else ""
+    ax.set_title(f"Google Trends (India): “{term}”{rise}", fontsize=10, loc="left")
+    cap = (f"“{term}” search interest, India, last 12 months (0-100)"
+           + (f" — recent quarter {'+' if (slope or 0) >= 0 else ''}{slope}% vs the prior period"
+              if slope is not None else ""))
+    return cap, _png(fig)
+
+
 def fund_charts(con: duckdb.DuckDBPyConnection, scheme_code: int) -> list[tuple[str, bytes]]:
     """Charts for a mutual-fund report: NAV growth (₹100 rebased) + the rolling
     1-year return distribution. Each is skipped when its data is too thin."""

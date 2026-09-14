@@ -867,12 +867,28 @@ A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tai
    pickaxes surface first**: watchlist → indirect-before-direct → lower-cyclicality → accumulating →
    smaller-cap → name.
 
-Output: an ⛏️ section, each theme carrying its **source link**, co-trending terms, and a numbered table of
-verified names (⛏️ pickaxe / 🎯 direct · cyclicality · smart-money · size · ⭐ watchlist) — reply a number
-→ that stock's deep report. On-demand `pickaxe` is **cached 24h** (`scan.pickaxe_cache_get`/`put`);
-**`pickaxe --latest`** forces a fresh live scan. **Honest by design:** an idea *generator*, not a call —
-every theme source-cited, "no clean listed beneficiary" is a valid un-forced answer, AI names stay
-🟡-flagged. **Phase 2 (deferred):** a mid-week urgent break-in (like Tailwind's), a curated seed of known
+**Deep per-name enrichment** (`pickaxe.enrich_report`/`enrich_pick`) — every verified name is then filled
+out: `pipeline.ensure_ingested` lands its financials, then **exact quant** from our own engines
+(`valuation.snapshot` → price / P/E / P/B / mcap; `sector.sector_valuation` → **P/E vs its sector median**;
+`technical.levels` → nearest **support / resistance** + trend), plus a **filing-grounded forward
+projection** (`synthesize.pickaxe_projection`, Google-Search-grounded over the company's annual report /
+concall / investor deck) → **revenue-share now → next FY, expected growth, and a one-line driver, each with
+a source link**. Blanks where a figure isn't confidently found (never fabricated).
+
+**Google-Trends chart per theme** — `trends.interest_details` (one browser session for all theme terms)
+feeds `charts.pickaxe_trend_chart`, a 12-month interest-over-time line with the recent-quarter rise; the
+metric + a unicode sparkline show inline, the chart rides in the **attached PDF** (`pdf.report_to_pdf`).
+
+Output: an ⛏️ section, each theme carrying its **Trends line + source**, co-trending terms, and its
+beneficiaries as **readable per-stock blocks** (quant · revenue-from-theme now→next · growth · sources ·
+why) — ⛏️ pickaxe-first, then 🎯 direct; reply a number → that stock's full deep report. **Delivery is
+async:** the full build (ingest + a grounded read per name + charts) is ~10-15 min, so the on-demand
+`pickaxe` **acks instantly and delivers the report + PDF from a background thread** (`email_bot._pickaxe_worker`,
+a single-build lock) when ready; likewise the **weekly Saturday push** (`maybe_pickaxe`) runs off-heartbeat.
+**Cached 24h** (`scan.pickaxe_cache_get`/`put`); **`pickaxe --latest`** forces fresh. **Honest by design:**
+an idea *generator*, not a call — every theme source-cited, AI names 🟡-flagged, and a **genuine demand
+theme always has listed beneficiaries** (the mapper is required to name them; an empty theme is never
+surfaced). **Phase 2 (deferred):** a mid-week urgent break-in (like Tailwind's), a curated seed of known
 demand→pickaxe chains, and a paid Trends/SerpApi source only if the browser tier proves too rate-limited.
 
 ## `help` — the command menu (`email_bot._send_help`)

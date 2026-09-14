@@ -56,7 +56,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `suppliers: <company>` *(e.g. `suppliers: BEL`)* | The smaller **listed** suppliers / ancillaries feeding that name. |
 | `tailwind` *(or `catalysts`)* | **💨 Tailwind** — global commodity shocks (export bans / quotas / tariffs across metals, agri, pharma, chemicals, energy…) → **verified Indian beneficiaries**, with the supplier's world-share and each firm's revenue-share & production share. **Cached 24h.** |
 | `tailwind --latest` *(or `fresh`)* | Same, but forces a brand-new live scan instead of the 24h-cached result. |
-| `pickaxe` *(or `demand`)* | **⛏️ Pickaxe** — surging Indian demand (Google-Trends 'buy' searches + demand-surge news) → the indirect **"sell the pickaxes"** listed beneficiaries (the feed/vaccine/ingredient/equipment/packaging names that ride a boom with less cyclicality), tagged ⛏️ indirect / 🎯 direct + cyclicality + who's accumulating. **Cached 24h.** |
+| `pickaxe` *(or `demand`)* | **⛏️ Pickaxe** — surging Indian demand (Google-Trends 'buy' searches + demand-surge news) → the indirect **"sell the pickaxes"** listed beneficiaries + the direct plays. Each name carries **exact price / P/E-vs-sector / support-resistance** and a **filing-grounded revenue-share now → next-FY + growth (with sources)**, plus a **Google-Trends chart** per theme in a PDF. A deep build (~10-15 min): acked instantly, lands when ready. **Cached 24h.** |
 | `pickaxe --latest` | Same, but forces a brand-new live scan instead of the 24h-cached result. |
 
 **📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
@@ -144,9 +144,13 @@ source → formula → model).
   Trends rising 'buy' searches + demand-surge news → LLM Demand-Analyst → Google-Search-grounded Value-Chain
   Mapper → NSE-master Auditor) finds **surging Indian consumer/industrial demand** and maps each theme to the
   **indirect "sell the pickaxes" beneficiaries** — the feed/vaccine/ingredient/equipment/packaging names that
-  ride a boom with **less cyclicality** than the crowded end-product — tagged ⛏️ indirect / 🎯 direct +
-  cyclicality + who's accumulating. Google Trends is best-effort (no official API); when it's blocked the read
-  is LLM/Search-driven. Cached 24h; `--latest` forces fresh.
+  ride a boom with **less cyclicality** than the crowded end-product — plus the direct plays. Every name is
+  then **deep-enriched**: exact **price / P/E-vs-sector / P/B / support-resistance** from our own engines, and
+  a **filing/concall-grounded revenue-share (now → next FY) + growth projection with sources**, plus a
+  **Google-Trends interest chart** per theme in an attached PDF. Because that's heavy it runs as a **background
+  job** (~10-15 min) — acked instantly, the full report lands when ready. Google Trends via the Camoufox
+  browser tier is best-effort (no official API); when throttled the demand read is news/LLM-driven. Cached
+  24h; `--latest` forces fresh.
 - **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
   (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
   alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI

@@ -174,6 +174,95 @@ def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,
     return ranked
 
 
+# ── deep per-name enrichment (heavy: ingests financials + reads filings; used off the live path) ──
+def _fnum(v):
+    """float-or-None, treating NaN as None (numpy/pandas floats)."""
+    try:
+        f = float(v)
+        return f if f == f else None
+    except (TypeError, ValueError):
+        return None
+
+
+def enrich_pick(con: duckdb.DuckDBPyConnection, pick: dict, theme: str) -> None:
+    """Attach exact quant + a filing-grounded forward projection to ONE pick, in place. Best-effort —
+    every sub-step degrades to blanks, never raises. Heavy (on-demand financials ingest + a grounded
+    LLM read of the company's filings/concalls), so this runs off the live command path.
+
+    Adds ``pick['quant']`` = {price, pe, pb, mcap_cr, sector_pe, sector, pe_vs_sector, support,
+    resistance, trend} and ``pick['proj']`` = the ``synthesize.pickaxe_projection`` dict (revenue
+    share now/next, growth, sources)."""
+    from equity_research.reports import pipeline
+    from equity_research.analysis import sector as sector_mod
+    from equity_research.analysis import technical, valuation
+
+    sym = pick["symbol"]
+    try:
+        pipeline.ensure_ingested(sym, con)                     # cooldown-guarded; safe to call
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        consolidated = pipeline._prefer_consolidated(con, sym)
+    except Exception:  # noqa: BLE001
+        consolidated = False
+
+    q: dict = {}
+    try:
+        snap = valuation.snapshot(con, sym, consolidated)
+        q["price"] = _fnum(snap.get("price"))
+        q["pe"] = _fnum(snap.get("pe_ttm"))
+        q["pb"] = _fnum(snap.get("pb"))
+        q["mcap_cr"] = _fnum(snap.get("market_cap_cr"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        sv = sector_mod.sector_valuation(con, sym, consolidated)
+        q["sector"] = sv.get("industry")
+        q["sector_pe"] = _fnum(sv.get("sector_median_pe"))
+        cheaper = _fnum(sv.get("pe_cheaper_than_%_of_peers"))
+        if q.get("pe") and q.get("sector_pe"):
+            q["pe_vs_sector"] = ("cheaper" if q["pe"] < q["sector_pe"] else "pricier")
+        if cheaper is not None:
+            q["pe_cheaper_than_pct"] = round(cheaper)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        lv = technical.levels(con, sym)
+        if lv.get("history_ok"):
+            sup = lv.get("supports") or []
+            res = lv.get("resistances") or []
+            q["support"] = _fnum(sup[0]["mid"]) if sup else None
+            q["resistance"] = _fnum(res[0]["mid"]) if res else None
+            st = lv.get("structure")
+            q["trend"] = st.get("trend") if isinstance(st, dict) else (st or None)
+            if q.get("price") is None:
+                q["price"] = _fnum(lv.get("close"))            # EOD close as a price fallback
+    except Exception:  # noqa: BLE001
+        pass
+    pick["quant"] = q
+
+    try:
+        pick["proj"] = synthesize.pickaxe_projection(pick["name"], sym, theme, pick.get("role", ""))
+    except Exception:  # noqa: BLE001
+        pick["proj"] = {}
+
+
+def enrich_report(con: duckdb.DuckDBPyConnection, themes: list[dict]) -> None:
+    """Deep-enrich EVERY beneficiary across all themes, in place (see ``enrich_pick``). Heavy — one
+    on-demand ingest + one grounded filing-read per name — so it's driven from the background worker
+    / weekly push, never the live 7-min command path."""
+    n = sum(len(t.get("beneficiaries") or []) for t in themes)
+    log.info("pickaxe: deep-enriching %d names across %d themes (heavy)…", n, len(themes))
+    done = 0
+    for t in themes:
+        for b in t.get("beneficiaries") or []:
+            enrich_pick(con, b, t.get("theme", ""))
+            done += 1
+            if done % 5 == 0:
+                log.info("pickaxe: enriched %d/%d names", done, n)
+    log.info("pickaxe: enrichment complete (%d names)", n)
+
+
 # ── orchestration ──
 def theme_key(d: dict) -> str:
     """Stable dedup key for a theme — normalised theme text. Lets the weekly push avoid repeating a

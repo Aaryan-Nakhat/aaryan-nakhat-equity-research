@@ -888,6 +888,13 @@ LISTED companies ride it. RUTHLESSLY REJECT: one-off news spikes, festival / sea
 election / cricket-event bumps, a single viral product, celebrity/scam/controversy searches, and \
 anything with no plausible listed-equity angle in India.
 
+**Be SPECIFIC, not vague.** Name a concrete product / sub-category with a real demand signal — e.g. \
+"protein & sports nutrition", "home fitness equipment", "electric two-wheelers", "premium beer", \
+"pet nutrition". Do NOT emit fuzzy umbrella themes like "broad-based premiumisation" or "rising \
+consumption" — split them into the specific products actually surging. Each theme's headline must \
+lead with the CONCRETE fact and its number ("EV sales +51% in Aug", "protein searches at a 5-yr \
+high"), and the driver must state the real mechanism in plain words, not corporate buzzwords.
+
 For each theme, also list the CO-TRENDING terms that CONFIRM it (e.g. a "protein" surge is \
 corroborated by "whey", "creatine", "protein bar"; a "treadmill" surge by "home gym", "dumbbells"). \
 A theme backed by several co-rising terms is a stronger signal than a lone query.
@@ -987,20 +994,22 @@ best-effort, grounded in filings — "revenue_share" (% of the company's revenue
 
 HARD RULES:
 - ONLY real, **currently listed** Indian companies (NSE/BSE) with a **genuine, established** business \
-in this good/input. If unsure it's listed AND the link is real, OMIT it.
+in this good/input. If unsure it's listed AND the link is real, OMIT that one.
 - **Never include a company just because its NAME sounds relevant.** Match on the REAL business, \
 verified via search — not the name or a guessed ticker.
 - **The company must ALREADY produce/sell the good/input** with real existing revenue. Do NOT include \
-a company that merely *announced plans*, *bid*, signed an *MoU*, or expressed *intent*. If the only \
-link is a future plan, OMIT it.
-- **Strongly prefer NON-OBVIOUS small- and mid-cap pure-plays** where this theme actually moves \
-earnings; AVOID index heavyweights / large conglomerates where it's a rounding error. The value is \
-the name the market hasn't crowded into.
-- "revenue_share"/"market_share" are hard — ground them in segment disclosures; if not reasonably \
-confident, return "" (an honest blank is REQUIRED — never fabricate a number).
+a company that merely *announced plans*, *bid*, signed an *MoU*, or expressed *intent*.
+- **Lead with NON-OBVIOUS small/mid-cap pickaxe pure-plays**, but ALSO include the obvious direct \
+leaders and large-caps so the list is COMPLETE — the reader wants the full map of who benefits, then \
+decides. (Rank/label them; don't omit the obvious ones.)
+- "revenue_share"/"market_share" — ground them in segment disclosures; if not reasonably confident, \
+return "" (never fabricate a number). A downstream step reads filings for exact figures, so a rough \
+estimate here is fine.
 - Do not invent tickers — leave "ticker" empty if unsure (the caller verifies against the NSE master).
-- If you genuinely cannot name a real listed Indian beneficiary, return an empty array [] — a valid, \
-honest answer. 0-8 names. Return ONLY a JSON array of \
+- **ALWAYS return real listed beneficiaries — a genuine demand theme ALWAYS has them** (e.g. a power/\
+industrial-demand theme has listed power producers, transmission, equipment & EPC names; there is no \
+such thing as "no beneficiary"). Return **6-12 names**, a mix of indirect and direct, strongest \
+first. Return ONLY a JSON array of \
 {name, ticker, role, why, layer, cyclicality, revenue_share, market_share}. No prose."""
 
 
@@ -1046,6 +1055,68 @@ def pickaxe_beneficiaries(theme: dict, *, model: str = MODEL) -> list[dict]:
                         "revenue_share": str(d.get("revenue_share", "")).strip(),
                         "market_share": str(d.get("market_share", "")).strip()})
     return out
+
+
+_PICKAXE_PROJ_SYS = """You are an Indian-equity analyst. For ONE listed company and ONE demand \
+theme, use Google Search over the company's LATEST primary disclosures — annual report, investor / \
+earnings presentation, concall transcript, and management guidance — to quantify how much this theme \
+drives the company and where it's headed. Be exact and grounded; cite a REAL source for each number.
+
+Return ONLY a JSON object (no prose):
+{"rev_share_now":"<% of the company's current revenue from this theme/segment, e.g. '~45%' or \
+'>80% pure-play' — '' if not found>",
+ "rev_share_next":"<projected % of revenue from it in the next 1-2 FY per management guidance / \
+credible plan, e.g. '~55% by FY27' — '' if none>",
+ "growth_pct":"<expected growth of this segment — revenue CAGR or a YoY %, e.g. '~30% CAGR FY25-27', \
+or the capacity/volume growth if that's what's guided — '' if none>",
+ "horizon":"<the year/period the projection refers to, e.g. 'FY27' — '' if none>",
+ "note":"<ONE crisp plain-English line on the growth driver & how it maps to this theme>",
+ "sources":[{"label":"<short source name, e.g. 'FY25 Annual Report', 'Q1FY26 concall', 'Investor PPT Aug-25'>",
+             "url":"<the real URL you used>"}]}
+
+HARD RULES: numbers must come from the company's OWN disclosures found via search — if a figure isn't \
+credibly available, return "" for it (an honest blank; NEVER fabricate). Prefer management's own \
+guidance for the forward figures. Give 1-3 real sources with working URLs. If you can find nothing \
+solid, return the object with empty strings and an empty sources array."""
+
+
+def pickaxe_projection(name: str, symbol: str, theme: str, role: str = "",
+                       *, model: str = MODEL) -> dict:
+    """Filing/concall-grounded read of how a demand theme drives ONE company, forward-looking.
+    Returns ``{rev_share_now, rev_share_next, growth_pct, horizon, note, sources:[{label,url}]}``
+    (all best-effort, "" where not found). ``{}`` on any failure. Never raises."""
+    prompt = (f"COMPANY: {name} (NSE: {symbol}). ROLE IN THEME: {role or 'n/a'}. "
+              f"DEMAND THEME: {theme}.\n\nQuantify this company's revenue exposure to the theme now "
+              f"and its projected trajectory (next 1-2 FY) from its own filings/concalls, with sources.")
+    try:
+        r = _client().models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_PICKAXE_PROJ_SYS,
+                tools=[types.Tool(google_search=types.GoogleSearch())]))
+        text = (r.text or "").strip()
+    except Exception:  # noqa: BLE001 — enrichment is best-effort, never break the pipeline
+        return {}
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return {}
+    try:
+        d = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    srcs = []
+    for s in d.get("sources") or []:
+        if isinstance(s, dict) and (s.get("url") or s.get("label")):
+            srcs.append({"label": str(s.get("label", "")).strip(),
+                         "url": str(s.get("url", "")).strip()})
+    return {"rev_share_now": str(d.get("rev_share_now", "")).strip(),
+            "rev_share_next": str(d.get("rev_share_next", "")).strip(),
+            "growth_pct": str(d.get("growth_pct", "")).strip(),
+            "horizon": str(d.get("horizon", "")).strip(),
+            "note": str(d.get("note", "")).strip(),
+            "sources": srcs[:3]}
 
 
 _FILING_SYS = """You are a forensic equity analyst writing the INLINE read of ONE company \

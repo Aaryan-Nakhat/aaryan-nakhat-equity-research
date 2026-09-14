@@ -18,6 +18,7 @@ fully intact and revives by setting CHANNELS=telegram. Run via run_email_bot.ps1
 from __future__ import annotations
 
 import concurrent.futures
+import threading
 import hashlib
 import json
 import logging
@@ -727,12 +728,15 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`tailwind --latest` (or `tailwind fresh`)",
          "Same, but forces a brand-new live scan instead of the 24h-cached result."],
     ]),
-    ("⛏️ Surging demand (Pickaxe)", "Cached for 24h — add `--latest` to force a fresh scan.", [
+    ("⛏️ Surging demand (Pickaxe)", "A deep build (~10-15 min) — you're acked instantly and the full "
+                                    "report + charted PDF lands in-thread when ready. Cached 24h.", [
         ["`pickaxe` (or `demand`)",
          "India's rising demand (Google-Trends 'buy' searches + demand-surge news) → the indirect "
-         "**'sell the pickaxes'** listed beneficiaries — the feed/vaccine/ingredient/equipment names "
-         "that ride a boom with less cyclicality, not the crowded end-product. Tagged ⛏️ indirect / "
-         "🎯 direct + cyclicality + who's accumulating. Reply a number → deep report."],
+         "**'sell the pickaxes'** listed beneficiaries (feed/vaccine/ingredient/equipment names that "
+         "ride a boom with less cyclicality) AND the direct plays. Each name carries **exact price / "
+         "P/E-vs-sector / support-resistance** and a **filing-grounded revenue-share now → next-FY + "
+         "growth, with sources**, plus a **Google-Trends chart** per theme (PDF). Reply a number → "
+         "full deep report."],
         ["`pickaxe --latest`",
          "Same, but forces a brand-new live scan instead of the 24h-cached result."],
     ]),
@@ -928,44 +932,100 @@ def _send_tailwind(req: EmailRequest) -> None:
              rep["n_catalysts"], len(rep["picks"]), rep.get("from_cache", False), req.sender)
 
 
-def _send_pickaxe(req: EmailRequest) -> None:
-    """⛏️ Pickaxe — surging Indian demand → the indirect 'sell the pickaxes' listed beneficiary;
-    reply → deep report. Serves the 24h cache by default; `pickaxe --latest` forces a live re-scan."""
-    latest = _wants_latest(req.subject)
-    log.info("running Pickaxe (req from %s, latest=%s)", req.sender, latest)
-    _reply_text(req, "📩 Got it — scanning India's rising demand and the indirect names that ride it. "
-                     "Forcing a fresh live scan (~2–4 min); it lands in this thread."
-                     if latest else
-                     "📩 Got it — pulling the demand-surge scan (cached for 24h, so this is quick "
-                     "unless it's stale; add `--latest` to force a fresh live scan). Lands in this "
-                     "thread shortly.")
-    con = connect()
+# Pickaxe is deep (on-demand financials ingest + a filing-grounded read per name + Trends charts),
+# so a full run is ~10-15 min — well past the IMAP loop's tolerance. It therefore runs in a
+# BACKGROUND daemon thread: the command is acked instantly and the report+PDF lands when ready. The
+# lock ensures only ONE build runs at a time (the on-demand command and the weekly push can't overlap
+# and hammer the DB together).
+_pickaxe_lock = threading.Lock()
+
+
+def _pickaxe_pdf(body: str, images: list) -> bytes | None:
+    if not images:
+        return None
     try:
-        rep = _screen_run(lambda: pickaxe_brief.build_pickaxe_report(con, use_cache=not latest),
-                          timeout=420)
-    finally:
-        con.close()
-    if not rep:
-        _reply_text(req, "No clean surging-demand → Indian-beneficiary setup surfaced right now "
-                         "(nothing durable crossed the bar, or no verifiable listed name). That's a "
-                         "valid answer — I don't force one. Try again in a day or two.")
+        return report_to_pdf(body, "Pickaxe", images)
+    except Exception:  # noqa: BLE001 — a PDF failure must not lose the report; send body-only
+        log.exception("pickaxe PDF render failed — sending body-only")
+        return None
+
+
+def _pickaxe_worker(*, req: EmailRequest | None, to: str, subject: str,
+                    use_cache: bool, weekly: bool) -> None:
+    """Build the deep Pickaxe report in the background and deliver it (report body + charted PDF).
+    ``req`` present → on-demand (threads the reply + arms the numbered reply→deep-report menu);
+    ``weekly`` → the Saturday push (advances the week-marker only after a successful send)."""
+    if not _pickaxe_lock.acquire(blocking=False):
+        log.info("pickaxe: a build is already running — skipping this trigger")
+        if req is not None:
+            _reply_text(req, "⏳ A Pickaxe scan is already running — your result will land shortly.")
         return
-    body = rep["markdown"]
-    if rep.get("from_cache"):                                  # note that this is a reused (not live) scan
-        stamp = ""
+    try:
+        con = connect()
         try:
-            ca = datetime.fromisoformat(rep["cached_at"]).astimezone(IST)
-            stamp = f" from {ca:%d-%b %H:%M}"
-        except Exception:  # noqa: BLE001
-            pass
-        body = (f"> ♻️ _Cached scan{stamp} (within 24h — same data as the last run). Reply "
-                f"`pickaxe --latest` for a fresh live scan._\n\n" + body)
-    _set_pending(req, "pickaxe", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
-    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
-                        html=emailer.body_html(body, "Pickaxe"),
-                        in_reply_to=req.message_id, references=req.references or req.message_id)
-    log.info("sent Pickaxe (%d themes, %d picks, cache=%s) to %s",
-             rep["n_themes"], len(rep["picks"]), rep.get("from_cache", False), req.sender)
+            rep = pickaxe_brief.build_pickaxe_report(con, use_cache=use_cache)
+        finally:
+            con.close()
+        if not rep:
+            if weekly:
+                scan.mark_pickaxe()
+                log.info("pickaxe: nothing surfaced this week — no email")
+            elif req is not None:
+                _reply_text(req, "No durable surging-demand → Indian-beneficiary setup surfaced right "
+                                 "now. That's a valid answer — I don't force one. Try again in a day.")
+            return
+        body = rep["markdown"]
+        if rep.get("from_cache"):
+            stamp = ""
+            try:
+                ca = datetime.fromisoformat(rep["cached_at"]).astimezone(IST)
+                stamp = f" from {ca:%d-%b %H:%M}"
+            except Exception:  # noqa: BLE001
+                pass
+            body = (f"> ♻️ _Cached scan{stamp} (within 24h — same data as the last run). Reply "
+                    f"`pickaxe --latest` for a fresh live scan._\n\n" + body)
+        pdf = _pickaxe_pdf(body, rep.get("images") or [])
+        today = datetime.now(IST).date().isoformat()
+        attachments = [(f"Pickaxe_{today}.pdf", pdf)] if pdf else []
+        if req is not None:
+            _set_pending(req, "pickaxe", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+            emailer.send_report(subject, body, to=to, html=emailer.body_html(body, "Pickaxe"),
+                                attachments=attachments, in_reply_to=req.message_id,
+                                references=req.references or req.message_id)
+        else:
+            emailer.send_report(subject, body, to=to, html=emailer.body_html(body, "Pickaxe"),
+                                attachments=attachments)
+        if weekly:
+            scan.mark_pickaxe()
+        log.info("sent Pickaxe (%d themes, %d picks, pdf=%s, cache=%s) to %s",
+                 rep["n_themes"], len(rep["picks"]), bool(pdf), rep.get("from_cache", False), to)
+    except Exception:  # noqa: BLE001 — the worker owns its errors; never crash the loop
+        log.exception("pickaxe worker failed")
+        if req is not None:
+            try:
+                _reply_text(req, "⚠️ The Pickaxe scan hit an error mid-build — please try again.")
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        _pickaxe_lock.release()
+
+
+def _send_pickaxe(req: EmailRequest) -> None:
+    """⛏️ Pickaxe — surging Indian demand → the indirect 'sell the pickaxes' beneficiary. Deep run
+    (~10-15 min): ack now, deliver the full report + charted PDF from a background thread when ready.
+    Serves the 24h cache by default; `pickaxe --latest` forces a fresh live scan."""
+    latest = _wants_latest(req.subject)
+    log.info("queuing Pickaxe build (req from %s, latest=%s)", req.sender, latest)
+    _reply_text(req, "📩 Got it — running the deep demand scan: rising 'buy' searches → durable "
+                     "themes → the indirect names that ride them, each with exact price/P/E/levels and "
+                     "a filing-grounded revenue-share & forward projection, plus Google-Trends charts. "
+                     "This is a heavy build (~10-15 min); the full report + PDF lands in this thread "
+                     "when ready." + ("" if latest else " (Cached within 24h; add `--latest` to force fresh.)"))
+    threading.Thread(
+        target=_pickaxe_worker,
+        kwargs={"req": req, "to": req.sender, "subject": _re_subject(req.subject),
+                "use_cache": not latest, "weekly": False},
+        name="pickaxe-ondemand", daemon=True).start()
 
 
 def _send_suppliers(req: EmailRequest, query: str) -> None:
@@ -1956,37 +2016,26 @@ def maybe_tailwind_urgent() -> None:
 
 def maybe_pickaxe() -> None:
     """Fire the weekly ⛏️ Pickaxe push once per ISO week (Saturday ≥18:00 IST): scout India's rising
-    demand → the indirect 'sell the pickaxes' beneficiaries. Runs the full 4-tier pipeline (demand
-    scout → analyst → grounded mapper → auditor), so it's slow (~2–4 min) but weekly. No email if
-    nothing durable surfaced; the week-marker advances only after a successful send (or a clean empty
-    result), so a delivery failure re-surfaces it next heartbeat."""
+    demand → the indirect 'sell the pickaxes' beneficiaries, deep-enriched with charts. The full
+    build is ~10-15 min, so it runs in a BACKGROUND thread (never blocks the heartbeat); the
+    week-marker advances only inside the worker after a successful send (or a clean empty result),
+    so a delivery failure re-surfaces it next heartbeat."""
     now = datetime.now(IST)
     if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening, weekly
         return
-    if not scan.pickaxe_due():
-        return
-    log.info("weekly Pickaxe push firing")
-    con = connect()
-    try:
-        rep = pickaxe_brief.build_pickaxe_report(con)
-    except Exception:  # noqa: BLE001
-        log.exception("pickaxe build failed")               # no mark → retried next heartbeat
-        return
-    finally:
-        con.close()
-    if not rep:
-        scan.mark_pickaxe()                                 # nothing durable this week — don't retry
-        log.info("pickaxe: nothing surfaced this week — no email")
+    if not scan.pickaxe_due() or _pickaxe_lock.locked():
         return
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send Pickaxe")
         return
     today = datetime.now(IST).date().isoformat()
-    emailer.send_report(f"⛏️ Pickaxe — {today}", rep["markdown"], to=to,
-                        html=emailer.body_html(rep["markdown"], "Pickaxe"))
-    scan.mark_pickaxe()                                     # advance week-marker ONLY after send
-    log.info("weekly Pickaxe push sent to %s (%d themes)", to, rep["n_themes"])
+    log.info("weekly Pickaxe push firing (background)")
+    threading.Thread(
+        target=_pickaxe_worker,
+        kwargs={"req": None, "to": to, "subject": f"⛏️ Pickaxe — {today}",
+                "use_cache": False, "weekly": True},
+        name="pickaxe-weekly", daemon=True).start()
 
 
 _last_mail_sweep: datetime | None = None

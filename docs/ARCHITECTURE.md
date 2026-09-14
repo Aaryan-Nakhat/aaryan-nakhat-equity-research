@@ -222,15 +222,23 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.pickaxe_due) — email_
               ④ AUDITOR pickaxe.auditor — verify each vs equity_master (reuses supply_chain._verify /
                         _implausible), attach market-cap tier + a smart-money read (ownership.ownership_
                         changes) + cyclicality tag, flag watchlist, RANK so indirect pickaxes surface first
+                        (the Mapper is required to ALWAYS return names — an empty theme is never surfaced)
+              ⑤ ENRICH  pickaxe.enrich_report — for EVERY name: pipeline.ensure_ingested → exact quant
+                        (valuation.snapshot price/PE/PB, sector.sector_valuation PE-vs-sector,
+                        technical.levels support/resistance) + synthesize.pickaxe_projection (grounded
+                        filing/concall read → revenue-share now→next-FY, growth, SOURCES)
+              ⑥ CHARTS  trends.interest_details (one browser session) → charts.pickaxe_trend_chart per
+                        theme (12-mo Google-Trends interest line) → the attached PDF
         ▼  sorted: watchlist → indirect-before-direct → lower-cyclicality → accumulating → smaller-cap
-        →  pickaxe_brief.build_pickaxe_report() → ⛏️ section (each theme + SOURCE LINK + verified names
-              tagged ⛏️ pickaxe / 🎯 direct / cyclicality / 📈 accumulating / ⭐ watchlist). Cached 24h.
+        →  pickaxe_brief.build_pickaxe_report() → ⛏️ per-stock BLOCKS (quant · rev-from-theme now→next ·
+              growth · sources · why; ⛏️ pickaxe / 🎯 direct badges) + Trends charts. Cached 24h (no PNGs).
         ▼
-   ⛏️ ONE "Pickaxe" email (also on-demand via `pickaxe`, `--latest` forces fresh); week-marker advances
-        only after a successful send (or a clean empty result). Reply a number → that stock's deep report.
+   ⛏️ ONE "Pickaxe" email + charted PDF. The full build is ~10-15 min, so it runs in a BACKGROUND thread
+        (email_bot._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
+        ready; the weekly push runs off-heartbeat. `--latest` forces fresh; reply a number → deep report.
 
-   (An idea generator — every theme is source-cited; "no clean listed beneficiary" is a valid, un-forced
-    answer. Google Trends is best-effort — when blocked, the LLM/Search Analyst+Mapper carry the pipeline.)
+   (An idea generator — every theme is source-cited; a genuine demand theme ALWAYS has beneficiaries.
+    Google Trends is best-effort — when throttled, the LLM/Search Analyst+Mapper carry the pipeline.)
 ```
 
 ## Component → file map

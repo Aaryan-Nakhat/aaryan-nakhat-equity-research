@@ -202,14 +202,8 @@ def scout_buy_surges(*, per_cat: int = 10, max_signals: int = 40) -> list[dict]:
     return out
 
 
-def interest_over_time(term: str) -> dict:
-    """Confirm ``term`` is spiking in India over the last year (ONE browser session). Returns
-    ``{term, latest, avg, peak, slope_pct, spiking}`` (``slope_pct`` = recent-quarter mean vs the
-    prior mean; ``spiking`` = latest well above its own average and rising). ``{}`` on any failure."""
-    if not term.strip():
-        return {}
-    collected = _collect([{"label": term, "q": term, "cat": 0, "date": _IOT_DATE, "kind": "iot"}])
-    series = collected.get(term, {}).get("timeline") or []
+def _summarise(term: str, series: list[float]) -> dict:
+    """Compute the spike summary + keep the raw series for charting. ``{}`` if too thin."""
     if len(series) < 4:
         return {}
     latest, avg, peak = float(series[-1]), sum(series) / len(series), max(series)
@@ -219,5 +213,29 @@ def interest_over_time(term: str) -> dict:
     prior = sum(prior_part) / len(prior_part)
     slope_pct = round((recent - prior) / prior * 100, 1) if prior else None
     spiking = latest > avg * 1.25 and (slope_pct or 0) > 15
-    return {"term": term, "latest": round(latest, 1), "avg": round(avg, 1), "peak": round(peak, 1),
-            "slope_pct": slope_pct, "spiking": spiking}
+    return {"term": term, "series": series, "latest": round(latest, 1), "avg": round(avg, 1),
+            "peak": round(peak, 1), "slope_pct": slope_pct, "spiking": spiking}
+
+
+def interest_details(terms: list[str]) -> dict[str, dict]:
+    """Interest-over-time for several terms in India over the last year, in ONE browser session
+    (minimises rate-limit exposure). Returns ``{term: {term, series, latest, avg, peak, slope_pct,
+    spiking}}`` for each term that came back. ``{}`` if Trends is unavailable."""
+    terms = [t for t in dict.fromkeys(t.strip() for t in terms) if t]
+    if not terms:
+        return {}
+    targets = [{"label": t, "q": t, "cat": 0, "date": _IOT_DATE, "kind": "iot"} for t in terms]
+    collected = _collect(targets)
+    out = {}
+    for t in terms:
+        s = _summarise(t, collected.get(t, {}).get("timeline") or [])
+        if s:
+            out[t] = s
+    return out
+
+
+def interest_over_time(term: str) -> dict:
+    """Confirm ONE ``term`` is spiking in India over the last year (ONE browser session). Returns
+    ``{term, series, latest, avg, peak, slope_pct, spiking}`` (``slope_pct`` = recent-quarter mean vs
+    the prior mean; ``spiking`` = latest well above its own average and rising). ``{}`` on failure."""
+    return interest_details([term]).get(term.strip(), {})

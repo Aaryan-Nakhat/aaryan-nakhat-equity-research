@@ -343,8 +343,17 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   Value-Chain Mapper (Google-Search-grounded → Indian listed names in **direct + indirect "pickaxe"**
   layers) → ④ Auditor (verify vs `equity_master` reusing `supply_chain._verify`/`_implausible`, attach
   market-cap tier + **smart-money read** via `ownership.ownership_changes` + cyclicality tag, **rank
-  indirect-pickaxes-first**). Autonomous (you never name a theme); each theme **source-cited**; reply a
-  number → deep report; **24h cache** + `--latest`. Verified live end-to-end (LLM spine): premium-beer boom
+  indirect-pickaxes-first**) → ⑤ **Enrich** (`pickaxe.enrich_report`: per name `pipeline.ensure_ingested`
+  + exact quant from `valuation.snapshot`/`sector.sector_valuation`/`technical.levels` — price, P/E-vs-sector,
+  support/resistance — plus `synthesize.pickaxe_projection`, a **grounded filing/concall read** →
+  revenue-share now→next-FY + growth **with source links**) → ⑥ **Charts** (`trends.interest_details` →
+  `charts.pickaxe_trend_chart`, a 12-mo Google-Trends line per theme in an **attached PDF**). Rendered as
+  **per-stock blocks**, not a table. **Delivery is async** — the deep build is ~10-15 min so it runs in a
+  **background thread** (`email_bot._pickaxe_worker`, single-build lock): on-demand `pickaxe` acks instantly
+  and delivers when ready; the weekly push runs off-heartbeat. The Mapper is required to **always return
+  beneficiaries** (a real demand theme always has them; empty themes are never surfaced). Autonomous (you
+  never name a theme); each theme **source-cited**; reply a number → deep report; **24h cache** + `--latest`.
+  Verified live end-to-end (LLM spine): premium-beer boom
   → glass-bottle/crown-cap/keg makers (not the brewery); premium-smartphone surge → packaging/EMS; EV
   demand → charging/powertrain/battery-chemicals; housing premiumisation → tiles/sanitaryware/glass.
   **Honest caveat:** Google Trends has **no official API**. pytrends (plain HTTP) 429s immediately, so we
