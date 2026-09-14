@@ -196,7 +196,8 @@ with zero).
   largest employer-review site). **Source:** the company page's embedded `__NEXT_DATA__` JSON via the
   **browser tier** (Camoufox) — overall rating, 7 category sub-ratings, a 1-5★ distribution (→ %positive
   / %detractor), review count, the **industry average**, and CEO. **Entity resolution** (a stock's name →
-  the right AmbitionBox company, not a namesake) is the hard part: verified `_SLUG_MAP` → direct
+  the right AmbitionBox company, not a namesake) is the hard part: verified slug overrides (from
+  `.env` `EMPLOYER_SLUG_OVERRIDES`, so the repo carries no specific tickers) → direct
   name-slug → search API with a strict brand-token name-guard; unresolved → honest "no coverage".
   **Scale — two banded scores, A→E, each 45% absolute + 55% peer-relative** (a rating *vs its own
   industry* matters more than the raw stars): **① Employee Sentiment** (overall + %detractor) and **②

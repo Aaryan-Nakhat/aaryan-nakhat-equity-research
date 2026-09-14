@@ -29,17 +29,25 @@ log = logging.getLogger("equity-research.employer")
 _HOME = "https://www.ambitionbox.com/"
 _OVERVIEW = "https://www.ambitionbox.com/overview/{slug}-overview"
 
-# Verified symbol → AmbitionBox slug, for cases the fuzzy search mis-resolves or the name-slug misses
-# (namesakes, "-ltd" suffixes, brand ≠ legal name). Extend as coverage widens.
-_SLUG_MAP: dict[str, str] = {
-    "example energy": "example energy-energy",            # search picks a 7-review namesake; this is example energy Group
-    "example financeFIN": "example financeleasing-finance",    # AmbitionBox name differs from "example finance"
-    "example retail": "example retail",                     # brand slug, not "avenue-supermarts"
-    "example fintech": "example fintech",                     # brand slug, not the legal "example ventures"
-    "EXMOT": "tata-motors", "EXMOT": "tata-motors",
-    "EXPEQ": "genus-power-infrastructures-ltd",
-    "example infra": "example infra-india",
-}
+# Verified symbol → AmbitionBox slug overrides, for cases the fuzzy search mis-resolves or the
+# name-slug misses (namesakes, "-ltd" suffixes, brand ≠ legal name). Kept OUT of the code (so the repo
+# carries no specific tickers) and read from the git-ignored ``.env`` — same pattern as the watchlist:
+#   EMPLOYER_SLUG_OVERRIDES=EXAMPLECO=example-co, OTHERCO=other-co-ltd   (comma-separated SYMBOL=slug pairs)
+# Empty is fine — the resolver still works via the direct name-slug + the name-guarded search.
+_slug_overrides_cache: dict[str, str] | None = None
+
+
+def _slug_overrides() -> dict[str, str]:
+    global _slug_overrides_cache
+    if _slug_overrides_cache is None:
+        out: dict[str, str] = {}
+        for pair in os.environ.get("EMPLOYER_SLUG_OVERRIDES", "").split(","):
+            if "=" in pair:
+                sym, slug = pair.split("=", 1)
+                if sym.strip() and slug.strip():
+                    out[sym.strip().upper()] = slug.strip()
+        _slug_overrides_cache = out
+    return _slug_overrides_cache
 
 _LEGAL = {"ltd", "limited", "corporation", "corp", "the", "co", "company", "group", "india",
           "incorporated", "inc", "and", "&", "of", "pvt", "private"}
@@ -132,7 +140,7 @@ def fetch_company(name: str, symbol: str | None = None) -> dict:
         return {"status": "disabled"}
     from scrapling.fetchers import StealthyFetcher
 
-    direct = [s for s in [(_SLUG_MAP.get((symbol or "").upper())), _clean_slug(name)] if s]
+    direct = [s for s in [_slug_overrides().get((symbol or "").upper()), _clean_slug(name)] if s]
     result: dict = {"status": "no_coverage"}
 
     def _action(page):

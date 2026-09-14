@@ -373,7 +373,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   own industry, per the user); **Employee Sentiment** (overall + %detractor) + **Management Quality**
   (`0.40·culture + 0.30·job-sec + 0.15·career + 0.15·satisfaction`); a **confidence gate** on review count
   (<20 → not scored). **Entity resolution** (the hard part — name→right company, not a namesake): verified
-  `_SLUG_MAP` → direct name-slug → search API with a strict brand-token name-guard; unresolved → honest
+  env-driven slug overrides (`EMPLOYER_SLUG_OVERRIDES`, kept out of the repo) → direct name-slug → search API with a strict brand-token name-guard; unresolved → honest
   "no coverage". Cached ~30d in `alert_state`; **opt-in** `EMPLOYER_REVIEWS_ENABLED`. Verified live
   (example pharma 🟢🟢A/🟢B +0.20; a turnaround airline 🔴E/🔴E −0.44). *Next:* Glassdoor secondary cross-check; a
   bot-stopped `backfill_employer_sentiment.py` to warm the whole watchlist.

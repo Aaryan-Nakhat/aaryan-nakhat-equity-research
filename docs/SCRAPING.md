@@ -178,7 +178,8 @@ verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
   inside view. A Next.js site behind bot protection → the **browser tier** (Camoufox) loads the company
   page and reads the structured ratings straight out of the embedded **`__NEXT_DATA__`** JSON (overall +
   7 sub-ratings + 1-5★ distribution + review count + industry average + CEO). Entity resolution (stock
-  name → right company) is the hard part: verified `_SLUG_MAP` → direct name-slug → search API
+  name → right company) is the hard part: verified slug overrides (`.env` `EMPLOYER_SLUG_OVERRIDES`,
+  so no tickers live in the repo) → direct name-slug → search API
   (`/api/v2/search?category=company` — its `url` field is the authoritative slug) with a strict
   brand-token name-guard against namesakes. **Opt-in** (`EMPLOYER_REVIEWS_ENABLED`); a *signal*, not
   primary DB data.
