@@ -19,7 +19,7 @@ A four-tier agent pipeline, each tier one job, chained (identical skeleton to Ta
 
 The verification spine is shared with ``analysis/supply_chain.py`` (``_verify`` / ``_implausible``):
 no company reaches you unless it resolves to a real NSE symbol AND its business is plausible. Trends
-is best-effort — when Google blocks it, the pipeline runs on the Google-Search-grounded LLM alone
+is best-effort — when Google blocks it, the pipeline runs on the web-search-grounded LLM alone
 (qualitative demand read). An idea *generator* — leads worth your own 10-minute check, never a call;
 when there is no clean listed beneficiary it says so.
 """

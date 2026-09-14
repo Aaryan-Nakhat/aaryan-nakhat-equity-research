@@ -18,7 +18,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 
 | Email this | You get |
 |---|---|
-| `example power` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk**, and a **🏢 inside view** (employee & management sentiment from AmbitionBox, graded A→E vs the company's own industry) — inline **and as a PDF**. |
+| `Infosys` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk**, and a **🏢 inside view** (employee & management sentiment from AmbitionBox, graded A→E vs the company's own industry) — inline **and as a PDF**. |
 | `Reliance consolidated` / `Reliance standalone` | Same, forced to that financials basis (default auto-picks). |
 | reply `1` after a report | **Growth-triggers 1-pager** — forward catalysts, each with an estimated ₹cr / % business impact. |
 
@@ -178,7 +178,7 @@ source → formula → model).
 - **Delivery** — email and/or Telegram via the `CHANNELS` flag; **`help`** returns the whole command menu;
   the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
   mail untouched).
-- **LLM** (the LLM via the provider) is used **only** for synthesis / filing-reading / name-resolution — every
+- **LLM** (your configured provider) is used **only** for synthesis / filing-reading / name-resolution — every
   number above is **deterministic**.
 
 ## Status
@@ -215,7 +215,7 @@ tests/         tests
 - Python 3.12, `uv`
 - `scrapling` (scraping, incl. Camoufox browser tier for NSE's anti-bot `/api/`)
 - DuckDB (analytics) · pandas
-- the LLM (`the LLM SDK`, via the provider AI service account) — symbol resolution + report synthesis
+- the LLM (configured via .env — any provider) — symbol resolution + report synthesis
 - `python-telegram-bot` (delivery) · `telegramify-markdown` (formatting) ·
   Playwright Chromium + `markdown` (HTML → PDF) · SMTP email
 
@@ -229,8 +229,8 @@ cp .env.example .env                       # then fill in your own credentials
 
 Configure `.env` (all secrets are read from the environment; `.env` is gitignored — see
 [`.env.example`](.env.example) for every variable):
-- **LLM** — either the provider AI (a GCP service-account JSON, also gitignored) or a
-  Developer API key.
+- **LLM** — bring your own: set `LLM_PROVIDER` (openai / openai_compatible / google / anthropic),
+  `LLM_MODEL` and `LLM_API_KEY` (or `LLM_BASE_URL` for any OpenAI-compatible endpoint).
 - **Delivery** — `CHANNELS=email` (Gmail SMTP/IMAP app password) and/or `telegram`
   (a BotFather token + your allowed user IDs).
 

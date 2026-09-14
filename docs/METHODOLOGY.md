@@ -74,7 +74,7 @@ Single local DuckDB file. Fifteen tables:
 | `alert_state` | per-symbol dedup ledger + pending menus | `alerts.save_state` |
 
 ### A.3 The model layer
-- **LLM: the configured LLM via the provider AI** (service-account auth, streaming). It touches only the
+- **LLM: the configured LLM** (service-account auth, streaming). It touches only the
   **unstructured** side — reading filing/RHP/concall PDFs and writing prose. **Every number in
   the structured tables is deterministic Python**, never the LLM.
 - **Simulation: Monte-Carlo DCF** — numpy `default_rng(seed=42)`, 20,000 draws (pure numpy, no
@@ -452,7 +452,7 @@ with zero).
 
 ## Part G — Every place the LLM is used (exhaustive)
 
-The LLM (**the configured LLM / the provider AI**) is used **only** here — everything else is deterministic:
+The LLM (**the configured LLM**) is used **only** here — everything else is deterministic:
 
 | Where | Function | Input | Output |
 |---|---|---|---|

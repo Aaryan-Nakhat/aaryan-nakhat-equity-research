@@ -49,7 +49,7 @@ in [`SCRAPING.md`](SCRAPING.md),
                    │  reports/                                                   │
                    │  brief.py / deep_brief.py  → one markdown brief (all signals)│
                    │  resolve.py  "name" → NSE symbol (LLM + Google Search)   │
-                   │  synthesize.py → the configured LLM via the provider (a cloud SA)    │
+                   │  synthesize.py → the configured LLM (see .env)    │
                    │  pdf.py (HTML→Chromium PDF) · email.py (SMTP)                │
                    └───────────────────────────────┬─────────────────────────────┘
                                                    ▼
@@ -250,5 +250,5 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
 | **Store** | 13 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,investors,tailwind,pickaxe,employer_sentiment}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
-| **LLM** | synthesis + filing/guidance extraction + name resolution | LLM via **the provider** (service account) |
+| **LLM** | synthesis + filing/guidance extraction + name resolution | the configured LLM (any provider, via .env) |
 | **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·holdco·investors·smallcap·technical·policy`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in growth-triggers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

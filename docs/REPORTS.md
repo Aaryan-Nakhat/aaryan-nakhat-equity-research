@@ -1,7 +1,7 @@
 # Reports — LLM synthesis + email (Phase 4)
 
 The capstone: assemble every quant signal into one **analytical brief**, have
-**LLM** (via the provider AI or the Developer API) turn it (plus an optional
+**LLM** (any provider you configure in `.env`) turn it (plus an optional
 filing PDF) into a structured investment thesis, and **email** the result.
 `src/equity_research/reports/`.
 
@@ -11,7 +11,7 @@ filing PDF) into a structured investment thesis, and **email** the result.
 brief.build_brief(con, symbol)        # deterministic — all primary-source signals
         │   (fundamentals · forensic · technicals · valuation · sector)
         ▼
-synthesize.synthesize_thesis(brief)   # LLM (the-model) — qualitative read + verdict
+synthesize.synthesize_thesis(brief)   # the LLM — qualitative read + verdict
         │   + optional concall/annual-report PDF (inline bytes)
         ▼
 email.send_report(subject, report)    # SMTP
@@ -29,24 +29,22 @@ Validated on RELIANCE.
 
 ## Synthesis (`reports/synthesize.py`)
 
-LLM via the `the LLM SDK` SDK (`the-model` by default, override with
-`LLM_MODEL`), streaming. System prompt = a sober Indian-equity analyst told to
-ground every claim in the brief, respect `n/a`/caveats, and emit a 4-part note
-(Verdict · Why · Risks · What to watch). An optional PDF (concall transcript /
-annual report) is passed inline (`types.Part.from_bytes`) and read alongside the
-brief — this is where management commentary enters the thesis.
+**Provider-agnostic.** Synthesis talks only to `common/llm.py`; the model is chosen entirely from
+the environment, so you can run this on **any** LLM. Streaming. System prompt = a sober Indian-equity
+analyst told to ground every claim in the brief, respect `n/a`/caveats, and emit a 4-part note
+(Verdict · Why · Risks · What to watch). An optional PDF (concall transcript / annual report) is read
+alongside the brief on backends that accept documents — this is where management commentary enters.
 
-**Auth (env, see `.env.example`) — two options:**
-- **the provider AI** (a cloud GCP) via a **service account**:
-  `LLM_USE_CLOUD=true`, `LLM_PROJECT`,
-  `LLM_REGION`, and `LLM_CREDENTIALS_FILE=./gcp-service-account.json`.
-  The key file is **gitignored** (`gcp-service-account.json` / `*service-account*.json`).
-  Falls back to `LLM_CREDENTIALS`, then to `gcloud` ADC if neither
-  is set.
-- **Developer API**: just `GOOGLE_API_KEY` (from your provider console).
-
-The client auto-selects the provider when `LLM_USE_CLOUD` is truthy, else
-the Developer API key.
+**Config (`.env`, see `.env.example`):**
+```env
+LLM_PROVIDER=openai        # openai | openai_compatible | google | anthropic
+LLM_MODEL=<model-name>
+LLM_API_KEY=<key>          # or a provider service account for the google backend
+# LLM_BASE_URL=<endpoint>  # any OpenAI-compatible endpoint (self-hosted, gateway, router…)
+```
+Two capabilities are provider-dependent and degrade gracefully: **PDF filing-reading** (used on
+backends that accept documents) and **web-grounded search** (used on backends that expose a search
+tool); on other backends those calls run text-only / un-grounded.
 
 **Shared house-style (`synthesize._FORMATTING`):** one formatting block is appended to **all
 four** long-form prompts — the deep stock analysis, the IPO note, the fund note and the
@@ -925,7 +923,7 @@ ages correctly. The client `.invest` account is intentionally left alone.
 
 - Brief + orchestration + `--dry-run` validated end-to-end on RELIANCE.
 - LLM synthesis + email are built and import-clean; **live runs need the
-  LLM/the provider env vars + `SMTP_*`** (user-supplied, not in repo).
+  LLM env vars + `SMTP_*`** (user-supplied, not in repo).
 - Follow-ups: auto-fetch the latest concall transcript / results PDF from the
   BSE announcement feed (so `--pdf` isn't manual); HTML email formatting;
   schedule via the nightly refresh; multi-stock watchlist digest.

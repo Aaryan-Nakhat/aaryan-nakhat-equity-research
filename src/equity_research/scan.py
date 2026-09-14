@@ -796,7 +796,7 @@ def _enrich_event_docs(results: dict[str, list[alerts.Alert]], cap: int = 25) ->
     candidates.sort(key=lambda x: prio.get(x[1].title, 99))
     if not candidates:
         return
-    from equity_research.reports import synthesize  # lazy: keeps llm_sdk off the hot path
+    from equity_research.reports import synthesize  # lazy: keeps the LLM SDK off the hot path
     done, seen = 0, set()
     for sym, al in candidates:
         if done >= cap:
@@ -1370,7 +1370,7 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
                 return default
 
         def _labeler(descs):
-            from equity_research.reports import synthesize  # lazy: keeps llm_sdk off the hot path
+            from equity_research.reports import synthesize  # lazy: keeps the LLM SDK off the hot path
             return synthesize.label_events(descs)
 
         # market block: indices+VIX (DB) · FII/DII (feeds) · USD/INR (FBIL) + commodities

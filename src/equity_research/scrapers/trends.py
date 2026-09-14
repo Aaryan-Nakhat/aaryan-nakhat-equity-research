@@ -17,7 +17,7 @@ Two probes, both driven from ONE browser session (a page navigation per target):
 Still **best-effort**: Google rate-limits, so any failure returns ``[]``/``{}`` and a per-process
 **circuit-breaker** trips once Google clearly throttles us, so we don't burn a minute of navigations
 on a host that's refusing. When Trends yields nothing the Pickaxe pipeline still runs on the
-Google-Search-grounded LLM alone (qualitative demand read, no hard %) — Trends is an *enricher*, not
+web-search-grounded LLM alone (qualitative demand read, no hard %) — Trends is an *enricher*, not
 a dependency. (Automated access to Google Trends is subject to Google's Terms of Service; this is a
 personal-research tool.)
 """

@@ -1,6 +1,6 @@
 """Resolve a free-text company name/query to NSE trading symbol candidates.
 
-Uses LLM + Google Search grounding so it works for any listed name, including
+Uses LLM + web-search grounding so it works for any listed name, including
 small-cap and recently-listed companies (not limited to a local universe).
 Returns up to 5 ranked candidates, or exactly one when the model is certain.
 The caller disambiguates when there's more than one.
@@ -12,18 +12,15 @@ import json
 import re
 from dataclasses import dataclass
 
-from the LLM SDK import types
+from equity_research.common import llm
 
-from equity_research.reports.synthesize import _client
-
-_RESOLVER_MODEL = "the-model"
 _RESOLVER_SYS = (
     "You map an Indian company name/query to its stock trading symbol(s) on NSE "
-    "(preferred) or BSE. Use Google Search to find the correct tickers, including "
+    "(preferred) or BSE. Use web search to find the correct tickers, including "
     "small-cap and recently-listed companies. Return the best matches, RANKED by "
     "relevance, as a JSON array of objects {\"symbol\":..., \"name\":..., "
     "\"exchange\":\"NSE\"|\"BSE\"}. The symbol must be the exact NSE trading symbol "
-    "(e.g. RELIANCE, EXPWR, PREMIERENE). If you are fully sure of a single "
+    "(e.g. RELIANCE, TCS, INFY). If you are fully sure of a single "
     "match, return exactly one element; otherwise return up to 5 plausible "
     "candidates. Reply with ONLY the JSON array, no prose."
 )
@@ -37,17 +34,11 @@ class Candidate:
 
 
 def resolve(query: str) -> list[Candidate]:
-    """NSE symbol candidates for ``query`` via the LLM + Google Search (≤5)."""
-    cfg = types.GenerateContentConfig(
-        system_instruction=_RESOLVER_SYS,
-        tools=[types.Tool(google_search=types.GoogleSearch())],
-    )
+    """NSE symbol candidates for ``query`` via the LLM + web search (≤5)."""
     try:
-        r = _client().models.generate_content(
-            model=_RESOLVER_MODEL, contents=query, config=cfg)
+        text = llm.generate(_RESOLVER_SYS, query, grounded=True)
     except Exception:  # noqa: BLE001
         return []
-    text = (r.text or "").strip()
     m = re.search(r"\[.*\]", text, re.DOTALL)   # strip ```json fences / prose
     if not m:
         return []

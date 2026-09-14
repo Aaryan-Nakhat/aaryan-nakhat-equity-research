@@ -106,22 +106,22 @@ data already scrapable via `nse_archives`/`nse_api`); ADX.
 ### Phase 4 — LLM integration + reports — ✅ done (live)
 **Built + live** (`reports/` + `research_report.py`, see [`REPORTS.md`](REPORTS.md)):
 `brief`/`deep_brief` assemble all quant signals → `synthesize.synthesize_thesis`
-(**LLM `the-model` via the provider AI**, service-account auth, streaming, reads
+(**the configured LLM**, service-account auth, streaming, reads
 an optional concall/annual-report PDF) → delivered via:
 - **Telegram bot** (`scripts/telegram_bot.py`, always-on Windows scheduled task):
   name → `resolve` (LLM+Search) → deep report, **formatted inline (MarkdownV2)
-  + styled PDF** (`reports/pdf.py`). Live-validated on RELIANCE / EXPWR.
+  + styled PDF** (`reports/pdf.py`). Live-validated on RELIANCE.
 - **CLI** (`research_report.py`) and **email** (`reports/email.py`, SMTP).
 
-(LLM provider is LLM — reuses an existing a cloud the provider key, employer-
-authorized; the brief/email layers are provider-agnostic.)
+(The provider is configurable in `.env` — the whole synthesis layer is provider-agnostic and talks
+only to `common/llm.py`, so any LLM works.)
 
 **Remaining (optional):** YoY annual-report diffing.
 
 ### Phase 5 — Watchlist alerts — ✅ done
 **Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`; see [`ALERTS.md`](ALERTS.md)):
 a **self-healing daily scan** (fires once per trading day at the first heartbeat
-≥18:00 IST; weekend/holiday-skipped) over the the watchlist, delivered as a
+≥18:00 IST; weekend/holiday-skipped) over the watchlist, delivered as a
 **company-name digest** (email or Telegram, lines-only, **no PDFs**), with a
 **market-context header** (Nifty 50 / Nifty 500 day move):
 - **📅 Upcoming** — board-meeting/results dates, ex-dividend/split/bonus, AGM/fund-raising.
@@ -131,7 +131,7 @@ a **self-healing daily scan** (fires once per trading day at the first heartbeat
   board meeting · AGM · credit rating · order win · pledge …), and **forensic/fundamental
   flips** (Altman/Beneish/Piotroski/CFO-PAT/pledge) — with `alert_state` dedup +
   first-sight seeding, and **inline LLM analysis** of notable filing PDFs (capped 5).
-Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. the watchlist populated.
+Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. Watchlist populated from `.env` (WATCHLIST_HOLDINGS / WATCHLIST_TRACKING).
 
 ### Phase 6 — depth, quant, email channel & report enrichment — ✅ done
 - **Email channel** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP), via the `CHANNELS`
@@ -453,5 +453,5 @@ The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
 
 ## 6. Stack
 
-Python 3.12 · `uv` · `scrapling` · DuckDB · pandas · the LLM (`the LLM SDK`, via
-the provider AI / Developer API) · email delivery.
+Python 3.12 · `uv` · `scrapling` · DuckDB · pandas · the LLM (configured via `.env` — any
+provider) · email delivery.

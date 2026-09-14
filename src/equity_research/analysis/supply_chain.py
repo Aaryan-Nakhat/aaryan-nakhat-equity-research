@@ -5,7 +5,7 @@ There is **no structured supplier dataset** for Indian equities, so this is a **
 
 * a hand-curated seed (``_CURATED_SECTOR`` / ``_CURATED_COMPANY``) for the flagship cases —
   reliable where it matters most (defence, EV…); plus
-* LLM suggestions (``synthesize.supply_chain_suppliers``, Google-Search-grounded) for breadth.
+* LLM suggestions (``synthesize.supply_chain_suppliers``, web-search-grounded) for breadth.
 
 **Every** name — curated or AI — is then **verified against the NSE master** (``equity_master``):
 anything that doesn't resolve to a real listed symbol is dropped. AI-sourced rows are flagged so

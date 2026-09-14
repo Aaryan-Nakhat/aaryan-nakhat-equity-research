@@ -1,16 +1,10 @@
 """LLM synthesis — turn the quant brief (+ optional filing PDF) into a thesis.
 
-Uses Google's LLM via the `the LLM SDK` SDK. The deterministic brief carries
-the numbers; the model's job is the qualitative read: weigh the signals, fold in
-management commentary from a concall transcript / annual report (if supplied),
-and produce a structured verdict with reasons.
-
-Auth — set in the environment (see ``.env.example``), two options:
-  - **the provider AI** (a cloud GCP): LLM_USE_CLOUD=true,
-    LLM_PROJECT, LLM_REGION (+ ADC, or a the provider API key via
-    GOOGLE_API_KEY for express mode).
-  - **Developer API**: GOOGLE_API_KEY (or LLM_API_KEY) only.
-Model via LLM_MODEL (default the-model). See ``docs/REPORTS.md``.
+The deterministic brief carries the numbers; the model's job is the qualitative read: weigh the
+signals, fold in management commentary from a concall transcript / annual report (if supplied), and
+produce a structured verdict with reasons. The model provider is **fully configurable** and this
+module is provider-agnostic — it only calls :func:`equity_research.common.llm.generate`; pick your
+LLM entirely in ``.env`` (``LLM_PROVIDER`` / ``LLM_MODEL`` / ``LLM_API_KEY``). See ``docs/REPORTS.md``.
 """
 
 from __future__ import annotations
@@ -19,10 +13,9 @@ import json
 import os
 import re
 
-from google import llm_sdk
-from the LLM SDK import types
+from equity_research.common import llm
 
-MODEL = os.environ.get("LLM_MODEL", "the-model")
+MODEL = llm.model()
 
 # Shared house-style for every long-form note (deep stock, IPO, fund, growth triggers).
 # Appended to each system prompt so the formatting rules are identical everywhere and a
@@ -129,39 +122,6 @@ output a space-aligned/ASCII table or one wider than 5 columns; if you have more
 (e.g. many years), split into two smaller tables or summarise the rest in prose.""" + _FORMATTING
 
 
-_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
-_CLIENT: llm_sdk.Client | None = None
-
-
-def _client() -> llm_sdk.Client:
-    """Cached llm_sdk client (one per process — creating several can close the
-    shared httpx transport). the provider (service account / ADC) if configured, else
-    the Developer API key."""
-    global _CLIENT
-    if _CLIENT is not None:
-        return _CLIENT
-    _CLIENT = _build_client()
-    return _CLIENT
-
-
-def _build_client() -> llm_sdk.Client:
-    if os.environ.get("LLM_USE_CLOUD", "").lower() in ("1", "true", "yes"):
-        creds = None
-        sa_file = (os.environ.get("LLM_CREDENTIALS_FILE")
-                   or os.environ.get("LLM_CREDENTIALS"))
-        if sa_file:
-            from google.oauth2 import service_account
-            creds = service_account.Credentials.from_service_account_file(
-                sa_file, scopes=_SCOPES)
-        return llm_sdk.Client(
-            cloud mode=True,
-            project=os.environ.get("LLM_PROJECT"),
-            location=os.environ.get("LLM_REGION", "global"),
-            credentials=creds,   # None -> SDK falls back to ADC (gcloud login)
-        )
-    return llm_sdk.Client()  # reads GOOGLE_API_KEY / LLM_API_KEY
-
-
 def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None,
                       pdfs: list[tuple[str, bytes]] | None = None,
                       model: str = MODEL, deep: bool = False) -> str:
@@ -172,34 +132,17 @@ def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None
     since the last fiscal year-end. ``pdf_path`` (a single file) is still accepted
     and folded in. ``deep=True`` uses the exhaustive forensic prompt, uncapped.
     """
-    client = _client()
-
     docs: list[tuple[str, bytes]] = list(pdfs or [])
     if pdf_path:
         with open(pdf_path, "rb") as fh:
             docs.append((os.path.basename(pdf_path), fh.read()))
-
-    parts: list[types.Part] = []
-    for label, data in docs:
-        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
     instruction = ("Write the full forensic fundamental analysis." if deep
                    else "Write the investment note.")
-    parts.append(types.Part.from_text(
-        text=f"Brief for {symbol}:\n\n{brief_md}\n\n{instruction}"))
-
-    config = types.GenerateContentConfig(
-        system_instruction=_DEEP_SYSTEM if deep else _SYSTEM,
-        # deep mode: leave max_output_tokens unset (uncapped — use the model max).
-        **({} if deep else {"max_output_tokens": 4000}),
-    )
-    out: list[str] = []
-    for chunk in client.models.generate_content_stream(
-        model=model, contents=parts, config=config,
-    ):
-        if chunk.text:
-            out.append(chunk.text)
-    return "".join(out).strip()
+    return llm.generate(
+        _DEEP_SYSTEM if deep else _SYSTEM,
+        f"Brief for {symbol}:\n\n{brief_md}\n\n{instruction}",
+        files=docs, model_name=model,
+        max_tokens=None if deep else 4000)      # deep mode: uncapped (use the model max)
 
 
 _OVERVIEW_SYS = """You are an equity analyst writing the opening "Business overview" \
@@ -257,22 +200,11 @@ def business_overview(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
         facts.append(f"Market capitalisation: ~₹{market_cap_cr:,.0f} crore")
     if industry:
         facts.append(f"NSE industry classification: {industry}")
-    parts: list[types.Part] = []
-    for label, data in docs:
-        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
-    parts.append(types.Part.from_text(
-        text="Hard facts:\n" + "\n".join(facts) + "\n\nWrite the Business overview section."))
     system = _OVERVIEW_SYS.format(order_line=_OVERVIEW_ORDER if order_driven else "")
     try:
-        out: list[str] = []
-        for chunk in _client().models.generate_content_stream(
-            model=model, contents=parts,
-            config=types.GenerateContentConfig(system_instruction=system),
-        ):
-            if chunk.text:
-                out.append(chunk.text)
-        text = "".join(out).strip()
+        text = llm.generate(
+            system, "Hard facts:\n" + "\n".join(facts) + "\n\nWrite the Business overview section.",
+            files=docs, model_name=model)
     except Exception:  # noqa: BLE001 — overview is best-effort context, never block the report
         return None
     return text or None
@@ -375,24 +307,13 @@ def growth_triggers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
     docs = list(pdfs or [])
     if not docs:
         return None
-    parts: list[types.Part] = []
-    for label, data in docs:
-        parts.append(types.Part.from_text(text=f"--- Company filing: {label} ---"))
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
     facts_block = ("Verified snapshot numbers (use these exact figures in Section 1; do not "
                    "recompute):\n" + "\n".join(f"- {f}" for f in (facts or []))) if facts else ""
-    parts.append(types.Part.from_text(
-        text=f"Company: {symbol}\n\n{facts_block}\n\nProduce the growth-triggers document, "
-             "grounded in the attached filings."))
     try:
-        out: list[str] = []
-        for chunk in _client().models.generate_content_stream(
-            model=model, contents=parts,
-            config=types.GenerateContentConfig(system_instruction=_GROWTH_TRIGGERS_SYS),
-        ):
-            if chunk.text:
-                out.append(chunk.text)
-        text = "".join(out).strip()
+        text = llm.generate(
+            _GROWTH_TRIGGERS_SYS,
+            f"Company: {symbol}\n\n{facts_block}\n\nProduce the growth-triggers document, "
+            "grounded in the attached filings.", files=docs, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort, never block on the follow-up
         return None
     return text or None
@@ -487,23 +408,13 @@ def ipo_analysis(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
     docs = list(pdfs or [])
     if not docs:
         return None
-    parts: list[types.Part] = []
-    for label, data in docs:
-        parts.append(types.Part.from_text(text=f"--- Offer document: {label} ---"))
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
     facts_block = ("Verified issue facts (use these exact figures):\n"
                    + "\n".join(f"- {f}" for f in (facts or []))) if facts else ""
-    parts.append(types.Part.from_text(
-        text=f"Company (NSE symbol): {symbol}\n\n{facts_block}\n\nWrite the pre-listing IPO note."))
     try:
-        out: list[str] = []
-        for chunk in _client().models.generate_content_stream(
-            model=model, contents=parts,
-            config=types.GenerateContentConfig(system_instruction=_IPO_SYS),
-        ):
-            if chunk.text:
-                out.append(chunk.text)
-        text = "".join(out).strip()
+        text = llm.generate(
+            _IPO_SYS,
+            f"Company (NSE symbol): {symbol}\n\n{facts_block}\n\nWrite the pre-listing IPO note.",
+            files=docs, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort
         return None
     return text or None
@@ -589,16 +500,9 @@ def fund_thesis(brief_md: str, fund_name: str, *, model: str = MODEL) -> str | N
     """Qualitative read + verdict over the deterministic fund report. Best-effort —
     returns None on any failure so the report still goes out numbers-only."""
     try:
-        out: list[str] = []
-        for chunk in _client().models.generate_content_stream(
-            model=model,
-            contents=[types.Part.from_text(
-                text=f"Fund report for {fund_name}:\n\n{brief_md}\n\nWrite the note.")],
-            config=types.GenerateContentConfig(system_instruction=_FUND_SYS),
-        ):
-            if chunk.text:
-                out.append(chunk.text)
-        text = "".join(out).strip()
+        text = llm.generate(_FUND_SYS,
+                            f"Fund report for {fund_name}:\n\n{brief_md}\n\nWrite the note.",
+                            model_name=model)
     except Exception:  # noqa: BLE001 — thesis is a bonus, never block the fund report
         return None
     return text or None
@@ -632,16 +536,9 @@ def sector_thesis(brief_md: str, sector_name: str, *, model: str = MODEL) -> str
     """Top-down enter/accumulate/hold/avoid read over the deterministic sector report.
     Best-effort — returns None on any failure so the report still ships numbers-only."""
     try:
-        out: list[str] = []
-        for chunk in _client().models.generate_content_stream(
-            model=model,
-            contents=[types.Part.from_text(
-                text=f"Sector report for {sector_name}:\n\n{brief_md}\n\nWrite the read.")],
-            config=types.GenerateContentConfig(system_instruction=_SECTOR_SYS),
-        ):
-            if chunk.text:
-                out.append(chunk.text)
-        text = "".join(out).strip()
+        text = llm.generate(_SECTOR_SYS,
+                            f"Sector report for {sector_name}:\n\n{brief_md}\n\nWrite the read.",
+                            model_name=model)
     except Exception:  # noqa: BLE001 — thesis is a bonus, never block the sector report
         return None
     return text or None
@@ -672,19 +569,14 @@ the target itself. Do not invent tickers — leave "ticker" empty if unsure (the
 
 
 def supply_chain_suppliers(target: str, *, context: str = "", model: str = MODEL) -> list[dict]:
-    """LLM-suggested listed suppliers/ancillaries for a company or sector, grounded with Google
-    Search. Returns ``[{name, ticker, role, why}]`` (the caller verifies each against the NSE
-    master and drops unlisted names). ``[]`` on any failure. Never raises."""
+    """LLM-suggested listed suppliers/ancillaries for a company or sector, web-search-grounded.
+    Returns ``[{name, ticker, role, why}]`` (the caller verifies each against the NSE master and
+    drops unlisted names). ``[]`` on any failure. Never raises."""
     prompt = f"TARGET: {target}"
     if context:
         prompt += f"\nCONTEXT: {context}"
     try:
-        r = _client().models.generate_content(
-            model=model, contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_SUPPLYCHAIN_SYS,
-                tools=[types.Tool(google_search=types.GoogleSearch())]))
-        text = (r.text or "").strip()
+        text = llm.generate(_SUPPLYCHAIN_SYS, prompt, grounded=True, model_name=model)
     except Exception:  # noqa: BLE001 — supply-chain is a bonus, never break the caller
         return []
     m = re.search(r"\[.*\]", text, re.DOTALL)     # strip ```json fences / prose
@@ -756,11 +648,7 @@ def tailwind_analyst(signals: list[dict], *, chokepoints: list[str],
     prompt = (f"COMMODITY CHOKEPOINTS (reference, not exhaustive): {', '.join(chokepoints)}\n\n"
               f"SIGNALS:\n{numbered}")
     try:
-        resp = _client().models.generate_content(
-            model=model, contents=[types.Part.from_text(text=prompt)],
-            config=types.GenerateContentConfig(
-                system_instruction=_TAILWIND_ANALYST_SYS, response_mime_type="application/json"))
-        text = (resp.text or "").strip()
+        text = llm.generate(_TAILWIND_ANALYST_SYS, prompt, json=True, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort, never break the pipeline
         return []
     m = re.search(r"\[.*\]", text, re.S)
@@ -804,7 +692,7 @@ scramble for other sources.
 You are given a DISRUPTION (a commodity/input, who restricted it, and the sectors it touches). \
 Benefit works TWO ways: (a) IMPORT-SUBSTITUTION — India imports this and a dominant supplier restricted \
 it, so Indian producers of it gain; or (b) EXPORT-SHARE GAIN — a rival exporting country restricted/lost \
-supply, so Indian exporters of the same good gain share/pricing. Using Google Search, list the Indian \
+supply, so Indian exporters of the same good gain share/pricing. Using web search, list the Indian \
 companies that genuinely benefit. For each return: "name" (the company), "ticker" (its NSE symbol if \
 confident, else ""), "role" (WHAT it makes/does that benefits — e.g. 'tungsten carbide tooling', \
 'paracetamol API maker', 'sugar & ethanol', 'cotton-yarn spinner'), "why" (one line: the specific link \
@@ -834,7 +722,7 @@ honest answer. 0-8 names. Return ONLY a JSON array of \
 
 
 def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict]:
-    """Tier ③ — Google-Search-grounded map from ONE disruption to Indian listed beneficiaries.
+    """Tier ③ — web-search-grounded map from ONE disruption to Indian listed beneficiaries.
     Returns ``[{name, ticker, role, why, revenue_share, market_share}]`` (the caller verifies each vs
     the NSE master and drops unlisted / implausible names). ``[]`` on any failure. Never raises."""
     sectors = ", ".join(disruption.get("sectors") or [])
@@ -847,12 +735,7 @@ def tailwind_beneficiaries(disruption: dict, *, model: str = MODEL) -> list[dict
               f"Context: {disruption.get('headline', '')}\n\n"
               f"List the Indian LISTED companies that benefit, with revenue_share & market_share.")
     try:
-        r = _client().models.generate_content(
-            model=model, contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_TAILWIND_BEN_SYS,
-                tools=[types.Tool(google_search=types.GoogleSearch())]))
-        text = (r.text or "").strip()
+        text = llm.generate(_TAILWIND_BEN_SYS, prompt, grounded=True, model_name=model)
     except Exception:  # noqa: BLE001
         return []
     m = re.search(r"\[.*\]", text, re.DOTALL)
@@ -932,11 +815,7 @@ def pickaxe_analyst(signals: list[dict], *, categories: list[str],
     prompt = (f"CONSUMER CATEGORIES (reference, not exhaustive): {', '.join(categories)}\n\n"
               f"DEMAND SIGNALS:\n{numbered}")
     try:
-        resp = _client().models.generate_content(
-            model=model, contents=[types.Part.from_text(text=prompt)],
-            config=types.GenerateContentConfig(
-                system_instruction=_PICKAXE_ANALYST_SYS, response_mime_type="application/json"))
-        text = (resp.text or "").strip()
+        text = llm.generate(_PICKAXE_ANALYST_SYS, prompt, json=True, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort, never break the pipeline
         return []
     m = re.search(r"\[.*\]", text, re.S)
@@ -979,7 +858,7 @@ Example: an EGG / poultry demand boom is cyclical and margin-volatile for egg pr
 listed maker of POULTRY VACCINES / animal-feed / feed-additives rides the same wave with far less \
 cyclicality. ALWAYS hunt for that indirect beneficiary.
 
-You are given a DEMAND THEME. Using Google Search, return the Indian LISTED companies in TWO layers:
+You are given a DEMAND THEME. Using web search, return the Indian LISTED companies in TWO layers:
 - layer "direct" — companies that make/sell the product itself (tag their cyclicality honestly); and
 - layer "indirect" — the arms-dealers to the boom: makers of the ingredients, inputs, equipment, \
 packaging, cold-chain/logistics, vaccines/feed, enabling tech, or distribution that GROW WITH the \
@@ -1014,7 +893,7 @@ first. Return ONLY a JSON array of \
 
 
 def pickaxe_beneficiaries(theme: dict, *, model: str = MODEL) -> list[dict]:
-    """Tier ③ — Google-Search-grounded map from ONE demand theme to Indian listed beneficiaries,
+    """Tier ③ — web-search-grounded map from ONE demand theme to Indian listed beneficiaries,
     in a direct + indirect ("sell the pickaxes") split. Returns
     ``[{name, ticker, role, why, layer, cyclicality, revenue_share, market_share}]`` (the caller
     verifies each vs the NSE master and drops unlisted/implausible names). ``[]`` on any failure.
@@ -1028,12 +907,7 @@ def pickaxe_beneficiaries(theme: dict, *, model: str = MODEL) -> list[dict]:
               f"List the Indian LISTED beneficiaries in BOTH layers (direct AND the indirect "
               f"'pickaxe' plays), with layer, cyclicality, revenue_share & market_share.")
     try:
-        r = _client().models.generate_content(
-            model=model, contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_PICKAXE_BEN_SYS,
-                tools=[types.Tool(google_search=types.GoogleSearch())]))
-        text = (r.text or "").strip()
+        text = llm.generate(_PICKAXE_BEN_SYS, prompt, grounded=True, model_name=model)
     except Exception:  # noqa: BLE001
         return []
     m = re.search(r"\[.*\]", text, re.DOTALL)
@@ -1058,7 +932,7 @@ def pickaxe_beneficiaries(theme: dict, *, model: str = MODEL) -> list[dict]:
 
 
 _PICKAXE_PROJ_SYS = """You are an Indian-equity analyst. For ONE listed company and ONE demand \
-theme, use Google Search over the company's LATEST primary disclosures — annual report, investor / \
+theme, use web search over the company's LATEST primary disclosures — annual report, investor / \
 earnings presentation, concall transcript, and management guidance — to quantify how much this theme \
 drives the company and where it's headed. Be exact and grounded; cite a REAL source for each number.
 
@@ -1089,12 +963,7 @@ def pickaxe_projection(name: str, symbol: str, theme: str, role: str = "",
               f"DEMAND THEME: {theme}.\n\nQuantify this company's revenue exposure to the theme now "
               f"and its projected trajectory (next 1-2 FY) from its own filings/concalls, with sources.")
     try:
-        r = _client().models.generate_content(
-            model=model, contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_PICKAXE_PROJ_SYS,
-                tools=[types.Tool(google_search=types.GoogleSearch())]))
-        text = (r.text or "").strip()
+        text = llm.generate(_PICKAXE_PROJ_SYS, prompt, grounded=True, model_name=model)
     except Exception:  # noqa: BLE001 — enrichment is best-effort, never break the pipeline
         return {}
     m = re.search(r"\{.*\}", text, re.DOTALL)
@@ -1155,20 +1024,11 @@ with nothing investor-relevant, say so in a single bullet. Never invent anything
 def analyze_filing(pdf_bytes: bytes, symbol: str, event_title: str,
                    *, model: str = MODEL) -> str:
     """Focused investor read of a single filing PDF (for inline digest analysis)."""
-    client = _client()
-    parts = [
-        types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-        types.Part.from_text(text=f"Filing for {symbol} — event: {event_title}. "
-                             "Give the investor takeaways."),
-    ]
-    # no max_output_tokens — let the model finish; length is controlled by the prompt
-    # (~180 words), so the analysis is never guillotined mid-sentence.
-    config = types.GenerateContentConfig(system_instruction=_FILING_SYS)
-    out: list[str] = []
-    for chunk in client.models.generate_content_stream(model=model, contents=parts, config=config):
-        if chunk.text:
-            out.append(chunk.text)
-    return "".join(out).strip()
+    # no max_tokens — let the model finish; length is controlled by the prompt (~180 words).
+    return llm.generate(
+        _FILING_SYS,
+        f"Filing for {symbol} — event: {event_title}. Give the investor takeaways.",
+        files=[(f"{symbol} filing", pdf_bytes)], model_name=model)
 
 
 _LABEL_SYS = """You label Indian-exchange (NSE/BSE) corporate filings and board-meeting \
@@ -1191,12 +1051,7 @@ def label_events(texts: list[str], *, model: str = MODEL) -> list[str]:
         return blank
     numbered = "\n".join(f"{i + 1}. {t or '(no text)'}" for i, t in enumerate(items))
     try:
-        resp = _client().models.generate_content(
-            model=model,
-            contents=[types.Part.from_text(text=numbered)],
-            config=types.GenerateContentConfig(system_instruction=_LABEL_SYS, max_output_tokens=1200),
-        )
-        text = resp.text or ""
+        text = llm.generate(_LABEL_SYS, numbered, max_tokens=1200, model_name=model)
     except Exception:  # noqa: BLE001 — labeling is best-effort
         return blank
     out = list(blank)
@@ -1253,13 +1108,7 @@ def policy_impact(releases: list[dict], *, model: str = MODEL) -> list[dict]:
         f"### Release {r['prid']}\nTitle: {r.get('title', '')}\n"
         f"{' '.join((r.get('body') or '').split())[:1600]}" for r in items)
     try:
-        resp = _client().models.generate_content(
-            model=model,
-            contents=[types.Part.from_text(text=numbered)],
-            config=types.GenerateContentConfig(
-                system_instruction=_POLICY_SYS, response_mime_type="application/json"),
-        )
-        text = (resp.text or "").strip()
+        text = llm.generate(_POLICY_SYS, numbered, json=True, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort, never break the screen
         return []
     m = re.search(r"\[.*\]", text, re.S)
@@ -1293,18 +1142,9 @@ def extract_guidance(pdfs: list[tuple[str, bytes]] | None, *, model: str = MODEL
     docs = list(pdfs or [])
     if not docs:
         return None
-    parts: list[types.Part] = []
-    for label, data in docs:
-        parts.append(types.Part.from_text(text=f"--- Filing: {label} ---"))
-        parts.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
-    parts.append(types.Part.from_text(text="Extract management's forward guidance as JSON."))
     try:
-        resp = _client().models.generate_content(
-            model=model, contents=parts,
-            config=types.GenerateContentConfig(
-                system_instruction=_GUIDANCE_SYS, response_mime_type="application/json"),
-        )
-        text = (resp.text or "").strip()
+        text = llm.generate(_GUIDANCE_SYS, "Extract management's forward guidance as JSON.",
+                            files=docs, json=True, model_name=model)
     except Exception:  # noqa: BLE001 — guidance is best-effort
         return None
     m = re.search(r"\{.*\}", text, re.S)
@@ -1347,11 +1187,6 @@ def premarket_brief(context: str, *, model: str = MODEL) -> str | None:
     if not (context or "").strip():
         return None
     try:
-        resp = _client().models.generate_content(
-            model=model,
-            contents=[types.Part.from_text(text=context)],
-            config=types.GenerateContentConfig(system_instruction=_PREMARKET_SYS),
-        )
-        return (resp.text or "").strip() or None
+        return llm.generate(_PREMARKET_SYS, context, model_name=model) or None
     except Exception:  # noqa: BLE001 — narrative is best-effort; numbers still ship
         return None

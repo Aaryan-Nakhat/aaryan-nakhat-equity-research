@@ -57,7 +57,7 @@ watchlist renders as a single flat list exactly as before.
 
 ## The digest
 
-Sent by **company name** (ticker in parens — symbols like `example tubes` are
+Sent by **company name** (ticker in parens — symbols like `RELIANCE` are
 cryptic), lines-only (no PDFs), with a **point-wise market-context header** (one
 emoji-tagged bullet per item) — then three parts. The header (all primary-source):
 - **Indices** — Nifty 50 + the key **sectoral Nifty indices** (Bank · Fin Services ·
