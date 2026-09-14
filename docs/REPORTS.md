@@ -37,14 +37,14 @@ alongside the brief on backends that accept documents — this is where manageme
 
 **Config (`.env`, see `.env.example`):**
 ```env
-LLM_PROVIDER=openai        # openai | openai_compatible | google | anthropic
-LLM_MODEL=<model-name>
-LLM_API_KEY=<key>          # or a provider service account for the google backend
-# LLM_BASE_URL=<endpoint>  # any OpenAI-compatible endpoint (self-hosted, gateway, router…)
+LLM_MODEL=<model string>   # the provider is inferred from it
+LLM_API_KEY=<key>          # omit if your backend uses ambient credentials
+# LLM_BASE_URL=<endpoint>  # optional: a custom API base URL (self-hosted, gateway, router…)
+# LLM_SEARCH_TOOL=<json>   # optional: the web-search tool spec your model accepts (for grounding)
 ```
-Two capabilities are provider-dependent and degrade gracefully: **PDF filing-reading** (used on
-backends that accept documents) and **web-grounded search** (used on backends that expose a search
-tool); on other backends those calls run text-only / un-grounded.
+Two capabilities are model-dependent and degrade gracefully: **PDF filing-reading** (used on
+backends that accept documents) and **web-grounded search** (used where `LLM_SEARCH_TOOL` is set and
+the model supports it); on other backends those calls run text-only / un-grounded.
 
 **Shared house-style (`synthesize._FORMATTING`):** one formatting block is appended to **all
 four** long-form prompts — the deep stock analysis, the IPO note, the fund note and the
@@ -367,8 +367,7 @@ You: "Infosys"  ──►  resolve (LLM + web search) ──►  one match? run 
 
 Setup: create a bot via **@BotFather** (`/newbot`) → token; get your ID from
 **@userinfobot**; put both in `.env`; then `uv run python scripts/telegram_bot.py`
-(keep it running, or schedule it). The llm_sdk client is a per-process singleton
-(creating several closes the shared httpx transport).
+(keep it running, or schedule it).
 
 ### Always-on (Windows Task Scheduler)
 

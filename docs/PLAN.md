@@ -428,7 +428,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
 - **Finer peer classification.** Peers are currently *same NSE macro-Industry within
   the Nifty 500* (`sector.peers` over the `sector_map`), so broad buckets lump
   unlike businesses (e.g. "Capital Goods" puts Welspun Corp's steel pipes next to
-  example energy's wind turbines). Add a sub-industry / business-line tag (curated, or via
+  a wind-turbine maker). Add a sub-industry / business-line tag (curated, or via
   the LLM) so the peer table compares true like-for-like competitors.
 
 ## 4. Where the LLM fits

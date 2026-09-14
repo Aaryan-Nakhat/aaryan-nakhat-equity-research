@@ -835,7 +835,7 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
         # valuation lens: current P/E vs the stock's own positive-P/E history median.
         # Suppress (with a reason) when the P/E is meaningless rather than show a bogus
         # number: a loss-maker, profit > sales (a demerger/exceptional artifact, e.g.
-        # EXMOT), or negative net worth (accumulated losses > equity, e.g. example telecom).
+        # a demerged entity), or negative net worth (accumulated losses > equity, e.g. a debt-laden telco).
         snap = valuation.snapshot(con, sym)
         pe = snap.get("pe_ttm")
         pe = float(pe) if (pe is not None and pe == pe and 0 < pe < 1000) else None

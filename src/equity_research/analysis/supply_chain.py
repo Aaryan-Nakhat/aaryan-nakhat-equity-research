@@ -63,7 +63,7 @@ _CURATED_COMPANY: dict[str, list[dict]] = {
     "HAL": [{"symbol": "DYNAMATECH", "role": "airframe & hydraulic assemblies"},
             {"symbol": "AZAD", "role": "engine & precision components"},
             {"symbol": "MTARTECH", "role": "precision machined assemblies"}],
-    "EXMOT": [{"symbol": "SANDHAR", "role": "locks, mirrors, structural parts"},
+    "MARUTI": [{"symbol": "SANDHAR", "role": "locks, mirrors, structural parts"},
                    {"symbol": "MINDACORP", "role": "wiring harnesses & electronics"}],
 }
 

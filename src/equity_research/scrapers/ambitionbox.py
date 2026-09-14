@@ -10,7 +10,7 @@ average** for peer benchmarking, and the CEO name).
 **Entity resolution** is the one hard part (a stock's name must map to the right AmbitionBox company,
 not a same-named namesake). Strategy, most-reliable first: a verified ``_SLUG_MAP`` override → the
 direct name-derived slug (trusted, since we built it from the name) → the search API with a strict
-name-match guard (to avoid namesakes like example finance→a same-named giant). If nothing resolves confidently it returns
+name-match guard (to avoid namesakes like a small co → a same-named giant). If nothing resolves confidently it returns
 ``no_coverage`` — an honest blank beats a wrong company.
 
 Automated access to AmbitionBox is subject to its Terms of Service; this is a **personal-research**

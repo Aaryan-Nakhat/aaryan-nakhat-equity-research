@@ -229,8 +229,8 @@ cp .env.example .env                       # then fill in your own credentials
 
 Configure `.env` (all secrets are read from the environment; `.env` is gitignored — see
 [`.env.example`](.env.example) for every variable):
-- **LLM** — bring your own: set `LLM_PROVIDER` (openai / openai_compatible / google / anthropic),
-  `LLM_MODEL` and `LLM_API_KEY` (or `LLM_BASE_URL` for any OpenAI-compatible endpoint).
+- **LLM** — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
+  (or `LLM_BASE_URL` for a custom endpoint). Runs on any provider via [LiteLLM](https://docs.litellm.ai).
 - **Delivery** — `CHANNELS=email` (Gmail SMTP/IMAP app password) and/or `telegram`
   (a BotFather token + your allowed user IDs).
 
