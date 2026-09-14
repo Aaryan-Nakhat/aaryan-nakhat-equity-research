@@ -375,7 +375,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   (<20 → not scored). **Entity resolution** (the hard part — name→right company, not a namesake): verified
   env-driven slug overrides (`EMPLOYER_SLUG_OVERRIDES`, kept out of the repo) → direct name-slug → search API with a strict brand-token name-guard; unresolved → honest
   "no coverage". Cached ~30d in `alert_state`; **opt-in** `EMPLOYER_REVIEWS_ENABLED`. Verified live
-  (example pharma 🟢🟢A/🟢B +0.20; a turnaround airline 🔴E/🔴E −0.44). *Next:* Glassdoor secondary cross-check; a
+  (a peer-beating large-cap → 🟢🟢A/🟢B; a below-peer turnaround → 🔴E/🔴E). *Next:* Glassdoor secondary cross-check; a
   bot-stopped `backfill_employer_sentiment.py` to warm the whole watchlist.
 - **`help` command — ✅ shipped** (`email_bot._send_help`/`_HELP_SECTIONS`): email `help` → the full
   command menu, section by section as tables (Subject → what you get) + the auto-pushes + tips.

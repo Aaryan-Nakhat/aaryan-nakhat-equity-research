@@ -40,7 +40,8 @@ Start-Sleep -Seconds 2
 # Auto-restart loop: if the bot exits/crashes, wait and relaunch.
 while ($true) {
     "$(Get-Date -Format o)  starting email bot" | Out-File -Append -FilePath $launchlog -Encoding utf8
-    & $uv run python scripts/email_bot.py
+    # --extra cloud installs the service-account SDK a cloud LLM backend needs (harmless for others).
+    & $uv run --extra cloud python scripts/email_bot.py
     "$(Get-Date -Format o)  email bot exited (code $LASTEXITCODE); restarting in 60s" | Out-File -Append -FilePath $launchlog -Encoding utf8
     Start-Sleep -Seconds 60
 }

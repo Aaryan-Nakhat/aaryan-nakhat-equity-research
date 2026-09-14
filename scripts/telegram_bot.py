@@ -1,6 +1,6 @@
 """Telegram bot — message a company name, get a deep equity report back.
 
-Flow: you send "example power" (optionally "... consolidated") -> the bot resolves
+Flow: you send "Infosys" (optionally "... consolidated") -> the bot resolves
 it to NSE symbol(s) [local map, else LLM + web search]; if several match it
 shows buttons to pick one; then it ingests-on-demand, builds the deep brief,
 runs the LLM forensic analysis, and replies with the report (inline + a .md

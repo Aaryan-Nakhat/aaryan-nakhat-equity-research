@@ -81,7 +81,7 @@ def _num(v):
 
 def _name_match(query: str, cand_name: str) -> bool:
     """Guard for SEARCH results only: the candidate must share a real BRAND token with the query and
-    cover ≥50% of the query's identifying tokens — so 'example tubes' won't accept 'example steel'."""
+    cover ≥50% of the query's identifying tokens — so a small 'Acme Tubes' won't match a giant 'Globex Steel'."""
     q = _toks(query) - _LEGAL
     c = _toks(cand_name) - _LEGAL
     if not q:

@@ -4,8 +4,8 @@ financials, and seed alert state. Prints what each name resolved to.
 Your personal portfolio is **not** hardcoded here — the names come from your
 (git-ignored) ``.env`` so the code stays generic and public-safe:
 
-    WATCHLIST_HOLDINGS=example power, HINDPETRO, example fmcg, ...      # stocks you own
-    WATCHLIST_TRACKING=example financial services, example chemicals co, ... # watching, not owned
+    WATCHLIST_HOLDINGS=reliance industries, hdfc bank, tcs, ...   # stocks you own
+    WATCHLIST_TRACKING=infosys, larsen and toubro, ...           # watching, not owned
 
 Each var is a comma-separated list of company names or NSE symbols. Then:
 

@@ -65,7 +65,7 @@ in [`SCRAPING.md`](SCRAPING.md),
 ## Flow A — Pull: you ask for a stock
 
 ```
-You ▶ Telegram: "example power"  (or "Reliance consolidated")
+You ▶ Telegram: "Infosys"  (or "Reliance consolidated")
         │
         ▼  resolve.py  → LLM+Search → NSE symbol(s)
    one match? ──run──┐        several? ──▶ buttons ──▶ you tap one ──┐

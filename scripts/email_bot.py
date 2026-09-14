@@ -682,7 +682,7 @@ _md_table = md.table          # shared markdown pipe-table helper (renders as st
 # what handle_request actually dispatches. (cmd, what-you-get) rows; commands in `backticks`.
 _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
     ("📊 Stock deep report", "Just put a company name or NSE symbol in the Subject — the core report.", [
-        ["`example power` (any company name or symbol)",
+        ["`Infosys` (any company name or symbol)",
          "Full deep report: fundamentals, forensics (Altman / Beneish / Piotroski), sector-lens "
          "valuation, technicals, shareholding + smart-money cost & profit-booking risk — with a PDF."],
         ["`Reliance consolidated` / `Reliance standalone`",
@@ -1735,7 +1735,7 @@ def handle_request(req: EmailRequest) -> None:
     #    take minutes, and a silent gap reads as "the bot is dead" and provokes resends.
     query = _clean_query(req.subject)
     if not query:
-        _reply_text(req, "Send a company name in the Subject line, e.g. 'example power'.")
+        _reply_text(req, "Send a company name in the Subject line, e.g. 'Infosys'.")
         return
     _reply_text(req, f"📩 Got it — resolving **{query}** and building the deep report. "
                      "This takes a few minutes; everything will land in this thread.")

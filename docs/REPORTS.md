@@ -347,7 +347,7 @@ Every headline metric is annotated so the report stands on its own:
 `scripts/telegram_bot.py` — message a company name, get a deep report back.
 
 ```
-You: "example power"  ──►  resolve (LLM + web search) ──►  one match? run it
+You: "Infosys"  ──►  resolve (LLM + web search) ──►  one match? run it
                                                           └─► several? buttons → you pick
    ──►  ensure-ingested (on demand) ──►  deep brief ──►  LLM forensic ──►  reply (formatted inline + PDF)
 ```
