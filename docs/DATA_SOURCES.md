@@ -184,6 +184,19 @@ news-portal / social-media rumor** — that would break the primary-only rule.
 | **Reddit** (early speculation) | 🟡→🔴 | `old.reddit.com/search.json` — now 403s unauthenticated from datacenter IPs; a per-process circuit-breaker skips it fast. Best-effort bonus; News carries the load. |
 | **Twitter / X** (fastest chatter) | 🔴 | No usable no-auth API; tried via nitter RSS mirrors (`xcancel.com`, `nitter.poast.org`) which are largely down → returns nothing gracefully (circuit-breaker). A paid X API key would make it reliable (deferred). |
 
+## 11. Surging-demand sources — the ⛏️ Pickaxe Scout (`scrapers/trends.py`, `scrapers/social.py`)
+
+> **Analysis/LLM-grounded layer, NOT the primary DB.** These feed the demand-side Pickaxe radar
+> (surging consumer demand → the indirect "sell the pickaxes" beneficiary). Like the Tailwind Scout,
+> it's a *signal* input, not government-primary data — every name is verified vs `equity_master` and
+> the report is a lead generator to check. See [`REPORTS.md`](REPORTS.md) → ⛏️ Pickaxe.
+
+| Data | Access | Notes |
+|---|---|---|
+| **Google Trends** (rising demand) | 🟡 | **No official API.** Plain-HTTP `pytrends` is 429-blocked instantly, so `scrapers/trends.py` uses the **Camoufox browser tier**: it loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata` XHRs the page fires** — `relatedsearches` → rising **"buy"** queries by consumer category (India, 3-mo), `multiline` → 12-mo interest-over-time (for the theme charts). Reaches data the direct API refuses, but Google **rate-limits by IP** → best-effort, circuit-breaker; when throttled, news + the LLM carry the pipeline. See [`SCRAPING.md`](SCRAPING.md). |
+| **Google News RSS** (demand-surge news) | 🟢 | `news.google.com/rss/search?q=<query>+when:<N>d` (via `social.py::google_news`) — demand-surge / sales-jump / price-hike / fastest-growing-category queries for India. The reliable leg that carries Pickaxe when Trends is throttled. |
+| **Reddit** (consumer chatter) | 🟡→🔴 | `social.py::reddit_search` — "everyone's buying", rising-price consumer chatter; same best-effort circuit-breaker as in Tailwind. |
+
 ## Practical takeaways for the scraping plan
 
 1. **BSE is the friendlier primary** for fundamentals/filings/actions; **NSE for

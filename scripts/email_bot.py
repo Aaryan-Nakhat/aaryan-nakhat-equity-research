@@ -2035,7 +2035,7 @@ def maybe_pickaxe() -> None:
         target=_pickaxe_worker,
         kwargs={"req": None, "to": to, "subject": f"⛏️ Pickaxe — {today}",
                 "use_cache": False, "weekly": True},
-        name="pickaxe-weekly", daemon=True).start()
+        name="pickaxe-monthly", daemon=True).start()
 
 
 _last_mail_sweep: datetime | None = None

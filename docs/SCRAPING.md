@@ -174,6 +174,15 @@ verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
 - **Reddit** (`social.py::reddit_search`) — `old.reddit.com/search.json`; now 403s unauth → a
   process-lifetime circuit-breaker (`_reddit_dead`) skips it after the first block. **Twitter/X**
   (`social.py::twitter_search`) via nitter mirrors is similarly best-effort (mirrors mostly down).
+- **Google Trends** (`scrapers/trends.py`) — feeds the ⛏️ Pickaxe demand radar (rising **"buy"**
+  queries by consumer category + interest-over-time). Google Trends has **no official API** and
+  plain-HTTP `pytrends` is **429-blocked instantly**, so this uses the **browser tier**, NSE-style:
+  Camoufox loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata`
+  XHR responses the page fires itself** (`relatedsearches` → rising queries, `multiline` →
+  interest-over-time) — real tokens/cookies/timing, which reaches data the direct API 429s on. Google
+  still **rate-limits by IP**, so it's **best-effort** with a per-process circuit-breaker
+  (`_trends_dead`); when throttled the Pickaxe pipeline runs on its news/LLM legs instead. A *signal*
+  source, not primary DB data. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §11.
 
 ## Storage (DuckDB landing)
 

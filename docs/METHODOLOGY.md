@@ -391,6 +391,35 @@ with zero).
   **mid-week urgent break-in** (fresh high-severity only, `run_tailwind_urgent`, `tailwind_seen_keys` dedup).
   **Honest:** an idea *generator* — `supplier_share`/`revenue_share`/`market_share` are LLM/grounded
   estimates (shown 🟡 verify; honest `n/a` when unknown); every catalyst is source-cited.
+- **`pickaxe` / `demand` — ⛏️ surging-demand radar (`analysis/pickaxe.py`; `scrapers/trends.py` + `social.py`)** —
+  the **demand-side mirror of Tailwind**, on the gold-rush *"sell the pickaxes, don't dig for gold"* principle
+  (when demand for a product booms, the less-cyclical winner is often the one who *supplies* the boom — the
+  feed/vaccine/ingredient/equipment maker — not the crowded end-product). A **six-stage pipeline**. **① Scout:**
+  **Google Trends** rising **"buy"** queries by consumer category — pulled via the **Camoufox browser tier**
+  (`scrapers/trends.py` loads the real *explore* page and **intercepts the `widgetdata` XHRs it fires**, since
+  plain-HTTP pytrends is 429-blocked; best-effort + circuit-breaker) — merged with demand-surge / price-hike
+  Google News (+ Reddit). **② Demand Analyst — 🤖 LLM (`synthesize.pickaxe_analyst`, JSON):** raw signals →
+  **specific, durable** demand themes (rejects fads / vague umbrella themes), each with co-trending
+  confirmation terms + `india_supply` + `durability`, returning the **source SIGNAL INDEX** (anti-hallucination
+  gate). **③ Value-Chain Mapper — 🤖 LLM (`synthesize.pickaxe_beneficiaries`, Google-Search-grounded):** theme →
+  Indian listed names in two layers — **direct** (makes the product) and **indirect "pickaxe"** (supplies the
+  boom); **required to always return real beneficiaries** (a genuine demand theme always has them). **④ Auditor
+  (deterministic):** verify every name vs `equity_master` (reuses `supply_chain._verify`/`_implausible`), attach
+  market-cap tier + a **smart-money read** (`ownership.ownership_changes` → accumulating/distributing) +
+  cyclicality tag, **rank indirect-pickaxes-first** (watchlist → indirect → lower-cyclicality → accumulating →
+  smaller-cap). **⑤ Enrich (per name):** `pipeline.ensure_ingested` then **exact quant** — `valuation.snapshot`
+  (price/P-E/P-B/mcap), `sector.sector_valuation` (**P/E vs sector median**), `technical.levels`
+  (support/resistance/trend) — plus **🤖 `synthesize.pickaxe_projection`** (Google-Search-grounded read of the
+  firm's own annual report / concall / investor deck → **revenue-share now → next-FY + growth, each with a
+  source link**). **⑥ Charts:** `trends.interest_details` (one browser session) → `charts.pickaxe_trend_chart`
+  (12-mo Google-Trends interest line per theme) into an **attached PDF**. Rendered as **per-stock blocks**.
+  **Cached 24h** (`scan.pickaxe_cache_get/put`; `--latest` forces fresh). **Delivery is async** — the deep build
+  is ~10-15 min, so it runs in a **background thread** (`email_bot._pickaxe_worker`, single-build lock): the
+  on-demand command acks instantly and delivers the report + PDF when ready; **pushed monthly (first Saturday
+  ≥18:00 IST**, `scan.pickaxe_due` on a year-month marker, `email_bot.maybe_pickaxe`). **Honest:** an idea
+  *generator* — Trends is best-effort (no official API; when throttled the read is news/LLM-driven), and the
+  revenue-share / projection figures are LLM/grounded estimates with sources to verify (honest blank when not
+  found).
 - **Weekly "Screener movements"** (`screen_digest.py`) — Saturday email with **trigger-based deltas
   only** across the three screens (fingerprints in `alert_state`). Each section is **self-explaining**:
   holdco rows carry company name + a plain-English discount reading (**positive % = trades below its
@@ -422,6 +451,9 @@ The LLM (**the configured LLM / the provider AI**) is used **only** here — eve
 | Supply-chain suggest | `synthesize.supply_chain_suppliers` | company/sector (+ Google Search) | listed ancillaries (verified vs master) |
 | Tailwind Analyst | `synthesize.tailwind_analyst` | Scout signals + chokepoint list | disruptions + supplier_share + source index (JSON) |
 | Tailwind Mapper | `synthesize.tailwind_beneficiaries` | one disruption (+ Google Search) | Indian beneficiaries + revenue/market share |
+| Pickaxe Analyst | `synthesize.pickaxe_analyst` | demand signals (Trends + news) | durable demand themes + source index (JSON) |
+| Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ Google Search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
+| Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ Google Search) | revenue-share now→next-FY + growth, with sources (JSON) |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
 
@@ -463,6 +495,15 @@ The LLM (**the configured LLM / the provider AI**) is used **only** here — eve
   `equity_master`**; but the three headline numbers — the **supplier's world-share** and each firm's
   **revenue-share / production-share** — are **LLM/grounded estimates** (shown 🟡, honest `n/a` when not
   confidently known, never fabricated). "No clean listed beneficiary" is a valid, un-forced answer.
+- **Pickaxe is a demand-signal idea generator, not primary data** — like Tailwind it reads *signals*
+  (Google Trends + news), not filed facts. **Google Trends has no official API**: it's scraped via the
+  Camoufox browser tier and Google **rate-limits by IP**, so it's best-effort — when throttled the demand
+  read falls back to news/LLM (qualitative, no hard % change). Each name's **exact quant** (price / P/E-vs-
+  sector / support-resistance) *is* deterministic from ingested data, but the **revenue-share (now → next
+  FY) and growth projection** are **LLM/grounded estimates read from the company's own filings/concalls**,
+  shown with **source links to verify** (honest blank when not confidently found). The Mapper is required to
+  always name real listed beneficiaries; empty themes are dropped rather than shown. Cadence is **monthly +
+  on-demand** (the build is deep, ~10-15 min).
 - **The LLM can be wrong** — it reads primary filings but is a language model; the verdict is a
   starting point, and the deterministic numbers above are the ground truth to check it against.
 
