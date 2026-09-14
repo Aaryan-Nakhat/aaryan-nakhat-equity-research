@@ -347,12 +347,12 @@ Every headline metric is annotated so the report stands on its own:
 `scripts/telegram_bot.py` — message a company name, get a deep report back.
 
 ```
-You: "example power"  ──►  resolve (LLM + Google Search) ──►  one match? run it
+You: "example power"  ──►  resolve (LLM + web search) ──►  one match? run it
                                                           └─► several? buttons → you pick
    ──►  ensure-ingested (on demand) ──►  deep brief ──►  LLM forensic ──►  reply (formatted inline + PDF)
 ```
 
-- **Resolver** (`reports/resolve.py`): LLM + Google-Search grounding maps free
+- **Resolver** (`reports/resolve.py`): LLM + web-search grounding maps free
   text → exact NSE symbol(s). Returns **one** when certain, **up to 5 ranked**
   otherwise (handles small-cap / newly-listed names, not just a fixed universe).
 - **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` —
@@ -747,7 +747,7 @@ The report (all from data we already refresh daily):
 *indirect* beneficiaries, excluding index members). Also a standalone **`suppliers: <company>`** command
 (`suppliers: BEL`). No structured supplier data exists, so it's a **hybrid**: a hand-curated seed
 (`_CURATED_SECTOR`/`_CURATED_COMPANY`, flagship sectors like defence) + LLM suggestions
-(`synthesize.supply_chain_suppliers`, Google-Search-grounded) — **every** name verified against
+(`synthesize.supply_chain_suppliers`, web-search-grounded) — **every** name verified against
 `equity_master` (dropped if it doesn't resolve to a real NSE symbol; a name-consistency guard rejects a
 hallucinated ticker like "PNC"→Pritish Nandy). Rows labelled 🖐️ curated vs 🤖 **AI-suggested (verify)**.
 A discovery aid, not a confirmed supplier ledger.
@@ -799,7 +799,7 @@ A **four-tier agent pipeline**, each tier one job, chained:
    (ban/quota/tariff/cut/shortage/subsidy), each tagged material/imposer/status/severity/sectors. It
    returns the **index of the evidencing signal**, not a free-text URL — so the source link is always a
    real fetched one (the anti-hallucination gate; unsourced items are dropped).
-3. **③ Mapper** (`synthesize.tailwind_beneficiaries`) — **Google-Search-grounded** per disruption →
+3. **③ Mapper** (`synthesize.tailwind_beneficiaries`) — **web-search-grounded** per disruption →
    candidate Indian listed beneficiaries (alternate producers / substitutes), with role + why.
 4. **④ Auditor** (`tailwind.auditor`) — verifies every name against `equity_master` (reuses
    `supply_chain._verify` name-consistency + `_implausible` industry guard + `_BLOCKLIST`), drops what
@@ -865,7 +865,7 @@ A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tai
    investable demand THEMES**, rejecting fads/seasonal/one-off spikes; each tagged
    category/driver/**co-trending confirmation terms**/india_supply/durability. Returns the **index of the
    evidencing signal**, not a free URL (the anti-hallucination gate; unsourced themes dropped).
-3. **③ Value-Chain Mapper** (`synthesize.pickaxe_beneficiaries`) — **Google-Search-grounded** per theme →
+3. **③ Value-Chain Mapper** (`synthesize.pickaxe_beneficiaries`) — **web-search-grounded** per theme →
    Indian listed names in **two layers**: **direct** (makes the product, cyclicality tagged) and
    **indirect "pickaxe"** (the arms-dealer to the boom — ingredient/feed/vaccine/equipment/packaging/
    logistics), asked for at least as many indirect as direct.
@@ -880,7 +880,7 @@ A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tai
 out: `pipeline.ensure_ingested` lands its financials, then **exact quant** from our own engines
 (`valuation.snapshot` → price / P/E / P/B / mcap; `sector.sector_valuation` → **P/E vs its sector median**;
 `technical.levels` → nearest **support / resistance** + trend), plus a **filing-grounded forward
-projection** (`synthesize.pickaxe_projection`, Google-Search-grounded over the company's annual report /
+projection** (`synthesize.pickaxe_projection`, web-search-grounded over the company's annual report /
 concall / investor deck) → **revenue-share now → next FY, expected growth, and a one-line driver, each with
 a source link**. Blanks where a figure isn't confidently found (never fabricated).
 

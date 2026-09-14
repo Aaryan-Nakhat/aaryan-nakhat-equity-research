@@ -48,7 +48,7 @@ in [`SCRAPING.md`](SCRAPING.md),
                    ┌─────────────────────────────────────────────────────────────┐
                    │  reports/                                                   │
                    │  brief.py / deep_brief.py  → one markdown brief (all signals)│
-                   │  resolve.py  "name" → NSE symbol (LLM + Google Search)   │
+                   │  resolve.py  "name" → NSE symbol (LLM + web search)   │
                    │  synthesize.py → the configured LLM (see .env)    │
                    │  pdf.py (HTML→Chromium PDF) · email.py (SMTP)                │
                    └───────────────────────────────┬─────────────────────────────┘
@@ -176,7 +176,7 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
               ② ANALYST synthesize.tailwind_analyst — triage signals → genuine disruptions
                         (export ban/quota/tariff/cut/shortage); returns the source SIGNAL INDEX not a
                         free URL, so every citation is a real fetched link — the anti-hallucination gate
-              ③ MAPPER  synthesize.tailwind_beneficiaries — Google-Search-grounded → candidate
+              ③ MAPPER  synthesize.tailwind_beneficiaries — web-search-grounded → candidate
                         Indian listed beneficiaries (alternate producers / substitutes), per disruption
               ④ AUDITOR tailwind.auditor — verify each vs equity_master (reuses supply_chain._verify
                         / _implausible), drop implausible/blocklisted, flag watchlist hits, rank
@@ -216,7 +216,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
               ② ANALYST synthesize.pickaxe_analyst — triage signals → genuine, DURABLE demand THEMES
                         (reject fads/seasonal); returns the source SIGNAL INDEX not a free URL (anti-
                         hallucination), with co-trending confirmation terms + india_supply + durability
-              ③ MAPPER  synthesize.pickaxe_beneficiaries — Google-Search-grounded → Indian listed names
+              ③ MAPPER  synthesize.pickaxe_beneficiaries — web-search-grounded → Indian listed names
                         in TWO layers: direct (makes the product) + INDIRECT "pickaxe" (the arms-dealer
                         to the boom — feed/vaccine/ingredient/equipment/packaging/logistics)
               ④ AUDITOR pickaxe.auditor — verify each vs equity_master (reuses supply_chain._verify /

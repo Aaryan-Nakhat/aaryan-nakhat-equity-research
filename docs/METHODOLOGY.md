@@ -400,7 +400,7 @@ with zero).
   ban/quota/tariff/cut/crop-failure), returning the **source SIGNAL INDEX** (not a free-text URL) so every
   citation maps to a real fetched link — the anti-hallucination gate — plus a **`supplier_share`** estimate
   (dominant supplier's world share) and **`mechanism`** (import-substitution / export-share-gain). **③
-  Mapper — 🤖 LLM (`synthesize.tailwind_beneficiaries`, Google-Search-grounded):** disruption → Indian
+  Mapper — 🤖 LLM (`synthesize.tailwind_beneficiaries`, web-search-grounded):** disruption → Indian
   listed beneficiaries, each with best-effort **`revenue_share`** (% of the firm's revenue from the good) +
   **`market_share`** (its production/export share). **④ Auditor (deterministic):** verify every name vs
   `equity_master` (reuses `supply_chain._verify`/`_implausible`), drop implausible/blocklisted, tag
@@ -419,7 +419,7 @@ with zero).
   Google News (+ Reddit). **② Demand Analyst — 🤖 LLM (`synthesize.pickaxe_analyst`, JSON):** raw signals →
   **specific, durable** demand themes (rejects fads / vague umbrella themes), each with co-trending
   confirmation terms + `india_supply` + `durability`, returning the **source SIGNAL INDEX** (anti-hallucination
-  gate). **③ Value-Chain Mapper — 🤖 LLM (`synthesize.pickaxe_beneficiaries`, Google-Search-grounded):** theme →
+  gate). **③ Value-Chain Mapper — 🤖 LLM (`synthesize.pickaxe_beneficiaries`, web-search-grounded):** theme →
   Indian listed names in two layers — **direct** (makes the product) and **indirect "pickaxe"** (supplies the
   boom); **required to always return real beneficiaries** (a genuine demand theme always has them). **④ Auditor
   (deterministic):** verify every name vs `equity_master` (reuses `supply_chain._verify`/`_implausible`), attach
@@ -427,7 +427,7 @@ with zero).
   cyclicality tag, **rank indirect-pickaxes-first** (watchlist → indirect → lower-cyclicality → accumulating →
   smaller-cap). **⑤ Enrich (per name):** `pipeline.ensure_ingested` then **exact quant** — `valuation.snapshot`
   (price/P-E/P-B/mcap), `sector.sector_valuation` (**P/E vs sector median**), `technical.levels`
-  (support/resistance/trend) — plus **🤖 `synthesize.pickaxe_projection`** (Google-Search-grounded read of the
+  (support/resistance/trend) — plus **🤖 `synthesize.pickaxe_projection`** (web-search-grounded read of the
   firm's own annual report / concall / investor deck → **revenue-share now → next-FY + growth, each with a
   source link**). **⑥ Charts:** `trends.interest_details` (one browser session) → `charts.pickaxe_trend_chart`
   (12-mo Google-Trends interest line per theme) into an **attached PDF**. Rendered as **per-stock blocks**.
@@ -466,12 +466,12 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 | Policy radar | `synthesize.policy_impact` | PIB releases | scheme → sector → beneficiaries (JSON) |
 | Fund thesis | `synthesize.fund_thesis` | fund report | qualitative fund read + verdict |
 | Sector top-down read | `synthesize.sector_thesis` | sector brief (tech/val/flows/news) | enter/accumulate/hold verdict |
-| Supply-chain suggest | `synthesize.supply_chain_suppliers` | company/sector (+ Google Search) | listed ancillaries (verified vs master) |
+| Supply-chain suggest | `synthesize.supply_chain_suppliers` | company/sector (+ web search) | listed ancillaries (verified vs master) |
 | Tailwind Analyst | `synthesize.tailwind_analyst` | Scout signals + chokepoint list | disruptions + supplier_share + source index (JSON) |
-| Tailwind Mapper | `synthesize.tailwind_beneficiaries` | one disruption (+ Google Search) | Indian beneficiaries + revenue/market share |
+| Tailwind Mapper | `synthesize.tailwind_beneficiaries` | one disruption (+ web search) | Indian beneficiaries + revenue/market share |
 | Pickaxe Analyst | `synthesize.pickaxe_analyst` | demand signals (Trends + news) | durable demand themes + source index (JSON) |
-| Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ Google Search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
-| Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ Google Search) | revenue-share now→next-FY + growth, with sources (JSON) |
+| Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ web search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
+| Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ web search) | revenue-share now→next-FY + growth, with sources (JSON) |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
 

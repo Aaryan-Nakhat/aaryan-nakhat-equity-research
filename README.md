@@ -136,12 +136,12 @@ source → formula → model).
 - **`suppliers: <company>`** — the smaller **listed** suppliers / ancillaries feeding a marquee name
   (curated + AI, every name verified against the NSE master).
 - **💨 `tailwind`** — the **global supply-shock radar**: a four-tier agent pipeline (Scout = Google News +
-  **US Federal Register** → LLM Analyst → Google-Search-grounded Mapper → NSE-master Auditor) finds global
+  **US Federal Register** → LLM Analyst → web-search-grounded Mapper → NSE-master Auditor) finds global
   **export bans / quotas / tariffs / cuts** across **all commodity categories** (metals · agri · pharma
   inputs · chemicals · fertiliser · energy) and maps them to **verified Indian beneficiaries** — with the
   supplier's world-share and each firm's revenue-share & production share. Cached 24h; `--latest` forces fresh.
 - **⛏️ `pickaxe`** — the **demand-side mirror of Tailwind**: a four-tier agent pipeline (Scout = Google
-  Trends rising 'buy' searches + demand-surge news → LLM Demand-Analyst → Google-Search-grounded Value-Chain
+  Trends rising 'buy' searches + demand-surge news → LLM Demand-Analyst → web-search-grounded Value-Chain
   Mapper → NSE-master Auditor) finds **surging Indian consumer/industrial demand** and maps each theme to the
   **indirect "sell the pickaxes" beneficiaries** — the feed/vaccine/ingredient/equipment/packaging names that
   ride a boom with **less cyclicality** than the crowded end-product — plus the direct plays. Every name is

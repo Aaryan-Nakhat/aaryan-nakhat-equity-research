@@ -296,7 +296,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   - **Supply-chain / indirect contributors — ✅ shipped** (`analysis/supply_chain.py`,
     `synthesize.supply_chain_suppliers`): a 🔗 section in the sector report **and** a standalone
     `suppliers: <company>` command. Hybrid — hand-curated seed (`_CURATED_SECTOR`/`_CURATED_COMPANY`) +
-    Google-Search-grounded LLM; **every** name verified against `equity_master` (dropped if not a real NSE
+    web-search-grounded LLM; **every** name verified against `equity_master` (dropped if not a real NSE
     symbol; name-consistency guard kills hallucinated tickers), labelled 🖐️ curated / 🤖 AI-verify.
   - **Weekly sector-rotation push — ✅ shipped** (`sector_brief.build_sector_rotation`,
     `email_bot.maybe_sector_rotation`, **Sat ≥18:00 IST**; on-demand `sector: rotation`): all sectors by RS
@@ -319,7 +319,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   `scan.tailwind_due`/`mark_tailwind`). The **chokepoint-arbitrage** lens: a **four-tier agent pipeline**
   — ① Scout (Google News RSS + best-effort Reddit over a ~15-material `_CHOKEPOINTS` catalog) → ② Analyst
   (LLM triage → genuine export-ban/quota/tariff/cut disruptions, source-index-gated so every link is real)
-  → ③ Mapper (Google-Search-grounded → Indian listed beneficiaries) → ④ Auditor (verify vs `equity_master`,
+  → ③ Mapper (web-search-grounded → Indian listed beneficiaries) → ④ Auditor (verify vs `equity_master`,
   reusing `supply_chain._verify`/`_implausible`, watchlist-flag, rank). Autonomous (you never name a
   material); each catalyst **source-cited**; reply a number → deep report. Verified live: DRC cobalt ban →
   HINDCOPPER/HINDALCO, US tungsten-scrap curb → KENNAMET/MIDHANI, China Ge/Ga curb → HINDZINC/NATIONALUM.
@@ -340,7 +340,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   loads the real explore page and **intercepts the widgetdata XHRs it fires**, like `nse_api`),
   **best-effort + circuit-breaker**, merged with demand-surge Google News + Reddit) → ② Demand Analyst (LLM
   triage → genuine **durable** demand themes, not fads; source-index-gated + co-trending confirmation) → ③
-  Value-Chain Mapper (Google-Search-grounded → Indian listed names in **direct + indirect "pickaxe"**
+  Value-Chain Mapper (web-search-grounded → Indian listed names in **direct + indirect "pickaxe"**
   layers) → ④ Auditor (verify vs `equity_master` reusing `supply_chain._verify`/`_implausible`, attach
   market-cap tier + **smart-money read** via `ownership.ownership_changes` + cyclicality tag, **rank
   indirect-pickaxes-first**) → ⑤ **Enrich** (`pickaxe.enrich_report`: per name `pipeline.ensure_ingested`
