@@ -679,7 +679,7 @@ deterministic — reuse `quant._ratios`/`load_annual`, `fundamentals.quarterly_m
 ### 🔥 Hotlist — `hotlist` (multi-signal confluence)
 
 **`hotlist`** (also `screen: hotlist`; `--latest` forces a fresh run) → `analysis/hotlist.py` runs the
-discovery engines (**momentum, leaders, accumulation, value+forensic, small-cap capex**) and ranks every
+discovery engines (**Volume Breakouts, Market Beaters, Institutional Buying, value+forensic, small-cap capex**) and ranks every
 surfaced name by **how many engines flag it** — confluence being a higher-conviction lead than any single
 screen — with per-engine rank + weight breaking ties. It's a heavier multi-engine run, so it's **built
 once and cached 24h** (via `scan.hotlist_cache_get/put`, mirroring Tailwind), served instantly on repeat

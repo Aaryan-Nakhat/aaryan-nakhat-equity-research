@@ -1,4 +1,5 @@
-"""Relative-strength leaders — surface the market's strongest performers, market-wide.
+"""Relative-strength discovery (surfaced to users as **Market Beaters**, `screen: beaters`) —
+surface the market's strongest performers, market-wide.
 
 Answers "what is quietly outrunning the market?" — the names beating the broad index (Nifty 500)
 over 3, 6 and 12 months while still trending up. Relative strength is one of the most persistent

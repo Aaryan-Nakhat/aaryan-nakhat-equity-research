@@ -1555,8 +1555,8 @@ def _hotlist_md(rows: list[dict]) -> str:
                       tbl, align="rllllrl")
     return ("**🔥 Hotlist — names lighting up across multiple discovery engines**\n\n"
             "Every screen surfaces a list; what matters is **confluence**. This ranks names by **how "
-            "many engines flag the same stock** — momentum, relative-strength leaders, accumulation, "
-            "value+forensic, and small-cap capex. A name flagged by several at once is a higher-"
+            "many engines flag the same stock** — Volume Breakouts, Market Beaters, Institutional "
+            "Buying, value+forensic, and small-cap capex. A name flagged by several at once is a higher-"
             "conviction lead than one flagged by a single screen. **Reply a number for that name's "
             "full deep report.**\n\n" + table + f"\n\n_A discovery screen — a candidate finder, not a "
             f"call. (Reply within {PENDING_TTL_H}h.)_")

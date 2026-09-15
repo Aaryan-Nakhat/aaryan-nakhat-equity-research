@@ -1,4 +1,4 @@
-"""🔔 Filing Alerts — standing keyword alerts on exchange announcements.
+"""🔔 Announcements — standing keyword alerts on exchange filings.
 
 The user registers keywords ("order win", "capacity", "QIP", "resignation"…); a gated background
 sweep matches every new market-wide filing against them and pushes an email the moment one hits.

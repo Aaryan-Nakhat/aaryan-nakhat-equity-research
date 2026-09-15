@@ -1,4 +1,5 @@
-"""Momentum-breakout discovery — surface stocks breaking out to new highs, market-wide.
+"""Momentum-breakout discovery (surfaced to users as **Volume Breakouts**, `screen: volume`) —
+surface stocks breaking out to new highs, market-wide.
 
 Answers "what is breaking out *right now*, with real buying behind it?" across the whole liquid
 price universe — a discovery screen that hands you names you didn't ask for. It ranks on **price

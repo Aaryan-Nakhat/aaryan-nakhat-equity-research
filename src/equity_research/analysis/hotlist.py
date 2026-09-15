@@ -26,16 +26,17 @@ _ENGINE_DEPTH = 30
 # Engine → a per-engine weight (some signals are higher-conviction than others). Sum need not be 1;
 # the aggregate score is weight-sum × position, so more engines + higher ranks = a higher score.
 _ENGINE_WEIGHT = {
-    "Momentum": 1.0, "Leaders": 1.0, "Accumulation": 1.2, "Value": 1.1, "Small-cap capex": 0.9,
+    "Volume Breakouts": 1.0, "Market Beaters": 1.0, "Institutional Buying": 1.2,
+    "Value": 1.1, "Small-cap capex": 0.9,
 }
 
 
 def _engine_rows(con: duckdb.DuckDBPyConnection) -> dict[str, list[dict]]:
     """Run every discovery engine (each best-effort — one failing engine never sinks the Hotlist)."""
     runners = {
-        "Momentum": lambda: momentum.scan(con, limit=_ENGINE_DEPTH),
-        "Leaders": lambda: leaders.scan(con, limit=_ENGINE_DEPTH),
-        "Accumulation": lambda: accumulation.scan(con, limit=_ENGINE_DEPTH),
+        "Volume Breakouts": lambda: momentum.scan(con, limit=_ENGINE_DEPTH),
+        "Market Beaters": lambda: leaders.scan(con, limit=_ENGINE_DEPTH),
+        "Institutional Buying": lambda: accumulation.scan(con, limit=_ENGINE_DEPTH),
         "Value": lambda: screener.fundamental_screen(con, limit=_ENGINE_DEPTH),
         "Small-cap capex": lambda: smallcap.smallcap_screen(con, limit=_ENGINE_DEPTH),
     }

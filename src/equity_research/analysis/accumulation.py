@@ -1,4 +1,5 @@
-"""Accumulation radar — surface where insiders and big holders are quietly *adding*.
+"""Accumulation discovery (surfaced to users as **Institutional Buying**, `screen: institutions`) —
+surface where insiders and big holders are quietly *adding*.
 
 Answers "where is conviction money going in before the story is obvious?" A promoter raising their
 own stake, or a marquee institution adding quarter-on-quarter, is one of the more reliable signals
