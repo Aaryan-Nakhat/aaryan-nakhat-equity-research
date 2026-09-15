@@ -20,7 +20,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 |---|---|
 | `Infosys` *(any company name or NSE symbol)* | Full deep report — filing-grounded business overview, multi-year fundamentals, forensics (Altman / Beneish / Piotroski / accruals), sector-lens valuation (reverse-DCF centrepiece), technicals, **holder-level shareholding + smart-money cost & profit-booking risk**, and a **🏢 inside view** (employee & management sentiment from AmbitionBox, graded A→E vs the company's own industry) — inline **and as a PDF**. |
 | `Reliance consolidated` / `Reliance standalone` | Same, forced to that financials basis (default auto-picks). |
-| reply `1` after a report | **Growth-triggers 1-pager** — forward catalysts, each with an estimated ₹cr / % business impact. |
+| reply `1` after a report | **Upside Drivers 1-pager** — forward catalysts, each with an estimated ₹cr / % business impact. |
 
 **💰 Your portfolio & holdings** — reads your tagged watchlist holdings.
 
@@ -34,11 +34,15 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | Email this | You get |
 |---|---|
 | `screen: value` *(or bare `screen`)* | Nifty-500 ranked on quality (Piotroski) + forensic + cheap-vs-own-history. |
+| `screen: momentum` *(or `breakout`)* | **Momentum breakouts** — names near 52-week highs, uptrend intact, with a volume surge (full liquid universe). |
+| `screen: leaders` *(or `rs`)* | **Relative-strength leaders** — beating the Nifty-500 over 3 / 6 / 12 months, still trending up. |
+| `screen: accumulation` | **Where promoters raised their own stake** last quarter — with the institution adding alongside. |
 | `screen: holdco` | The **Elcid trade, generalised** — listed holdcos trading below their listed-stake NAV. |
 | `screen: investors` | Where ~25 tracked **marquee HNIs** just entered / added / trimmed / exited. |
 | `screen: smallcap` | **Capex-led small-cap** hunt (structural capex boom before the P&L re-rates), traps gated out. |
 | `screen: technical` | Strongest **chart setups to buy** — entry / stop / target. |
 | `screen: policy` *(or `policy`)* | **Govt policy radar** — latest PIB schemes/policies → likely listed beneficiaries. |
+| `hotlist` *(`--latest` forces fresh)* | **🔥 Hotlist** — the names lighting up across **several** screeners at once (momentum · leaders · accumulation · value · small-cap); highest-conviction confluence first. **Cached 24h.** |
 
 **🧭 Sector analysis** — top-down, one sectoral index at a time.
 
@@ -118,6 +122,13 @@ source → formula → model).
 
 - **`screen: value`** — the Nifty-500 ranked on quality (Piotroski) + forensic
   (Altman / Beneish / accruals / no-pledge) + **cheap-vs-own-history**.
+- **`screen: momentum`** — **momentum breakouts** across the **full liquid equity universe**: names
+  within ~4% of their **52-week high**, in an uptrend (>200-DMA · 50>200), with a **volume surge**
+  confirming the move (ranked on high-proximity + volume + delivery, forensic-trap-gated).
+- **`screen: leaders`** — **relative-strength leaders**: names **beating the Nifty-500** over 3 / 6 /
+  12 months and still above their 200-DMA (leadership persists), restricted to liquid, tradeable names.
+- **`screen: accumulation`** — **where insiders & big holders are adding**: names whose **promoter raised
+  their own stake** quarter-on-quarter, annotated with the largest **institution adding alongside**.
 - **`screen: holdco`** — the **Elcid trade, generalised**: listed holding companies whose disclosed
   listed-stake NAV exceeds their own market cap, ranked by discount.
 - **`screen: investors` / `investor: <name>`** — ~25 tracked **marquee HNIs** (Jhunjhunwala, Mukul
@@ -151,6 +162,10 @@ source → formula → model).
   job** (~10-15 min) — acked instantly, the full report lands when ready. Google Trends via the Camoufox
   browser tier is best-effort (no official API); when throttled the demand read is news/LLM-driven. Cached
   24h; `--latest` forces fresh.
+- **🔥 `hotlist`** — the **multi-signal confluence** screen: it runs every discovery engine (momentum ·
+  leaders · accumulation · value+forensic · small-cap capex) and ranks names by **how many engines flag
+  the same stock** — confluence being a higher-conviction lead than any single screen. A heavier
+  multi-engine run, so it's built once and **cached 24h**; `--latest` forces fresh.
 - **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
   (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
   alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI
@@ -169,7 +184,7 @@ source → formula → model).
   **holder-level shareholding** section + a **quarter-over-quarter ownership diff** (who entered / added /
   trimmed / exited) and the **💰 smart-money cost & profit-booking-risk** block, and gives every
   valuation / forensic / technical section a plain-English **"how to read this."** Opt-in
-  **growth-triggers 1-pager** (reply `1`) — forward catalysts, each with an estimated **₹cr / % impact**.
+  **Upside Drivers 1-pager** (reply `1`) — forward catalysts, each with an estimated **₹cr / % impact**.
 - **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
   FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on

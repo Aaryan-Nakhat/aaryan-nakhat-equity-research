@@ -48,7 +48,7 @@ the model supports it); on other backends those calls run text-only / un-grounde
 
 **Shared house-style (`synthesize._FORMATTING`):** one formatting block is appended to **all
 four** long-form prompts — the deep stock analysis, the IPO note, the fund note and the
-growth-triggers 1-pager — so the rendering rules are identical everywhere and a fix lands in
+upside-drivers 1-pager — so the rendering rules are identical everywhere and a fix lands in
 one place. It requires **bolded key terms/figures**, a few **tasteful emojis** on headings and
 signals (🎯 verdict · 📈 growth · ⚠️/🔴 flags …), and — the two real render failures it
 targets — that every **table** be a standalone markdown block with a blank line before/after
@@ -399,7 +399,7 @@ PULL  you email a stock name (Subject) from an allowlisted address
         ▼  resolve → one match runs; several → "which one?" reply, you reply a number
         ▼  instant ack → reply in-thread: the FULL deep report in the body
            + the same report (tables + charts) as the attached PDF
-           ▼  then a separate "want a deeper cut? reply 1) growth triggers" email
+           ▼  then a separate "want a deeper cut? reply 1) upside drivers" email
         │  other Subjects (`help` lists them all in-email) — `fund: <name>` ·
         │  `ipo: ongoing|upcoming|<name>` ·
         │  `screen: value` (quality+forensic+cheap) · `screen: holdco` (Elcid-pattern
@@ -449,18 +449,18 @@ PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screene
   another thread. (Thread identity = a hash of the References root; a lone live menu
   is the unambiguous fallback if a reply's threading headers are missing.)
 - **One request = one Gmail thread**: every email in a flow (ack → report → deeper-cut
-  menu → growth triggers) is sent with the **same subject** (`Re: <original>`) plus
+  menu → upside drivers) is sent with the **same subject** (`Re: <original>`) plus
   In-Reply-To/References — Gmail only groups a conversation when the subject matches,
-  so the old decorated subjects ("… — growth triggers", "… — which one?") forked a new
+  so the old decorated subjects ("… — upside drivers", "… — which one?") forked a new
   thread per email. The body headings carry the description instead.
 - **Deeper-cut menu** (opt-in follow-ups): right **after** each deep report the bot
   sends a **separate short in-thread email** — "want a deeper cut? reply with the
   number" (`_send_followup_menu`); replying with a bare number runs that deeper
   analysis *for the same stock*, in-thread. (Kept separate rather than tacked onto the
-  end of the long report so it's actually seen.) Today: **`1) Growth-triggers 1-pager`** —
-  `pipeline.generate_growth_triggers` → `synthesize.growth_triggers`, a
+  end of the long report so it's actually seen.) Today: **`1) Upside Drivers 1-pager`** —
+  `pipeline.generate_upside_drivers` → `synthesize.upside_drivers`, a
   forward-looking catalysts note (5–7 concrete triggers, each quantified +
-  timeline + **HIGH / MEDIUM / OPTIONALITY** conviction tag, a "what's in the
+  timeline + **Contracted / Guided / Optional** conviction tag, a "what's in the
   price" read, risks, and a scoreboard table). Every trigger also carries an
   **estimated business impact in ₹ cr and %** — incremental annual revenue as ₹X cr
   (≈Y% of TTM revenue) and, where estimable, the potential market-cap impact %
@@ -567,8 +567,8 @@ PDF**, alongside an **IPO metrics & terminology guide PDF** (`glossary.ipo_guide
 fresh-issue vs OFS, QIB/NII/RII, anchor investors, price band/lot, P/E-at-band · P/B · RoNW · NAV,
 EBITDA/PAT/CFO, D/E · DSCR, contingent liabilities, RPTs, concentration, and the verdict scale;
 it also states plainly that **GMP is excluded** as non-primary) — mirroring the stock and fund
-reports' guides. Then the same **deeper-cut menu** (reply `1` → growth-triggers, here grounded in
-the RHP via `IGT:` items + `generate_growth_triggers(ipo_mode=True)`). On-demand, no DB table.
+reports' guides. Then the same **deeper-cut menu** (reply `1` → upside-drivers, here grounded in
+the RHP via `IUD:` items + `generate_upside_drivers(ipo_mode=True)`). On-demand, no DB table.
 
 > **Gotcha (fixed):** the RHP archive's folder is itself named `RHP_<SYM>/`, so matching the
 > preferred keyword against the **full zip path** selected the first PDF in that folder — the
@@ -622,7 +622,7 @@ text that collapsed on phones.
   **Coverage note:** the real edge needs a small-cap universe — `backfill_universe.py --seed-smallcaps`
   lands **Nifty Smallcap 250 + Microcap 250** into `sector_map` and backfills them; until then the band
   is only the small end of the Nifty-500.
-- **`screen: technical`** (aliases `setups`, `momentum`, `buys`, `chart`) → `analysis/technical_screen.py`
+- **`screen: technical`** (aliases `setups`, `buys`, `chart`) → `analysis/technical_screen.py`
   ranks on **price action** instead of fundamentals — the strongest chart setups to *buy*, market-wide.
   Two stages so it fits the time budget: **(1)** score every **liquid** name (avg turnover ≥ ₹2 cr/day,
   20-session window) that has financials on a technical composite — **30% trend** (>200-DMA · 50>200) ·
@@ -638,6 +638,36 @@ text that collapsed on phones.
   real for every row (spans micro→large incl. Microcap-250; the liquidity floor drops the un-tradeable
   long tail anyway). Reply a number → deep report. **Honest caveat (in the email):** a candidate finder
   with *defined risk*, **not** a back-tested edge — short-term timing is the tool's least-proven area.
+
+- **`screen: momentum`** (aliases `breakout`) → `analysis/momentum.py` surfaces **momentum breakouts**
+  across the **full liquid equity universe** (not just names with financials — a surfaced name's report
+  ingests on demand): names within ~4% of their **52-week high**, in an uptrend (>200-DMA · 50>200),
+  with a **volume surge** (latest volume ≥ 1.3× its 20-day average). Ranked on a rank-normalised
+  composite — **40% high-proximity · 35% volume surge · 25% delivery-volume ratio** — with the forensic
+  **trap gate** applied on the shortlist where financials exist. Columns: price · breakout label · Vol
+  (×avg) · Deliv (×avg) · sector. Reply a number → deep report.
+
+- **`screen: leaders`** (aliases `rs`, `strength`, `outperformers`) → `analysis/leaders.py` surfaces
+  **relative-strength leaders** — names **beating the Nifty 500** over 3m/6m/12m and still above their
+  200-DMA (leadership persists). Ranked on rank-normalised outperformance — **50% 3m · 30% 6m · 20% 1y**.
+  Liquidity floor **₹10 cr/day** (RS leadership is only meaningful for tradeable, institution-sized names).
+  Columns: 3m/6m/1y returns · outperformance vs Nifty500 (pp) · sector. Reply a number → deep report.
+
+- **`screen: accumulation`** (aliases `adding`, `smart money`, `promoter buying`) →
+  `analysis/accumulation.py` surfaces **where insiders & big holders are adding** — names where the
+  **promoter raised their own stake QoQ** (a set-based diff over the holder-level shareholding filings),
+  annotated with the largest **institution adding alongside** (via `ownership.ownership_changes`).
+  **Bounded to symbols with holder-level shareholding ingested** (coverage grows). Columns: promoter Δ
+  (pp) · promoter now (%) · top adder · as-of. Reply a number → deep report.
+
+### 🔥 Hotlist — `hotlist` (multi-signal confluence)
+
+**`hotlist`** (also `screen: hotlist`; `--latest` forces a fresh run) → `analysis/hotlist.py` runs the
+discovery engines (**momentum, leaders, accumulation, value+forensic, small-cap capex**) and ranks every
+surfaced name by **how many engines flag it** — confluence being a higher-conviction lead than any single
+screen — with per-engine rank + weight breaking ties. It's a heavier multi-engine run, so it's **built
+once and cached 24h** (via `scan.hotlist_cache_get/put`, mirroring Tailwind), served instantly on repeat
+calls. Columns: signal count · which engines flagged it · price · sector. Reply a number → deep report.
 
 ### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
 

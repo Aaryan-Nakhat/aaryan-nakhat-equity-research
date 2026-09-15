@@ -17,7 +17,7 @@ from equity_research.common import llm
 
 MODEL = llm.model()
 
-# Shared house-style for every long-form note (deep stock, IPO, fund, growth triggers).
+# Shared house-style for every long-form note (deep stock, IPO, fund, upside drivers).
 # Appended to each system prompt so the formatting rules are identical everywhere and a
 # fix lands in one place. Targets the real render failures: tables written inline inside a
 # sentence (so markdown never parses them), and numbered points strung into one paragraph.
@@ -210,109 +210,111 @@ def business_overview(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
     return text or None
 
 
-_GROWTH_TRIGGERS_SYS = """You are a senior equity research analyst at a top-tier \
+_UPSIDE_DRIVERS_SYS = """You are a senior equity research analyst at a top-tier \
 Indian institutional brokerage (Kotak Institutional / Motilal Oswal / Ambit Capital \
-caliber). Produce a single, high-density **growth-triggers document** for the company \
-that a fund manager can glance at and immediately grasp why this business could re-rate \
-over the next 12–36 months. You are given the company's own recent filings as PDFs \
-(concall transcripts, investor presentations, results, annual report) plus a block of \
-verified snapshot numbers. GROUND every quantified claim in those filings.
+caliber). Produce a single, high-density **upside-drivers document** for the company \
+that a fund manager can glance at and immediately grasp what could move this business \
+over the next 12–36 months, and how big each move is. You are given the company's own \
+recent filings as PDFs (concall transcripts, investor presentations, results, annual \
+report) plus a block of verified snapshot numbers. GROUND every quantified claim in those \
+filings.
 
 Structure it exactly as follows (markdown):
 
-## 🚀 Growth triggers — [Company] (NSE: [Ticker])
+## 🚀 Upside Drivers — [Company] (NSE: [Ticker])
 
-### 1. Company snapshot (4–5 lines)
+### Snapshot
 - What the company does, in one jargon-free sentence a non-sector analyst understands.
 - Current market cap, CMP, TTM revenue, TTM EBITDA margin, TTM ROE/ROCE — **use the \
 verified numbers supplied; do not recompute or estimate them**.
 - Promoter holding % and any recent change.
 - Where it sits in the value chain (upstream/midstream/downstream) and who the end customers are.
-- **Business uniqueness:** what is genuinely unique/moated vs. whether it competes in a \
-commoditized industry — say which, plainly.
+- **Edge:** what is genuinely unique/moated vs. whether it competes in a commoditized \
+industry — say which, plainly.
 
-### 2. Core growth triggers
-5–7 specific, concrete triggers (never generic tailwinds). Render EACH trigger as its own \
+### The drivers
+5–7 specific, concrete drivers (never generic tailwinds). Render EACH driver as its own \
 `####` sub-heading, then a blank line, then the five fields below as a flat markdown list — \
 one field per line, each line starting with `- `, and a blank line before the list starts. \
 CRITICAL: NEVER join the fields on one line with " - " separators, and NEVER indent a \
 sub-bullet under a field — the fields are five sibling bullets, nothing nested. Use exactly \
-this shape (repeat per trigger, numbered):
+this shape (repeat per driver, numbered):
 
-#### [N]. [Trigger name — crisp 5–7 words]
+#### [N]. [Driver name — crisp 5–7 words]
 
-- **What's happening:** 2–3 sentences — the specific capex, order win, capacity addition, \
-product launch, policy change, or structural shift.
-- **Quantified impact:** numbers wherever the filings allow — incremental revenue (₹ cr), \
-margin expansion (bps), volume growth (%), capacity/utilisation, addressable market, \
-order-book/bid-pipeline value.
-- **Estimated business impact:** REQUIRED for every trigger — translate the trigger into \
-money so its magnitude can be judged independently of conviction, all on this one line: \
-**Incremental annual revenue ₹X cr (≈Y% of TTM revenue)** using the verified TTM revenue \
-supplied as the denominator (show the range when the filings give one); then, where \
-estimable, the incremental EBITDA/earnings (₹ cr, stating the segment's or company's margin \
-used) and the **potential market-cap impact ≈Z%** (incremental earnings × the company's \
-current multiple, against the verified market cap — state the multiple). Write \
-"*not estimable from filings*" only for the leg that genuinely isn't disclosed — never \
-invent, and never skip the whole line when the revenue leg IS estimable.
-- **Timeline:** when it starts flowing into the P&L (e.g. "H2 FY27", "commissioning Q1 FY28").
-- **Conviction:** **HIGH CONVICTION** (already visible in order book / capex / policy), \
-**MEDIUM CONVICTION** (management-guided, not yet contracted), or **OPTIONALITY** \
-(asymmetric upside, not in consensus).
+- **The move:** 2–3 sentences — the specific capex, order win, capacity addition, product \
+launch, policy change, or structural shift that is actually happening.
+- **Numbers behind it:** the figures the filings give — incremental revenue (₹ cr), margin \
+expansion (bps), volume growth (%), capacity/utilisation, addressable market, order-book / \
+bid-pipeline value.
+- **Money math:** REQUIRED for every driver — translate it into money so its magnitude can be \
+judged independently of how likely it is, all on this one line: **incremental annual revenue \
+₹X cr (≈Y% of TTM revenue)** using the verified TTM revenue supplied as the denominator (show \
+the range when the filings give one); then, where estimable, the incremental EBITDA / earnings \
+(₹ cr, stating the segment's or company's margin used) and the **≈Z% upside to market cap** \
+(incremental earnings × the company's current multiple, against the verified market cap — state \
+the multiple). Write "*not estimable from filings*" only for the leg that genuinely isn't \
+disclosed — never invent, and never skip the whole line when the revenue leg IS estimable.
+- **When it hits the P&L:** when it starts flowing into revenue/earnings (e.g. "H2 FY27", \
+"commissioning Q1 FY28").
+- **How sure:** **Contracted** (already visible in order book / capex incurred / policy \
+notified), **Guided** (management-guided, not yet contracted), or **Optional** (asymmetric \
+upside, not in consensus).
 
-Order the triggers by this priority: (1) capacity/capex-led volume, (2) new \
+Order the drivers by this priority: (1) capacity/capex-led volume, (2) new \
 product/segment/geography, (3) margin-expansion drivers, (4) policy/regulatory catalysts, \
 (5) industry-structure shifts (consolidation, competitor exit, import substitution, China+1), \
-(6) balance-sheet triggers (deleveraging, asset monetisation, subsidiary value unlock), \
+(6) balance-sheet drivers (deleveraging, asset monetisation, subsidiary value unlock), \
 (7) management/governance upgrades.
 
-### 3. What's already in the price? (2–3 lines)
+### Priced-in check (2–3 lines)
 What is consensus already discounting, and where is the incremental surprise vs. street.
 
-### 4. Key risks to the trigger thesis (3–4 bullets)
-What can delay or derail each high-conviction trigger — execution, regulatory, input-cost, \
+### What breaks it (3–4 bullets)
+What can delay or derail each Contracted/Guided driver — execution, regulatory, input-cost, \
 demand-cyclicality, or balance-sheet risk.
 
-### 5. Trigger scoreboard
+### Driver scoreboard
 A markdown table:
-| # | Trigger | Est. impact (₹ cr) | % of TTM revenue | Potential mcap impact | Timeline | Conviction |
-**Sort the scoreboard by estimated ₹ cr impact (largest first) — NOT by conviction** — so a \
-big MEDIUM-conviction trigger is never buried under small HIGH-conviction ones. After the \
-table add one line — **Priority read:** — naming any MEDIUM/OPTIONALITY trigger whose \
-estimated impact ranks in the top 3, e.g. "Trigger #2 is only MEDIUM conviction but carries \
-the largest ₹ impact — size it on probability, don't ignore it."
+| # | Driver | Est. impact (₹ cr) | % of TTM revenue | ≈ Mcap upside | When | Certainty |
+**Sort the scoreboard by estimated ₹ cr impact (largest first) — NOT by certainty** — so a \
+big Guided driver is never buried under small Contracted ones. After the table add one line — \
+**Priority read:** — naming any Guided/Optional driver whose estimated impact ranks in the \
+top 3, e.g. "Driver #2 is only Guided but carries the largest ₹ impact — size it on \
+probability, don't ignore it."
 
 **Quality & sourcing rules (strict):**
-- Every trigger must be **company-specific and verifiable** from the filings — cite the \
+- Every driver must be **company-specific and verifiable** from the filings — cite the \
 source inline (e.g. "(Q4FY26 concall)", "(May-2026 investor presentation, p.17)"). NO filler \
 like "India's growing economy" or "rising middle class".
 - Every ₹cr / bps / % figure must be **sourced to a filing** OR flagged as an explicit \
-estimate with the assumption stated. If the data for a trigger isn't disclosed, write \
+estimate with the assumption stated. If the data for a driver isn't disclosed, write \
 "*awaiting disclosure*" — never guess a number.
 - Use the model's own knowledge only for industry framing, and label it as context — never \
 present it as a company-specific fact.
 - Write like a conviction note briefing a PM before a position-sizing meeting: dense, \
-specific, no fluff. Length is fine — cover every real trigger; do not artificially compress \
+specific, no fluff. Length is fine — cover every real driver; do not artificially compress \
 or truncate. If the filings are thin, say so and give what is grounded.
 - Output ONLY the finished document — do NOT echo these instructions, the section \
-descriptions, or the bracketed placeholders; start directly at the '## 🚀 Growth triggers' heading.""" + _FORMATTING
+descriptions, or the bracketed placeholders; start directly at the '## 🚀 Upside Drivers' \
+heading.""" + _FORMATTING
 
 
-def growth_triggers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
-                    facts: list[str] | None = None, model: str = MODEL) -> str | None:
-    """Forward-looking **growth-triggers 1-pager** for ``symbol`` — catalysts, quantified
-    and conviction-tagged — read from the company's own filings and grounded on a block of
+def upside_drivers(pdfs: list[tuple[str, bytes]] | None, symbol: str, *,
+                   facts: list[str] | None = None, model: str = MODEL) -> str | None:
+    """Forward-looking **upside-drivers 1-pager** for ``symbol`` — catalysts, quantified
+    and certainty-tagged — read from the company's own filings and grounded on a block of
     verified snapshot numbers (``facts``). Best-effort: returns None if there are no filings
     to read or the call fails, so the caller can fall back gracefully. Never invents data."""
     docs = list(pdfs or [])
     if not docs:
         return None
-    facts_block = ("Verified snapshot numbers (use these exact figures in Section 1; do not "
+    facts_block = ("Verified snapshot numbers (use these exact figures in the Snapshot; do not "
                    "recompute):\n" + "\n".join(f"- {f}" for f in (facts or []))) if facts else ""
     try:
         text = llm.generate(
-            _GROWTH_TRIGGERS_SYS,
-            f"Company: {symbol}\n\n{facts_block}\n\nProduce the growth-triggers document, "
+            _UPSIDE_DRIVERS_SYS,
+            f"Company: {symbol}\n\n{facts_block}\n\nProduce the upside-drivers document, "
             "grounded in the attached filings.", files=docs, model_name=model)
     except Exception:  # noqa: BLE001 — best-effort, never block on the follow-up
         return None

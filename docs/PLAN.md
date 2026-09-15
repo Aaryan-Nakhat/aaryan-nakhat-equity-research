@@ -235,7 +235,7 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
   RHP risks · demand (subscription + anchor) · **APPLY / AVOID / NEUTRAL** verdict. No XBRL exists
   pre-listing, so it's RHP-driven, not the deterministic quant engine. **No grey-market/GMP.**
 - **Delivery ✅ done**: `ipo: ongoing|upcoming|<name>` → list/note (body + PDF) + the same deeper-cut
-  menu (growth triggers, RHP-grounded via `ipo_mode`). On-demand, no DB table.
+  menu (upside drivers, RHP-grounded via `ipo_mode`). On-demand, no DB table.
 - *Later:* verdict track-record for IPOs (listing-gain vs the call); DRHP-stage (SEBI) coverage for
   issues before the NSE RHP is posted; BSE fallback for the issue list.
 

@@ -283,8 +283,8 @@ with zero).
   to respect the brief's numbers and caveats (never invent). The verdict is parsed back out
   (`verdict_from_text`) to make the Trading-levels setup defer to it.
 
-### Growth-triggers 1-pager (opt-in, reply `1`) — 🤖 LLM
-- `synthesize.growth_triggers` reads the filings + verified snapshot facts and writes 5–7 quantified,
+### Upside Drivers 1-pager (opt-in, reply `1`) — 🤖 LLM
+- `synthesize.upside_drivers` reads the filings + verified snapshot facts and writes 5–7 quantified,
   timeline-tagged, conviction-rated catalysts (₹cr & % impact), each cited to a filing. Numbers it's
   given (mcap, TTM revenue) are ours; the ₹-impact estimates are the LLM's, explicitly labelled.
 
@@ -458,7 +458,7 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 |---|---|---|---|
 | Deep-report Analysis + Verdict | `synthesize.synthesize_thesis` | quant brief + filing PDFs | forensic thesis, Buy→Avoid verdict |
 | Business overview | `synthesize.business_overview` | filing PDFs + snapshot facts | "what it does / segments / TAM" |
-| Growth-triggers 1-pager | `synthesize.growth_triggers` | filings + snapshot facts | quantified catalysts |
+| Upside Drivers 1-pager | `synthesize.upside_drivers` | filings + snapshot facts | quantified catalysts |
 | Forward multiple | `synthesize.extract_guidance` | filings | management's next-year guidance |
 | IPO note | `synthesize.ipo_analysis` | RHP + band ad + anchor + facts | APPLY/AVOID note |
 | Digest event analysis | `synthesize.analyze_filing` | one filing PDF | inline point-wise read |

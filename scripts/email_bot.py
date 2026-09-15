@@ -35,7 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import (booking_risk, holdco, investors, policy,  # noqa: E402
+from equity_research.analysis import (accumulation, booking_risk, holdco, hotlist,  # noqa: E402
+                                      investors, leaders, momentum, policy,
                                       screener, sector_analysis, sell_advisor, smallcap,
                                       supply_chain, technical, technical_screen)
 from equity_research import mail_cleanup  # noqa: E402
@@ -51,7 +52,7 @@ from equity_research.reports import tailwind_brief  # noqa: E402
 from equity_research.reports import email as emailer  # noqa: E402
 from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
 from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import (generate_report, generate_growth_triggers,  # noqa: E402
+from equity_research.reports.pipeline import (generate_report, generate_upside_drivers,  # noqa: E402
                                               generate_ipo_report)
 from equity_research.reports.synthesize import fund_thesis  # noqa: E402
 from equity_research.scrapers import ipo  # noqa: E402
@@ -138,7 +139,7 @@ def _find_pending(req: EmailRequest) -> tuple[str, list] | None:
             return key, cands
     # Fallback ONLY for a bare new email (no threading headers at all) with a lone live
     # menu. A reply that IS threaded but matches nothing must never borrow another
-    # thread's menu — that's how a fund reply once triggered a stock's growth triggers.
+    # thread's menu — that's how a fund reply once triggered a stock's upside drivers.
     if not req.references and not req.in_reply_to and len(fresh) == 1:
         return fresh[0]
     return None
@@ -163,7 +164,7 @@ def _clear_consumed(key: str, cands: list) -> None:
 def _re_subject(subject: str) -> str:
     """'Re: <original subject>' — NEVER append suffixes: Gmail only groups messages
     into one conversation when the subject matches (ignoring Re:), so a decorated
-    subject ('… — growth triggers') forks a brand-new thread despite correct
+    subject ('… — upside drivers') forks a brand-new thread despite correct
     In-Reply-To/References. One request flow = one subject = one thread."""
     s = subject.strip()
     if not s.lower().startswith("re:"):
@@ -233,7 +234,7 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
 
 class _MenuItem:
     """Pending-state shim for a follow-up menu choice (reuses the numbered-reply UX).
-    ``symbol`` is prefixed by action, e.g. ``GT:RELIANCE`` → growth triggers."""
+    ``symbol`` is prefixed by action, e.g. ``UD:RELIANCE`` → upside drivers."""
     def __init__(self, symbol: str, name: str | None) -> None:
         self.symbol = symbol
         self.name = name or ""
@@ -242,8 +243,8 @@ class _MenuItem:
 def _set_followup(req: EmailRequest, symbol: str, name: str | None, *, ipo_mode: bool = False) -> None:
     """Arm the numbered follow-up menu in THIS thread so a bare-number reply maps back
     to a deeper cut for ``symbol`` (24h TTL, via the thread-scoped pending state). ``ipo_mode``
-    tags the growth-triggers item as IPO (``IGT:`` — grounded in the offer docs)."""
-    tag = "IGT" if ipo_mode else "GT"
+    tags the upside-drivers item as IPO (``IUD:`` — grounded in the offer docs)."""
+    tag = "IUD" if ipo_mode else "UD"
     _set_pending(req, f"__followup__:{symbol}", [_MenuItem(f"{tag}:{symbol}", name)])
 
 
@@ -257,8 +258,8 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
     md = (f"✅ Full {'IPO note' if ipo_mode else 'report'} for **{symbol}**"
           + (f" — {name}" if name else "") + " is in the previous email (body + PDF).\n\n"
           "**Want a deeper cut?** Just reply to this email with the number:\n\n"
-          "  **1) Growth-triggers 1-pager** — forward-looking catalysts, each quantified, "
-          f"timeline-tagged and rated HIGH / MEDIUM / OPTIONALITY conviction, grounded in {grounded}.\n\n"
+          "  **1) Upside Drivers 1-pager** — forward-looking catalysts, each quantified, "
+          f"timeline-tagged and rated Contracted / Guided / Optional certainty, grounded in {grounded}.\n\n"
           "_(More deeper cuts coming soon.)_")
     emailer.send_report(
         _re_subject(req.subject),
@@ -298,38 +299,38 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     _send_followup_menu(symbol, req, resolved_name)      # separate "want a deeper cut?" prompt
 
 
-def _send_growth_triggers(symbol: str, req: EmailRequest, name: str | None = None,
-                          *, ipo_mode: bool = False) -> None:
-    """Growth-triggers 1-pager (opt-in deeper cut) — email body + PDF, in-thread. ``ipo_mode``
+def _send_upside_drivers(symbol: str, req: EmailRequest, name: str | None = None,
+                         *, ipo_mode: bool = False) -> None:
+    """Upside-drivers 1-pager (opt-in deeper cut) — email body + PDF, in-thread. ``ipo_mode``
     grounds it in the IPO offer documents instead of listed filings."""
-    log.info("generating growth triggers for %s (req from %s, ipo=%s)", symbol, req.sender, ipo_mode)
-    _reply_text(req, f"🚀 Building the growth-triggers 1-pager for **{symbol}**"
+    log.info("generating upside drivers for %s (req from %s, ipo=%s)", symbol, req.sender, ipo_mode)
+    _reply_text(req, f"🚀 Building the upside-drivers 1-pager for **{symbol}**"
                      + (f" ({name})" if name else "") + " — ~1–2 min; it'll land in this thread.")
-    md = generate_growth_triggers(symbol, ipo_mode=ipo_mode)
+    md = generate_upside_drivers(symbol, ipo_mode=ipo_mode)
     if not md:
         src = "offer documents" if ipo_mode else "filings (concalls / presentations)"
-        _reply_text(req, f"Couldn't build growth triggers for {symbol} — no {src} "
+        _reply_text(req, f"Couldn't build upside drivers for {symbol} — no {src} "
                          "were available to ground it.")
         return
-    pdf = _text_pdf(md, f"{symbol} — Growth Triggers")
+    pdf = _text_pdf(md, f"{symbol} — Upside Drivers")
     today = datetime.now(IST).date().isoformat()
-    head = f"Growth triggers — **{symbol}**" + (f" — {name}" if name else "")
+    head = f"Upside Drivers — **{symbol}**" + (f" — {name}" if name else "")
     body = f"{head}\n\n{md}"
     attachments = []
     if pdf:
-        attachments.append((f"{symbol}_growth_triggers_{today}.pdf", pdf))
+        attachments.append((f"{symbol}_upside_drivers_{today}.pdf", pdf))
     else:
         body += "\n\n_(The PDF couldn't be generated this time — the full 1-pager is above.)_"
     emailer.send_report(
         _re_subject(req.subject),
         body,
         to=req.sender,
-        html=emailer.body_html(body, f"{symbol} — growth triggers"),
+        html=emailer.body_html(body, f"{symbol} — upside drivers"),
         attachments=attachments,
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
     )
-    log.info("sent growth triggers for %s to %s", symbol, req.sender)
+    log.info("sent upside drivers for %s to %s", symbol, req.sender)
 
 
 def _text_pdf(report_md: str, title: str) -> bytes | None:
@@ -414,7 +415,7 @@ def _send_ipo_list(kind: str, req: EmailRequest) -> None:
 
 
 def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) -> None:
-    """Pre-listing IPO note — email body + PDF, in-thread. No deeper-cut/growth-triggers
+    """Pre-listing IPO note — email body + PDF, in-thread. No deeper-cut/upside-drivers
     follow-up for IPOs (the note already carries the forward view)."""
     log.info("generating IPO note for %s (req from %s)", symbol, req.sender)
     _reply_text(req, f"🧾 Building the pre-listing IPO analysis for **{symbol}**"
@@ -442,7 +443,7 @@ def _send_ipo_report(symbol: str, req: EmailRequest, name: str | None = None) ->
         in_reply_to=req.message_id, references=req.references or req.message_id,
     )
     log.info("sent IPO note for %s to %s", symbol, req.sender)
-    # (No growth-triggers follow-up for IPOs — the IPO note already covers the forward
+    # (No upside-drivers follow-up for IPOs — the IPO note already covers the forward
     # view; per the user's ask, don't prompt for a deeper cut here.)
 
 
@@ -494,9 +495,9 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 # ----------------- screeners (idea generation) -----------------
 def _screen_query(subject: str) -> str | None:
-    """Parse a screener request → 'holdco' | 'investors' | 'smallcap' | 'policy' | 'technical' |
-    'value' (default), or None if not a screen. Accepts 'screen: holdco', 'screen: investors',
-    'screen: smallcap', 'screen: policy', 'screen: technical', 'screen: value', bare 'screen'."""
+    """Parse a screener request → one of 'holdco' | 'investors' | 'smallcap' | 'policy' |
+    'technical' | 'momentum' | 'leaders' | 'accumulation' | 'hotlist' | 'value' (default), or None
+    if not a screen. Accepts 'screen: <name>' and bare 'screen' (→ value)."""
     m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
     if not m:
         return None
@@ -510,8 +511,15 @@ def _screen_query(subject: str) -> str | None:
     if val in ("policy", "policies", "scheme", "schemes", "govt", "government", "gov",
                "policy radar", "scheme radar", "budget"):
         return "policy"
-    if val in ("technical", "technicals", "ta", "setup", "setups", "momentum", "chart", "charts",
-               "buy", "buys"):
+    if val in ("momentum", "breakout", "breakouts", "momentum breakout", "momentum breakouts"):
+        return "momentum"
+    if val in ("leaders", "leader", "relative strength", "rs", "strength", "outperformers"):
+        return "leaders"
+    if val in ("accumulation", "accumulate", "adding", "smart money", "smartmoney", "promoter buying"):
+        return "accumulation"
+    if val in ("hotlist", "hot list", "hot", "multisignal", "multi-signal", "confluence", "top"):
+        return "hotlist"
+    if val in ("technical", "technicals", "ta", "setup", "setups", "chart", "charts", "buy", "buys"):
         return "technical"
     return "value"
 
@@ -563,8 +571,17 @@ def _pickaxe_query(subject: str) -> bool:
                          r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
 
 
+def _hotlist_query(subject: str) -> bool:
+    """True for a bare multi-signal Hotlist request ('hotlist', 'hotlist:', 'hot list'), optionally
+    with a trailing '--latest' / 'fresh' flag. (The `screen: hotlist` form is handled by
+    `_screen_query`.)"""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:hotlist|hot\s*list)\s*[:\-]?\s*"
+                         r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
+
+
 def _wants_latest(subject: str) -> bool:
-    """True if a Tailwind / Pickaxe request asks to bypass the 24h cache ('--latest' / 'fresh')."""
+    """True if a Tailwind / Pickaxe / Hotlist request asks to bypass the 24h cache
+    ('--latest' / 'fresh')."""
     return bool(re.search(r"(?:--?\s*)?\b(?:latest|fresh|refresh)\b", subject or "", flags=re.I))
 
 
@@ -689,7 +706,7 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`Reliance consolidated` / `Reliance standalone`",
          "Same report, forced to that financials basis (default auto-picks)."],
         ["reply `1` after a report",
-         "Growth-triggers 1-pager — forward catalysts, each with an estimated ₹cr / % business impact."],
+         "Upside Drivers 1-pager — forward catalysts, each with an estimated ₹cr / % business impact."],
     ]),
     ("💰 Your portfolio & holdings", "Reads your tagged holdings in the watchlist.", [
         ["`booking`", "Where the tracked institutions on YOUR holdings sit on big gains → "
@@ -700,11 +717,19 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
     ("🔎 Idea screeners — find new names", "Each returns a numbered list; reply a number → deep report.", [
         ["`screen: value` (or just `screen`)",
          "Quality + forensic + cheap-vs-own-history, ranked across the Nifty-500."],
+        ["`screen: momentum`", "Momentum breakouts — near 52-week highs, uptrend, with a volume surge."],
+        ["`screen: leaders`", "Relative-strength leaders — beating the Nifty-500 over 3/6/12 months."],
+        ["`screen: accumulation`", "Where promoters raised their own stake QoQ (+ who's adding alongside)."],
         ["`screen: holdco`", "Holding companies trading below their listed-stake NAV (the Elcid trade)."],
         ["`screen: investors`", "Where marquee HNIs just entered / added / trimmed."],
         ["`screen: smallcap`", "Capex-led small-caps (spending now for future growth)."],
         ["`screen: technical`", "Strongest chart setups to buy — with entry / stop / target."],
         ["`screen: policy`", "Recent govt schemes/policies → likely listed beneficiaries."],
+    ]),
+    ("🔥 Hotlist — multi-signal confluence", "Cached 24h — add `--latest` to force a fresh run.", [
+        ["`hotlist`",
+         "The names lighting up across **several** discovery engines at once (momentum, leaders, "
+         "accumulation, value, small-cap) — highest-conviction leads first. Reply a number → deep report."],
     ]),
     ("🧭 Sector analysis", "Top-down, one sectoral index at a time.", [
         ["`sector: <name>` e.g. `sector: defence`, `sector: pharma`",
@@ -1235,6 +1260,180 @@ def _send_technical_screen(req: EmailRequest) -> None:
     log.info("sent technical screen (%d names) to %s", len(rows), req.sender)
 
 
+def _send_momentum_screen(req: EmailRequest) -> None:
+    """Momentum-breakout discovery — stocks near a 52-week high, in an uptrend, with a volume surge,
+    market-wide. Reply a number → that name's deep report."""
+    log.info("running momentum screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning the market for **momentum breakouts** (near 52-week highs, "
+                     "uptrend intact, with a volume surge). ~1 min; the ranked list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: momentum.scan(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The momentum screen timed out this time — please resend `screen: momentum`.")
+        return
+    if not rows:
+        _reply_text(req, "No clean breakouts cleared the filters today — the tape may simply have no "
+                         "strong, volume-backed names near their highs right now.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"₹{r['price']:,.0f}", r["breakout"],
+            f"{r['vol_surge']:.1f}×", f"{r['deliv_ratio']:.1f}×", (r["sector"] or "—")[:16]]
+           for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Price", "Breakout", "Vol", "Deliv", "Sector"],
+                      tbl, align="rllrllll")
+    body = ("**🚀 Momentum breakouts — strongest charts making new highs (market-wide)**\n\n"
+            "Names within ~4% of their **52-week high**, in an uptrend (>200-DMA · 50>200), with a "
+            "**volume surge** confirming the move. **Vol** = latest volume ÷ its 20-day average; "
+            "**Deliv** = delivery% ÷ its 20-day average (>1 = stronger conviction). Ranked across the "
+            "full liquid equity universe — a name without ingested financials is still shown (its "
+            "report ingests on demand). **Reply a number for that name's full deep report.**\n\n"
+            + table + f"\n\n_A discovery screen — a candidate finder, not a call. Momentum reverses; "
+            f"diligence each name before acting. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:momentum", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — momentum breakouts"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent momentum screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_leaders_screen(req: EmailRequest) -> None:
+    """Relative-strength leaders — names beating the Nifty 500 over 3/6/12m, still trending up,
+    market-wide. Reply a number → that name's deep report."""
+    log.info("running leaders screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — finding the market's **relative-strength leaders** (beating the "
+                     "Nifty 500 over 3/6/12 months, still trending up). ~1 min; the list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: leaders.scan(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The leaders screen timed out this time — please resend `screen: leaders`.")
+        return
+    if not rows:
+        _reply_text(req, "No names are meaningfully leading the market on the filters right now.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"₹{r['price']:,.0f}", f"{r['ret_3m']:+.0f}%",
+            f"{r['ret_6m']:+.0f}%", f"{r['ret_1y']:+.0f}%", f"{r['out_3m']:+.0f}pp",
+            (r["sector"] or "—")[:14]] for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Price", "3m", "6m", "1y", "vs Nifty500 (3m)", "Sector"],
+                      tbl, align="rllrrrrrl")
+    body = ("**🏆 Relative-strength leaders — quietly outrunning the market (market-wide)**\n\n"
+            "Names **beating the Nifty 500** over 3, 6 and 12 months and still above their 200-DMA — "
+            "leadership tends to persist. **vs Nifty500 (3m)** = the name's 3-month return minus the "
+            "index's, in percentage points. Only liquid, tradeable names. **Reply a number for that "
+            "name's full deep report.**\n\n"
+            + table + f"\n\n_A discovery screen — a candidate finder, not a call. Strong runs can be "
+            f"extended; diligence each name before acting. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:leaders", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — relative-strength leaders"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent leaders screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_accumulation_screen(req: EmailRequest) -> None:
+    """Accumulation radar — where promoters raised their stake QoQ (with the institutions adding
+    alongside). Reply a number → that name's deep report."""
+    log.info("running accumulation screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning shareholding filings for **accumulation**: where promoters "
+                     "raised their own stake last quarter, and who's adding alongside. ~1 min.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: accumulation.scan(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The accumulation screen timed out this time — please resend "
+                         "`screen: accumulation`.")
+        return
+    if not rows:
+        _reply_text(req, "No clear promoter accumulation surfaced in the latest shareholding filings.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"₹{r['price']:,.0f}" if r["price"] else "—",
+            f"+{r['promoter_delta']:.2f}pp", f"{r['promoter_now']:.1f}%", r["added"], r["as_of"]]
+           for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Price", "Promoter Δ", "Now", "Top adder", "As of"],
+                      tbl, align="rllrrrll")
+    body = ("**🐘 Accumulation radar — where insiders & big holders are adding**\n\n"
+            "Names where the **promoter raised their own stake** quarter-on-quarter — buying with their "
+            "own money is one of the more reliable signals there is — with the largest **institution "
+            "adding alongside** them. **Promoter Δ** = change in promoter holding vs the prior quarter "
+            "(percentage points). **Reply a number for that name's full deep report.**\n\n"
+            + table + "\n\n_Bounded to names with holder-level shareholding ingested (coverage grows "
+            f"over time). A discovery screen, not a call. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:accumulation", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — accumulation radar"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent accumulation screen (%d names) to %s", len(rows), req.sender)
+
+
+def _hotlist_md(rows: list[dict]) -> str:
+    """Render the Hotlist rows to the emailed markdown (table + explainer)."""
+    tbl = [[i, r["symbol"], r["name"][:20], "●" * r["n_signals"] + f" {r['n_signals']}",
+            ", ".join(r["engines"]), f"₹{r['price']:,.0f}" if r.get("price") else "—",
+            (r["sector"] or "—")[:14]] for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Signals", "Flagged by", "Price", "Sector"],
+                      tbl, align="rllllrl")
+    return ("**🔥 Hotlist — names lighting up across multiple discovery engines**\n\n"
+            "Every screen surfaces a list; what matters is **confluence**. This ranks names by **how "
+            "many engines flag the same stock** — momentum, relative-strength leaders, accumulation, "
+            "value+forensic, and small-cap capex. A name flagged by several at once is a higher-"
+            "conviction lead than one flagged by a single screen. **Reply a number for that name's "
+            "full deep report.**\n\n" + table + f"\n\n_A discovery screen — a candidate finder, not a "
+            f"call. (Reply within {PENDING_TTL_H}h.)_")
+
+
+def _send_hotlist(req: EmailRequest) -> None:
+    """🔥 Hotlist — names surfaced by the most discovery engines at once. Serves the 24h cache by
+    default; `hotlist --latest` forces a fresh multi-engine build. Reply a number → deep report."""
+    latest = _wants_latest(req.subject)
+    log.info("running Hotlist (req from %s, latest=%s)", req.sender, latest)
+    _reply_text(req, "📩 Got it — building the **Hotlist** (a fresh run across every discovery engine, "
+                     "~2–3 min); it lands in this thread." if latest else
+                     "📩 Got it — fetching the **Hotlist** (cached for 24h, so this is quick unless "
+                     "it's stale; add `--latest` to force a fresh run). Lands here shortly.")
+    con = connect()
+    from_cache, cached_at = False, None
+    try:
+        cached = None if latest else scan.hotlist_cache_get(con)
+        if cached and cached.get("report", {}).get("picks"):
+            rep, from_cache, cached_at = cached["report"], True, cached.get("cached_at")
+        else:
+            rows = _screen_run(lambda: hotlist.build(con, limit=25), timeout=420)
+            if rows is None:
+                _reply_text(req, "The Hotlist timed out this time — please resend `hotlist` shortly.")
+                return
+            rep = {"markdown": _hotlist_md(rows),
+                   "picks": [{"symbol": r["symbol"], "name": r["name"]} for r in rows]}
+            if rows:
+                scan.hotlist_cache_put(rep, con)
+    finally:
+        con.close()
+    if not rep.get("picks"):
+        _reply_text(req, "Nothing is lighting up across multiple engines right now — a valid answer. "
+                         "Try again in a day or two.")
+        return
+    body = rep["markdown"]
+    if from_cache:
+        stamp = ""
+        try:
+            ca = datetime.fromisoformat(cached_at).astimezone(IST)
+            stamp = f" from {ca:%d-%b %H:%M}"
+        except Exception:  # noqa: BLE001
+            pass
+        body = (f"> ♻️ _Cached run{stamp} (within 24h — same names as the last build). Reply "
+                f"`hotlist --latest` for a fresh run._\n\n" + body)
+    _set_pending(req, "hotlist", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Hotlist"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent Hotlist (%d names, cache=%s) to %s", len(rep["picks"]), from_cache, req.sender)
+
+
 def _send_policy_screen(req: EmailRequest) -> None:
     """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
     sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
@@ -1606,11 +1805,11 @@ def handle_request(req: EmailRequest) -> None:
     if found and sel is not None and 1 <= sel <= len(found[1]):
         key, cands = found
         symbol, name = cands[sel - 1]
-        if str(symbol).startswith("GT:"):       # deeper-cut menu: growth triggers (listed)
-            _send_growth_triggers(symbol[3:], req, name)   # keep the menu armed for other cuts
+        if str(symbol).startswith("UD:"):       # deeper-cut menu: upside drivers (listed)
+            _send_upside_drivers(symbol[3:], req, name)   # keep the menu armed for other cuts
             return
-        if str(symbol).startswith("IGT:"):      # deeper-cut menu: growth triggers (IPO)
-            _send_growth_triggers(symbol[4:], req, name, ipo_mode=True)
+        if str(symbol).startswith("IUD:"):      # deeper-cut menu: upside drivers (IPO)
+            _send_upside_drivers(symbol[4:], req, name, ipo_mode=True)
             return
         if str(symbol).startswith("MF:"):       # a fund choice
             _send_fund_report(int(symbol[3:]), req, name)
@@ -1672,6 +1871,14 @@ def handle_request(req: EmailRequest) -> None:
             _send_policy_screen(req)
         elif sq == "technical":
             _send_technical_screen(req)
+        elif sq == "momentum":
+            _send_momentum_screen(req)
+        elif sq == "leaders":
+            _send_leaders_screen(req)
+        elif sq == "accumulation":
+            _send_accumulation_screen(req)
+        elif sq == "hotlist":
+            _send_hotlist(req)
         else:
             _send_fundamental_screen(req)
         return
@@ -1718,6 +1925,11 @@ def handle_request(req: EmailRequest) -> None:
     # 1e-sept) ⛏️ Pickaxe — surging Indian demand → indirect beneficiary ('pickaxe', 'demand')
     if _pickaxe_query(req.subject):
         _send_pickaxe(req)
+        return
+
+    # 1e-oct) 🔥 Hotlist — multi-signal confluence across the discovery engines ('hotlist')
+    if _hotlist_query(req.subject):
+        _send_hotlist(req)
         return
 
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')

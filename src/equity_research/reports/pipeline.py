@@ -25,8 +25,8 @@ from equity_research.reports import deep_brief as deep_brief_mod
 from equity_research.reports.brief import build_brief
 from equity_research.reports.deep_brief import build_deep_brief
 from equity_research.reports.synthesize import (business_overview, extract_guidance,
-                                                growth_triggers, ipo_analysis,
-                                                synthesize_thesis)
+                                                ipo_analysis, synthesize_thesis,
+                                                upside_drivers)
 from equity_research.scrapers import ipo, nse_api
 
 CR = 1e7
@@ -379,7 +379,7 @@ def _ok(v) -> bool:
 
 
 def _snapshot_facts(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool) -> list[str]:
-    """Verified, deterministic snapshot numbers to ground the growth-triggers Section 1 —
+    """Verified, deterministic snapshot numbers to ground the upside-drivers Snapshot —
     market cap / CMP / TTM revenue & EBITDA margin / ROE / ROCE / P/E / P/B / promoter
     holding (+ recent change). The LLM must use these verbatim instead of estimating."""
     facts: list[str] = []
@@ -416,9 +416,9 @@ def _snapshot_facts(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: b
     return facts
 
 
-def generate_growth_triggers(symbol: str, *, consolidated: bool | None = None,
-                             ipo_mode: bool = False) -> str | None:
-    """Forward-looking **growth-triggers 1-pager** for ``symbol`` — an opt-in deeper cut
+def generate_upside_drivers(symbol: str, *, consolidated: bool | None = None,
+                            ipo_mode: bool = False) -> str | None:
+    """Forward-looking **upside-drivers 1-pager** for ``symbol`` — an opt-in deeper cut
     offered after a deep report. Grounded in the primary filings plus the verified snapshot.
     ``ipo_mode`` grounds it in the IPO offer documents (RHP etc.) for a pre-listing company
     instead of listed filings. Returns markdown, or ``None`` if there's nothing to ground it."""
@@ -438,7 +438,7 @@ def generate_growth_triggers(symbol: str, *, consolidated: bool | None = None,
         pdfs = _filings_for_analysis(symbol)
     if not pdfs:
         return None
-    return growth_triggers(pdfs, symbol, facts=facts)
+    return upside_drivers(pdfs, symbol, facts=facts)
 
 
 # ----------------- IPO (pre-listing) -----------------

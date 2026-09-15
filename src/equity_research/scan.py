@@ -459,6 +459,49 @@ def tailwind_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = Non
             con.close()
 
 
+_HOTLIST_CACHE_TTL_H = 24
+
+
+def hotlist_cache_get(con: duckdb.DuckDBPyConnection | None = None) -> dict | None:
+    """Return the last Hotlist build if younger than 24h (a multi-engine run is heavy, so a re-run
+    within a day reuses it), else None. ``{report, cached_at}``."""
+    own = con is None
+    con = con or connect()
+    try:
+        raw = _meta(con, "hotlist_cache")
+        if not raw:
+            return None
+        try:
+            blob = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+        ts = blob.get("ts")
+        if not ts:
+            return None
+        try:
+            age_h = (datetime.now(_IST) - datetime.fromisoformat(ts)).total_seconds() / 3600
+        except (ValueError, TypeError):
+            return None
+        if age_h > _HOTLIST_CACHE_TTL_H:
+            return None
+        return {"report": blob.get("report"), "cached_at": ts}
+    finally:
+        if own:
+            con.close()
+
+
+def hotlist_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Store a freshly-built Hotlist (markdown + picks) with a timestamp."""
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "hotlist_cache",
+                  json.dumps({"ts": datetime.now(_IST).isoformat(), "report": report}))
+    finally:
+        if own:
+            con.close()
+
+
 def _year_month(dt: datetime) -> str:
     return f"{dt.year}-{dt.month:02d}"
 
