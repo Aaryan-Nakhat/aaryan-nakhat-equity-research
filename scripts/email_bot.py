@@ -35,10 +35,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import (accumulation, booking_risk, call_radar, holdco,  # noqa: E402
-                                      hotlist, investors, leaders, momentum, policy,
-                                      results_radar, screener, sector_analysis, sell_advisor,
-                                      smallcap, supply_chain, technical, technical_screen)
+from equity_research.analysis import (accumulation, booking_risk, call_radar,  # noqa: E402
+                                      fundamental_screens, holdco, hotlist, investors, leaders,
+                                      momentum, policy, results_radar, screener, sector_analysis,
+                                      sell_advisor, smallcap, supply_chain, technical, technical_screen)
 from equity_research import mail_cleanup  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import call_radar_brief  # noqa: E402
@@ -521,6 +521,12 @@ def _screen_query(subject: str) -> str | None:
         return "accumulation"
     if val in ("hotlist", "hot list", "hot", "multisignal", "multi-signal", "confluence", "top"):
         return "hotlist"
+    if val in ("margins", "margin", "margin momentum", "expanding margins"):
+        return "margins"
+    if val in ("deleverage", "deleveraging", "debt payers", "debt", "debt reduction"):
+        return "deleverage"
+    if val in ("quality", "compounders", "compounder", "quality compounders"):
+        return "quality"
     if val in ("technical", "technicals", "ta", "setup", "setups", "chart", "charts", "buy", "buys"):
         return "technical"
     return "value"
@@ -735,6 +741,9 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`screen: momentum`", "Momentum breakouts — near 52-week highs, uptrend, with a volume surge."],
         ["`screen: leaders`", "Relative-strength leaders — beating the Nifty-500 over 3/6/12 months."],
         ["`screen: accumulation`", "Where promoters raised their own stake QoQ (+ who's adding alongside)."],
+        ["`screen: margins`", "Margin Momentum — net margin expanding on growing revenue."],
+        ["`screen: deleverage`", "Debt Payers — cut debt over 3-4 yrs while staying profitable."],
+        ["`screen: quality`", "Compounders — high ROCE, low debt, steady multi-year growth, clean."],
         ["`screen: holdco`", "Holding companies trading below their listed-stake NAV (the Elcid trade)."],
         ["`screen: investors`", "Where marquee HNIs just entered / added / trimmed."],
         ["`screen: smallcap`", "Capex-led small-caps (spending now for future growth)."],
@@ -1399,6 +1408,108 @@ def _send_accumulation_screen(req: EmailRequest) -> None:
     log.info("sent accumulation screen (%d names) to %s", len(rows), req.sender)
 
 
+def _send_margins_screen(req: EmailRequest) -> None:
+    """Margin Momentum — net margin expanding (vs the prior ~4 quarters) on growing revenue."""
+    log.info("running margin-momentum screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning for **Margin Momentum** (net margin expanding on growing "
+                     "revenue). ~1 min; the ranked list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: fundamental_screens.margin_momentum(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The margins screen timed out this time — please resend `screen: margins`.")
+        return
+    if not rows:
+        _reply_text(req, "No names with a clean, growth-backed margin expansion cleared the filters today.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"{r['net_margin']:.1f}%", f"+{r['margin_bps']} bps",
+            f"{r['rev_yoy']:+.0f}%", (r["sector"] or "—")[:16]] for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "Net margin", "Δ margin", "Rev YoY", "Sector"],
+                      tbl, align="rllrrrl")
+    body = ("**📈 Margin Momentum — expanding margins on growing revenue**\n\n"
+            "Names whose **net margin** is widening vs the prior four quarters **while revenue grows** "
+            "(margin gains on a growing base, not a shrinking one). **Δ margin** is the expansion in "
+            "basis points (100 bps = 1 percentage point). Forensic-trap-gated. **Reply a number for that "
+            "name's full deep report.**\n\n" + table +
+            f"\n\n_A discovery screen, not a call. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:margins", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — margin momentum"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent margin-momentum screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_deleverage_screen(req: EmailRequest) -> None:
+    """Debt Payers — cut debt over ~3-4 years while staying profitable (healthy deleveraging)."""
+    log.info("running debt-payers screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning for **Debt Payers** (companies cutting debt over the years "
+                     "while staying profitable). ~1 min; the list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: fundamental_screens.debt_payers(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The deleverage screen timed out this time — please resend `screen: deleverage`.")
+        return
+    if not rows:
+        _reply_text(req, "No clean healthy-deleveraging names cleared the filters today.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"{r['de']:.2f}" if r["de"] is not None else "—",
+            f"−{r['debt_cut_pct']}%", f"{r['roce']:.0f}%", (r["sector"] or "—")[:16]]
+           for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "D/E now", "Debt cut (3-4y)", "ROCE", "Sector"],
+                      tbl, align="rllrrrl")
+    body = ("**💸 Debt Payers — cutting debt while staying profitable**\n\n"
+            "Names that have **reduced total borrowings** over the last 3-4 years **and** still earn a "
+            "healthy return (ROCE > 0) — deleveraging from strength, not distress. **D/E now** = "
+            "debt ÷ equity today; **Debt cut** = the fall in total borrowings. **Reply a number for that "
+            "name's full deep report.**\n\n" + table +
+            f"\n\n_A discovery screen, not a call. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:deleverage", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — debt payers"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent debt-payers screen (%d names) to %s", len(rows), req.sender)
+
+
+def _send_quality_screen(req: EmailRequest) -> None:
+    """Compounders — high ROCE, low debt, steady multi-year growth, clean books."""
+    log.info("running compounders screen (req from %s)", req.sender)
+    _reply_text(req, "📩 Got it — scanning for **Compounders** (high ROCE, low debt, steadily growing, "
+                     "clean books). ~1-2 min; the list lands here.")
+    con = connect()
+    try:
+        rows = _screen_run(lambda: fundamental_screens.compounders(con, limit=20))
+    finally:
+        con.close()
+    if rows is None:
+        _reply_text(req, "The quality screen timed out this time — please resend `screen: quality`.")
+        return
+    if not rows:
+        _reply_text(req, "No names cleared the high-ROCE / low-debt / steady-growth bar today.")
+        return
+    tbl = [[i, r["symbol"], r["name"][:20], f"{r['roce']:.0f}%", f"{r['de']:.2f}" if r["de"] is not None else "—",
+            f"{r['cagr']:.0f}%", f"{r['forensic']:.1f}/4" if r["forensic"] is not None else "—",
+            (r["sector"] or "—")[:14]] for i, r in enumerate(rows, 1)]
+    table = _md_table(["#", "Symbol", "Company", "ROCE", "D/E", "3y rev CAGR", "Forensic", "Sector"],
+                      tbl, align="rllrrrll")
+    body = ("**🏆 Compounders — high-return, low-debt, steady growers**\n\n"
+            "The **quality** screen: names with a **high ROCE** (≥15%), **low debt** (D/E ≤ 0.75) and "
+            "**steady multi-year revenue growth**, with clean forensics. Leads with *business quality* "
+            "(unlike `screen: value`, which leads with cheapness). **Forensic** = a 0-4 health score "
+            "(Altman · Beneish · accruals · no-pledge). **Reply a number for that name's full deep "
+            "report.**\n\n" + table +
+            f"\n\n_A discovery screen, not a call — quality says nothing about price. (Reply within {PENDING_TTL_H}h.)_")
+    _set_pending(req, "screen:quality", [_MenuItem(r["symbol"], r["name"]) for r in rows])
+    emailer.send_report(_re_subject(req.subject), body, to=req.sender,
+                        html=emailer.body_html(body, "Screen — compounders"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent compounders screen (%d names) to %s", len(rows), req.sender)
+
+
 def _hotlist_md(rows: list[dict]) -> str:
     """Render the Hotlist rows to the emailed markdown (table + explainer)."""
     tbl = [[i, r["symbol"], r["name"][:20], "●" * r["n_signals"] + f" {r['n_signals']}",
@@ -1952,6 +2063,12 @@ def handle_request(req: EmailRequest) -> None:
             _send_accumulation_screen(req)
         elif sq == "hotlist":
             _send_hotlist(req)
+        elif sq == "margins":
+            _send_margins_screen(req)
+        elif sq == "deleverage":
+            _send_deleverage_screen(req)
+        elif sq == "quality":
+            _send_quality_screen(req)
         else:
             _send_fundamental_screen(req)
         return

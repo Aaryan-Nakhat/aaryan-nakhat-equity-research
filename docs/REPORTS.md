@@ -664,6 +664,18 @@ text that collapsed on phones.
   **Bounded to symbols with holder-level shareholding ingested** (coverage grows). Columns: promoter Δ
   (pp) · promoter now (%) · top adder · as-of. Reply a number → deep report.
 
+The three **fundamental** screens (`analysis/fundamental_screens.py`, over symbols with financials,
+deterministic — reuse `quant._ratios`/`load_annual`, `fundamentals.quarterly_metrics`,
+`screener._forensic_raw`/`_normalise` + the forensic trap-gate):
+- **`screen: margins`** → **Margin Momentum**: latest net margin vs the prior ~4 quarters → expansion
+  (bps), required **on positive revenue growth**; a plausibility guard drops holdco/trader denominator
+  artifacts. Columns: net margin · Δ margin (bps) · rev YoY · sector.
+- **`screen: deleverage`** → **Debt Payers**: total borrowings (`BorrowingsCurrent+Noncurrent`) cut over
+  ~3-4 FYs **and** ROCE > 0 (healthy, not distress). Columns: D/E now · debt cut % · ROCE · sector.
+- **`screen: quality`** → **Compounders**: ROCE ≥ 15 · D/E ≤ 0.75 · steady multi-year revenue CAGR ·
+  clean forensic — leads with *business quality*, distinct from `screen: value` (cheapness-led).
+  Columns: ROCE · D/E · 3y rev CAGR · forensic · sector.
+
 ### 🔥 Hotlist — `hotlist` (multi-signal confluence)
 
 **`hotlist`** (also `screen: hotlist`; `--latest` forces a fresh run) → `analysis/hotlist.py` runs the

@@ -397,6 +397,16 @@ with zero).
   - Forensic (0–4) = +1 each for Altman-safe, Beneish-clean, low accruals, no pledge.
   - Cheapness = `100 − own-history percentile` of the current P/E (P/B for financials).
   A missing pillar maps to 0.5 (doesn't sink the name). Ranked list; reply a number → full deep report.
+- **Fundamental screens (`analysis/fundamental_screens.py`)** — over symbols with financials,
+  deterministic (reuse `quant._ratios`/`load_annual`, `fundamentals.quarterly_metrics`,
+  `screener._forensic_raw`/`_normalise` + the forensic trap-gate):
+  - **`screen: margins`** (Margin Momentum) — latest net margin vs the prior ~4 quarters → expansion
+    (bps), required on **positive revenue growth**; a ±100% plausibility guard drops holdco/trader
+    denominator artifacts. Rank = 0.7·expansion + 0.3·rev-growth.
+  - **`screen: deleverage`** (Debt Payers) — total borrowings (`BorrowingsCurrent+Noncurrent`) cut over
+    ~3-4 FYs (≥5%) **and** ROCE > 0 (healthy, not distress). Rank = 0.6·debt-cut + 0.4·ROCE.
+  - **`screen: quality`** (Compounders) — ROCE ≥ 15, D/E ≤ 0.75, revenue CAGR ≥ 8% over ≥3 FYs. Rank =
+    0.35·ROCE + 0.30·CAGR + 0.15·up-years-consistency + 0.20·forensic. Quality-led, not cheapness-led.
 - **`screen: holdco` (`analysis/holdco.py`)** — the Elcid trade generalised. From `shp_holders`
   rows classified `LISTED company`, invert to `holder → [(investee, pct)]`; **stake NAV = Σ pct% ×
   investee market cap**; **discount = 1 − own market cap / stake NAV**; ranked deepest-first. Only

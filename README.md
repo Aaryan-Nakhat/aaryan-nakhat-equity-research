@@ -37,6 +37,9 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `screen: momentum` *(or `breakout`)* | **Momentum breakouts** — names near 52-week highs, uptrend intact, with a volume surge (full liquid universe). |
 | `screen: leaders` *(or `rs`)* | **Relative-strength leaders** — beating the Nifty-500 over 3 / 6 / 12 months, still trending up. |
 | `screen: accumulation` | **Where promoters raised their own stake** last quarter — with the institution adding alongside. |
+| `screen: margins` | **Margin Momentum** — net margin expanding vs the prior quarters, on growing revenue. |
+| `screen: deleverage` | **Debt Payers** — cut total debt over 3-4 yrs while staying profitable (healthy, not distress). |
+| `screen: quality` | **Compounders** — high ROCE + low debt + steady multi-year growth + clean books. |
 | `screen: holdco` | The **Elcid trade, generalised** — listed holdcos trading below their listed-stake NAV. |
 | `screen: investors` | Where ~25 tracked **marquee HNIs** just entered / added / trimmed / exited. |
 | `screen: smallcap` | **Capex-led small-cap** hunt (structural capex boom before the P&L re-rates), traps gated out. |
@@ -132,6 +135,12 @@ source → formula → model).
   12 months and still above their 200-DMA (leadership persists), restricted to liquid, tradeable names.
 - **`screen: accumulation`** — **where insiders & big holders are adding**: names whose **promoter raised
   their own stake** quarter-on-quarter, annotated with the largest **institution adding alongside**.
+- **`screen: margins`** — **Margin Momentum**: names whose **net margin is expanding** vs the prior four
+  quarters **on growing revenue** (margin gains on a growing base, not a shrinking one).
+- **`screen: deleverage`** — **Debt Payers**: names that have **cut total borrowings** over the last
+  3-4 years **while staying profitable** (ROCE > 0) — deleveraging from strength, not distress.
+- **`screen: quality`** — **Compounders**: **high ROCE + low debt + steady multi-year growth + clean
+  forensics** — leads with *business quality* (unlike `screen: value`, which leads with cheapness).
 - **`screen: holdco`** — the **Elcid trade, generalised**: listed holding companies whose disclosed
   listed-stake NAV exceeds their own market cap, ranked by discount.
 - **`screen: investors` / `investor: <name>`** — ~25 tracked **marquee HNIs** (Jhunjhunwala, Mukul
