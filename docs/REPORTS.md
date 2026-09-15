@@ -643,7 +643,7 @@ text that collapsed on phones.
   long tail anyway). Reply a number → deep report. **Honest caveat (in the email):** a candidate finder
   with *defined risk*, **not** a back-tested edge — short-term timing is the tool's least-proven area.
 
-- **`screen: momentum`** (aliases `breakout`) → `analysis/momentum.py` surfaces **momentum breakouts**
+- **`screen: volume`** (aliases `breakout`) → `analysis/momentum.py` surfaces **Volume Breakouts**
   across the **full liquid equity universe** (not just names with financials — a surfaced name's report
   ingests on demand): names within ~4% of their **52-week high**, in an uptrend (>200-DMA · 50>200),
   with a **volume surge** (latest volume ≥ 1.3× its 20-day average). Ranked on a rank-normalised
@@ -651,13 +651,13 @@ text that collapsed on phones.
   **trap gate** applied on the shortlist where financials exist. Columns: price · breakout label · Vol
   (×avg) · Deliv (×avg) · sector. Reply a number → deep report.
 
-- **`screen: leaders`** (aliases `rs`, `strength`, `outperformers`) → `analysis/leaders.py` surfaces
-  **relative-strength leaders** — names **beating the Nifty 500** over 3m/6m/12m and still above their
+- **`screen: beaters`** (aliases `rs`, `strength`, `outperformers`) → `analysis/leaders.py` surfaces
+  **Market Beaters** — names **beating the Nifty 500** over 3m/6m/12m and still above their
   200-DMA (leadership persists). Ranked on rank-normalised outperformance — **50% 3m · 30% 6m · 20% 1y**.
   Liquidity floor **₹10 cr/day** (RS leadership is only meaningful for tradeable, institution-sized names).
   Columns: 3m/6m/1y returns · outperformance vs Nifty500 (pp) · sector. Reply a number → deep report.
 
-- **`screen: accumulation`** (aliases `adding`, `smart money`, `promoter buying`) →
+- **`screen: institutions`** (aliases `adding`, `smart money`, `promoter buying`) →
   `analysis/accumulation.py` surfaces **where insiders & big holders are adding** — names where the
   **promoter raised their own stake QoQ** (a set-based diff over the holder-level shareholding filings),
   annotated with the largest **institution adding alongside** (via `ownership.ownership_changes`).
@@ -733,7 +733,7 @@ numbers. Reply a number → deep report.
 *biggest / accelerating growth vs the company's own history*, **not** "beat vs street"; watch base
 effects on tiny year-ago numbers. Bounded to names with financials history until the universe backfill.
 
-### 🔔 Filing alerts — `alert: <keyword>` (standing keyword alerts)
+### 🔔 Announcements — `alert: <keyword>` (standing keyword alerts)
 
 Register phrases to watch across **all** listed companies' exchange filings and get an email the moment
 one matches — front-running the news. `analysis/keyword_alerts.py` + an `alert_keywords` table:

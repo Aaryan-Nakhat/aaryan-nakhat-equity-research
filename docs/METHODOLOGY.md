@@ -407,7 +407,7 @@ with zero).
     ~3-4 FYs (≥5%) **and** ROCE > 0 (healthy, not distress). Rank = 0.6·debt-cut + 0.4·ROCE.
   - **`screen: quality`** (Compounders) — ROCE ≥ 15, D/E ≤ 0.75, revenue CAGR ≥ 8% over ≥3 FYs. Rank =
     0.35·ROCE + 0.30·CAGR + 0.15·up-years-consistency + 0.20·forensic. Quality-led, not cheapness-led.
-- **🔔 Filing alerts (`analysis/keyword_alerts.py`)** — standing keyword alerts, deterministic (no LLM).
+- **🔔 Announcements (`analysis/keyword_alerts.py`)** — standing keyword alerts, deterministic (no LLM).
   A filing matches a keyword when **every word of the phrase is a substring** of its `desc+attchmntText`
   (order-independent; longer forms match — "order"→"orders"). A background sweep (~20 min, 08:00–23:00
   IST) fetches the market-wide announcement feed, matches filings **newer than a high-watermark**

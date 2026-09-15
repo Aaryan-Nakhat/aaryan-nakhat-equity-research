@@ -10,15 +10,15 @@ Beyond the original deep-report / screeners / sector / Tailwind / Pickaxe / MF /
 workbench now spans a full **idea-discovery + monitoring** layer (all on-demand `screen:`/command +
 reply-a-number → deep report; details in [`REPORTS.md`](REPORTS.md) / [`METHODOLOGY.md`](METHODOLOGY.md)):
 
-- **Discovery engines** — `screen: momentum` (breakouts), `screen: leaders` (relative strength),
-  `screen: accumulation` (promoter/insider buying), and **`hotlist`** (multi-signal confluence).
+- **Discovery engines** — `screen: volume` (breakouts), `screen: beaters` (relative strength),
+  `screen: institutions` (promoter/insider buying), and **`hotlist`** (multi-signal confluence).
 - **Fundamental screens** — `screen: margins` (Margin Momentum), `screen: deleverage` (Debt Payers),
   `screen: quality` (Compounders).
 - **🎙️ Concalls** (`concalls`) — market-wide earnings-call radar: Management Tone (words) vs Execution
   (numbers) → Say-Do Gap; incremental background scoring → `concall_signals`; weekly push.
 - **📈 Results Radar** (`results`) — just-reported companies ranked by growth + acceleration; background
   financials refresh, computed on-the-fly; weekly push.
-- **🔔 Filing alerts** (`alert: <kw>` / `alerts` / `unalert:`) — standing keyword alerts on exchange
+- **🔔 Announcements** (`alert: <kw>` / `alerts` / `unalert:`) — standing keyword alerts on exchange
   filings, ~20-min background sweep, forward-looking (watermark dedup), push email on match.
 - **IPO note enrichment** — retail allotment odds + an accounting/governance flag from the RHP.
 - **Upside Drivers** — the reply-`1` deeper-cut 1-pager (renamed from "growth triggers").

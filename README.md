@@ -43,9 +43,9 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | Email this | You get |
 |---|---|
 | `screen: value` *(or bare `screen`)* | Nifty-500 ranked on quality (Piotroski) + forensic + cheap-vs-own-history. |
-| `screen: momentum` *(or `breakout`)* | **Momentum breakouts** — names near 52-week highs, uptrend intact, with a volume surge (full liquid universe). |
-| `screen: leaders` *(or `rs`)* | **Relative-strength leaders** — beating the Nifty-500 over 3 / 6 / 12 months, still trending up. |
-| `screen: accumulation` | **Where promoters raised their own stake** last quarter — with the institution adding alongside. |
+| `screen: volume` *(or `breakout`)* | **Volume Breakouts** — names near 52-week highs, uptrend intact, with a volume surge (full liquid universe). |
+| `screen: beaters` *(or `rs`)* | **Market Beaters** — beating the Nifty-500 over 3 / 6 / 12 months, still trending up. |
+| `screen: institutions` | **Institutional Buying** — where promoters raised their own stake last quarter, with the institution adding alongside. |
 | `screen: margins` | **Margin Momentum** — net margin expanding vs the prior quarters, on growing revenue. |
 | `screen: deleverage` | **Debt Payers** — cut total debt over 3-4 yrs while staying profitable (healthy, not distress). |
 | `screen: quality` | **Compounders** — high ROCE + low debt + steady multi-year growth + clean books. |
@@ -54,7 +54,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `screen: smallcap` | **Capex-led small-cap** hunt (structural capex boom before the P&L re-rates), traps gated out. |
 | `screen: technical` | Strongest **chart setups to buy** — entry / stop / target. |
 | `screen: policy` *(or `policy`)* | **Govt policy radar** — latest PIB schemes/policies → likely listed beneficiaries. |
-| `hotlist` *(`--latest` forces fresh)* | **🔥 Hotlist** — the names lighting up across **several** screeners at once (momentum · leaders · accumulation · value · small-cap); highest-conviction confluence first. **Cached 24h.** |
+| `hotlist` *(`--latest` forces fresh)* | **🔥 Hotlist** — the names lighting up across **several** screeners at once (volume · beaters · institutions · value · small-cap); highest-conviction confluence first. **Cached 24h.** |
 
 **🧭 Sector analysis** — top-down, one sectoral index at a time.
 
@@ -76,7 +76,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `pickaxe --latest` | Same, but forces a brand-new live scan instead of the 24h-cached result. |
 | `concalls` *(or `calls`)* | **🎙️ Concalls** — the most notable recent earnings calls market-wide: **Management Tone** (from the transcript) vs the quarter's **Execution** (from our numbers), ranked by how far the two diverge (upbeat talk on soft numbers = caution; quiet talk on strong numbers = under-radar). Reply a number → deep report. *(Also pushed weekly.)* |
 | `results` *(or `movers`)* | **📈 Results Radar** — companies that **just reported**, ranked by how strong the quarter was (YoY growth + whether it's **accelerating** + margin inflection, from the numbers). No analyst consensus → growth-vs-own-history, not beat-vs-street. Reply a number → deep report. *(Also pushed weekly.)* |
-| `alert: <keyword>` *(· `alerts` · `unalert: <keyword>`)* | **🔔 Filing alerts** — watch every company's exchange filings for a phrase (e.g. `alert: order win`, `alert: QIP`); get an email within ~20 min of any match (8am-11pm IST). Forward-looking; `alerts` lists them, `unalert:` removes. |
+| `alert: <keyword>` *(· `alerts` · `unalert: <keyword>`)* | **🔔 Announcements** — watch every company's exchange filings for a phrase (e.g. `alert: order win`, `alert: QIP`); get an email within ~20 min of any match (8am-11pm IST). Forward-looking; `alerts` lists them, `unalert:` removes. |
 
 **📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
 
@@ -138,13 +138,14 @@ source → formula → model).
 
 - **`screen: value`** — the Nifty-500 ranked on quality (Piotroski) + forensic
   (Altman / Beneish / accruals / no-pledge) + **cheap-vs-own-history**.
-- **`screen: momentum`** — **momentum breakouts** across the **full liquid equity universe**: names
+- **`screen: volume`** — **Volume Breakouts** across the **full liquid equity universe**: names
   within ~4% of their **52-week high**, in an uptrend (>200-DMA · 50>200), with a **volume surge**
   confirming the move (ranked on high-proximity + volume + delivery, forensic-trap-gated).
-- **`screen: leaders`** — **relative-strength leaders**: names **beating the Nifty-500** over 3 / 6 /
+- **`screen: beaters`** — **Market Beaters**: names **beating the Nifty-500** over 3 / 6 /
   12 months and still above their 200-DMA (leadership persists), restricted to liquid, tradeable names.
-- **`screen: accumulation`** — **where insiders & big holders are adding**: names whose **promoter raised
-  their own stake** quarter-on-quarter, annotated with the largest **institution adding alongside**.
+- **`screen: institutions`** — **Institutional Buying**: names whose **promoter raised their own stake**
+  quarter-on-quarter, annotated with the largest **institution adding alongside** — where the smart,
+  informed money is going in.
 - **`screen: margins`** — **Margin Momentum**: names whose **net margin is expanding** vs the prior four
   quarters **on growing revenue** (margin gains on a growing base, not a shrinking one).
 - **`screen: deleverage`** — **Debt Payers**: names that have **cut total borrowings** over the last
@@ -201,7 +202,7 @@ source → formula → model).
   inflection — all from our numbers. A background pass lands the fresh quarter for names that just filed;
   the command computes + ranks instantly. **No analyst consensus** (primary data only), so it's
   growth-vs-own-history, not beat-vs-street. Reply a number → deep report; also a weekly Saturday digest.
-- **🔔 `alert: <keyword>`** — **standing filing alerts**: register a phrase (`alert: order win`,
+- **🔔 `alert: <keyword>`** — **standing announcement alerts**: register a phrase (`alert: order win`,
   `alert: QIP`, `alert: capacity expansion`) and get an email the moment **any** listed company files
   an announcement that matches — front-running the news. A background sweep (~every 20 min, 8am-11pm
   IST) matches new filings against your keywords; **forward-looking** (a high-watermark means a new
