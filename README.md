@@ -1,12 +1,37 @@
-# aaryan-nakhat-equity-research
+# 📈 aaryan-nakhat-equity-research
 
-A private equity-research workbench for **Indian stocks (NSE / BSE)**. Pulls
-**primary, official, government-backed data only** (exchanges, SEBI, RBI, MOSPI,
-company filings) — no blogs, no news aggregators, no third-party data vendors —
-runs **fundamental + technical analysis**, and emails decision-grade reports to
-help with actual buy/sell decisions.
+> A self-hosted equity-research workbench for **Indian stocks (NSE / BSE)** — you drive the whole
+> thing by **emailing a command**, and an always-on bot emails back decision-grade reports.
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Data](https://img.shields.io/badge/data-primary%20%2F%20official%20only-2E7D32)
+![LLM](https://img.shields.io/badge/LLM-provider--agnostic%20(BYO)-6E56CF)
+![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
+![Delivery](https://img.shields.io/badge/delivery-email%20%2F%20Telegram%20bot-0088CC)
+![Self-hosted](https://img.shields.io/badge/self--hosted-yes-informational)
+
+Pulls **primary, official, government-backed data only** (exchanges, SEBI, RBI, MOSPI, company
+filings) — no blogs, no news aggregators, no third-party data vendors — runs **fundamental +
+technical + forensic analysis**, and turns it into readable reports + a set of **idea-discovery
+engines** that surface stocks you didn't name. Bring your own LLM (any provider, via `.env`).
 
 Personal use. Not a hosted product.
+
+```mermaid
+flowchart LR
+    subgraph SRC["Primary sources"]
+        NSE["NSE / BSE<br/>filings · prices · SHP · derivatives"]
+        REG["SEBI · RBI · MOSPI · PIB"]
+        AMFI["AMFI · MCX · FBIL"]
+    end
+    SRC -->|"anti-bot scrapers"| DB[("DuckDB<br/>15 tables")]
+    DB --> AN["Deterministic analysis<br/>valuation · forensic · ownership · screeners"]
+    AN --> LLM{{"LLM (BYO, via .env)<br/>thesis · concall read · resolve"}}
+    LLM --> BOT["📬 email / Telegram bot"]
+    AN --> BOT
+    USER(("👤 you")) -->|"email a command"| BOT
+    BOT -->|"report · PDF · alert"| USER
+```
 
 ## 📖 What you can ask it (email commands)
 
