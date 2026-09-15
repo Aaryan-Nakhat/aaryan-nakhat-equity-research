@@ -221,6 +221,13 @@ _SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS alert_keywords (
+        keyword    VARCHAR,        -- lowercased phrase to watch for in exchange announcements
+        added_at   TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (keyword)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS concall_signals (
         symbol        VARCHAR,
         filed_date    DATE,       -- when the transcript was filed with the exchange

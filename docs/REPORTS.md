@@ -733,6 +733,22 @@ numbers. Reply a number → deep report.
 *biggest / accelerating growth vs the company's own history*, **not** "beat vs street"; watch base
 effects on tiny year-ago numbers. Bounded to names with financials history until the universe backfill.
 
+### 🔔 Filing alerts — `alert: <keyword>` (standing keyword alerts)
+
+Register phrases to watch across **all** listed companies' exchange filings and get an email the moment
+one matches — front-running the news. `analysis/keyword_alerts.py` + an `alert_keywords` table:
+
+- **Manage:** `alert: <keyword>` add · `alerts` (or bare `alert`) list · `unalert: <keyword>` remove ·
+  `alert clear` wipe. Keywords are stored lowercased.
+- **Matching:** a filing matches a keyword when **every word of the phrase appears** in its
+  `desc + attchmntText` (order-independent substring — "order win" catches "…won a large order…"; longer
+  forms like "orders" match "order"). Use root words; deterministic, no LLM.
+- **Sweep + push:** `maybe_alert_scan` runs a background pass **~every 20 min, 08:00–23:00 IST** (skipped
+  when no keywords) — one market-wide date-ranged sweep (`nse_api.corporate_announcements`), matches
+  filings **newer than a high-watermark** (`scan.alert_watermark`), advances it, and sends **one**
+  email of the hits (symbol · keyword · headline · document link). **Forward-looking:** the first sweep
+  seeds the watermark silently, so a new keyword never dumps a backlog.
+
 ### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
 
 **`sell`** (aliases `raise`, `trim`) → `analysis/sell_advisor.sell_ranking` answers a different

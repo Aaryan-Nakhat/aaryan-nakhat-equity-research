@@ -67,6 +67,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `pickaxe --latest` | Same, but forces a brand-new live scan instead of the 24h-cached result. |
 | `concalls` *(or `calls`)* | **🎙️ Concalls** — the most notable recent earnings calls market-wide: **Management Tone** (from the transcript) vs the quarter's **Execution** (from our numbers), ranked by how far the two diverge (upbeat talk on soft numbers = caution; quiet talk on strong numbers = under-radar). Reply a number → deep report. *(Also pushed weekly.)* |
 | `results` *(or `movers`)* | **📈 Results Radar** — companies that **just reported**, ranked by how strong the quarter was (YoY growth + whether it's **accelerating** + margin inflection, from the numbers). No analyst consensus → growth-vs-own-history, not beat-vs-street. Reply a number → deep report. *(Also pushed weekly.)* |
+| `alert: <keyword>` *(· `alerts` · `unalert: <keyword>`)* | **🔔 Filing alerts** — watch every company's exchange filings for a phrase (e.g. `alert: order win`, `alert: QIP`); get an email within ~20 min of any match (8am-11pm IST). Forward-looking; `alerts` lists them, `unalert:` removes. |
 
 **📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
 
@@ -191,6 +192,12 @@ source → formula → model).
   inflection — all from our numbers. A background pass lands the fresh quarter for names that just filed;
   the command computes + ranks instantly. **No analyst consensus** (primary data only), so it's
   growth-vs-own-history, not beat-vs-street. Reply a number → deep report; also a weekly Saturday digest.
+- **🔔 `alert: <keyword>`** — **standing filing alerts**: register a phrase (`alert: order win`,
+  `alert: QIP`, `alert: capacity expansion`) and get an email the moment **any** listed company files
+  an announcement that matches — front-running the news. A background sweep (~every 20 min, 8am-11pm
+  IST) matches new filings against your keywords; **forward-looking** (a high-watermark means a new
+  keyword only catches *future* filings, never a backlog). `alerts` lists them, `unalert: <keyword>`
+  removes, `alert clear` wipes all.
 - **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
   (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
   alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI

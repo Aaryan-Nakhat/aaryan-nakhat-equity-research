@@ -609,6 +609,63 @@ def mark_results_ingest(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
+_ALERT_SCAN_MIN_GAP_MIN = 20
+_ALERT_HOURS = range(8, 23)          # 08:00–22:59 IST — nothing pings overnight
+
+
+def alert_scan_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True when the keyword-alert sweep should run: inside trading-day hours (08:00–23:00 IST) and
+    ≥20 min since the last sweep. (The caller also skips entirely when no keywords are set.)"""
+    if datetime.now(_IST).hour not in _ALERT_HOURS:
+        return False
+    own = con is None
+    con = con or connect()
+    try:
+        last = _meta(con, "last_alert_scan")
+        if not last:
+            return True
+        try:
+            return (datetime.now(_IST) - datetime.fromisoformat(last)).total_seconds() / 60 >= \
+                _ALERT_SCAN_MIN_GAP_MIN
+        except (ValueError, TypeError):
+            return True
+    finally:
+        if own:
+            con.close()
+
+
+def mark_alert_scan(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_alert_scan", datetime.now(_IST).isoformat())
+    finally:
+        if own:
+            con.close()
+
+
+def alert_watermark(con: duckdb.DuckDBPyConnection | None = None) -> str | None:
+    """The max announcement ``an_dt`` (ISO) already processed by the keyword-alert sweep, or None
+    before the first (seeding) run."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "alert_watermark")
+    finally:
+        if own:
+            con.close()
+
+
+def set_alert_watermark(iso: str, con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "alert_watermark", iso)
+    finally:
+        if own:
+            con.close()
+
+
 def _year_month(dt: datetime) -> str:
     return f"{dt.year}-{dt.month:02d}"
 

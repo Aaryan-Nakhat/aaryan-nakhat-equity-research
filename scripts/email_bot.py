@@ -36,9 +36,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (accumulation, booking_risk, call_radar,  # noqa: E402
-                                      fundamental_screens, holdco, hotlist, investors, leaders,
-                                      momentum, policy, results_radar, screener, sector_analysis,
-                                      sell_advisor, smallcap, supply_chain, technical, technical_screen)
+                                      fundamental_screens, holdco, hotlist, investors, keyword_alerts,
+                                      leaders, momentum, policy, results_radar, screener,
+                                      sector_analysis, sell_advisor, smallcap, supply_chain,
+                                      technical, technical_screen)
 from equity_research import mail_cleanup  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import call_radar_brief  # noqa: E402
@@ -587,6 +588,28 @@ def _hotlist_query(subject: str) -> bool:
                          r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
 
 
+def _alert_query(subject: str) -> tuple[str, str] | None:
+    """Parse a 🔔 filing-alert command → ``(action, keyword)``, or None if not an alert command.
+    action ∈ {add, list, remove, clear}; keyword is '' for list/clear.
+      `alert: <kw>` / `watch: <kw>` / `alert add: <kw>`  → add
+      `alerts` / `alert` / `alert list`                  → list
+      `unalert: <kw>` / `alert remove: <kw>` / `stop alert: <kw>` → remove
+      `alert clear` / `clear alerts`                     → clear"""
+    s = subject.strip()
+    s = re.sub(r"^\s*re:\s*", "", s, flags=re.I).strip()
+    if re.match(r"^(?:alert\s+clear|clear\s+alerts?)\s*$", s, flags=re.I):
+        return ("clear", "")
+    if re.match(r"^alerts?\s*$", s, flags=re.I) or re.match(r"^alert\s+list\s*$", s, flags=re.I):
+        return ("list", "")
+    m = re.match(r"^(?:unalert|alert\s+remove|remove\s+alert|stop\s+alert)\s*[:\-]\s*(.+)$", s, flags=re.I)
+    if m:
+        return ("remove", m.group(1).strip())
+    m = re.match(r"^(?:alert\s+add|alert|watch)\s*[:\-]\s*(.+)$", s, flags=re.I)
+    if m:
+        return ("add", m.group(1).strip())
+    return None
+
+
 def _calls_query(subject: str) -> bool:
     """True for a 🎙️ Concalls request ('calls', 'call radar', 'concall', 'concalls',
     'earnings calls')."""
@@ -767,6 +790,15 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "Companies that **just reported**, ranked by how strong the quarter was — YoY growth + whether "
          "it's **accelerating** + margin inflection (from the numbers; no analyst consensus, so it's "
          "growth-vs-own-history). Reply a number → deep report."],
+    ]),
+    ("🔔 Filing alerts — get pinged on any filing", "Standing keyword alerts, pushed within ~20 min "
+                                                    "(8am-11pm IST).", [
+        ["`alert: <keyword>`",
+         "Watch every company's exchange filings for a phrase — e.g. `alert: order win`, `alert: QIP`, "
+         "`alert: capacity expansion`. You get an email the moment one files a match (forward-looking; "
+         "use root words — ‘order’ also catches ‘orders’)."],
+        ["`alerts`", "List your current alerts."],
+        ["`unalert: <keyword>`", "Remove one (`alert clear` removes all)."],
     ]),
     ("🧭 Sector analysis", "Top-down, one sectoral index at a time.", [
         ["`sector: <name>` e.g. `sector: defence`, `sector: pharma`",
@@ -1618,6 +1650,62 @@ def _send_results(req: EmailRequest) -> None:
     log.info("sent Results Radar (%d names) to %s", len(rep["picks"]), req.sender)
 
 
+def _handle_alert(req: EmailRequest, action: str, keyword: str) -> None:
+    """🔔 Filing-alert management — add / list / remove / clear the user's keyword alerts."""
+    con = connect()
+    try:
+        if action == "add":
+            kw = keyword_alerts.add_keyword(con, keyword)
+            kws = keyword_alerts.list_keywords(con)
+            _reply_text(req, f"🔔 Alert set for **{kw}** — I'll email you when any company files an "
+                             "announcement that matches.\n\nWatching now: "
+                             f"{', '.join(kws)}\n\n_Forward-looking (only new filings from now). Matches "
+                             "the words you type and their longer forms (‘order’ also catches ‘orders’) — "
+                             "use root words. `alerts` to list · `unalert: <kw>` to remove._")
+        elif action == "remove":
+            existed = keyword_alerts.remove_keyword(con, keyword)
+            kws = keyword_alerts.list_keywords(con)
+            tail = f" Still watching: {', '.join(kws)}." if kws else " No alerts set now."
+            _reply_text(req, (f"🔕 Removed the alert for **{keyword.strip().lower()}**." if existed
+                              else f"No alert for '{keyword.strip()}' was set.") + tail)
+        elif action == "clear":
+            n = keyword_alerts.clear_keywords(con)
+            _reply_text(req, f"🔕 Cleared {n} filing alert(s).")
+        else:                                          # list
+            kws = keyword_alerts.list_keywords(con)
+            if kws:
+                _reply_text(req, "🔔 **Your filing alerts**\n\n" + "\n".join(f"- {k}" for k in kws)
+                                 + "\n\n_Add `alert: <keyword>` · remove `unalert: <keyword>`._")
+            else:
+                _reply_text(req, "You have no filing alerts set. Add one with `alert: <keyword>` — e.g. "
+                                 "`alert: order win`, `alert: QIP`, `alert: capacity expansion`.")
+    finally:
+        con.close()
+    log.info("filing-alert %s: %s", action, keyword or "(all)")
+
+
+def _push_alerts(matches: list[dict]) -> None:
+    """Send ONE email with the new keyword-matched filings (no reply-thread — a standalone push)."""
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot push filing alerts")
+        return
+    tbl = [[i, m["symbol"], m["keyword"], m["headline"][:70], m["an_dt"]]
+           for i, m in enumerate(matches, 1)]
+    table = _md_table(["#", "Symbol", "Keyword", "Headline", "Filed"], tbl, align="rllll")
+    body = (f"**🔔 Filing alerts — {len(matches)} match{'es' if len(matches) != 1 else ''}**\n\n"
+            "New exchange filings matching your saved keywords:\n\n" + table)
+    links = "\n".join(f"- **{m['symbol']}** [{m['keyword']}] — {m['url']}"
+                      for m in matches if m.get("url"))
+    if links:
+        body += "\n\n**Documents:**\n" + links
+    body += "\n\n_Manage with `alerts` · `alert: <kw>` · `unalert: <kw>`._"
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"🔔 Filing alerts — {today}", body, to=to,
+                        html=emailer.body_html(body, "Filing alerts"))
+    log.info("pushed %d filing alert(s) to %s", len(matches), to)
+
+
 def _send_policy_screen(req: EmailRequest) -> None:
     """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
     sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
@@ -2132,6 +2220,12 @@ def handle_request(req: EmailRequest) -> None:
         _send_results(req)
         return
 
+    # 1e-undec) 🔔 Filing alerts — manage standing keyword alerts ('alert: X', 'alerts', 'unalert: X')
+    alertq = _alert_query(req.subject)
+    if alertq:
+        _handle_alert(req, alertq[0], alertq[1])
+        return
+
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
     lq = _levels_query(req.subject)
     if lq:
@@ -2579,6 +2673,35 @@ def maybe_results() -> None:
     log.info("weekly Results Radar push sent (%d names) to %s", len(rep["picks"]), to)
 
 
+_alert_lock = threading.Lock()
+
+
+def _alert_scan_worker() -> None:
+    """Background pass: match new market-wide filings against saved keywords and push any hits.
+    `scan_new` no-ops cheaply when no keywords are set (before any sweep). Holds `_alert_lock`."""
+    if not _alert_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        matches = keyword_alerts.scan_new(con)
+        scan.mark_alert_scan(con)
+        if matches:
+            _push_alerts(matches)
+    except Exception:  # noqa: BLE001 — never let the alert scan crash the bot
+        log.exception("keyword-alert scan failed")
+    finally:
+        con.close()
+        _alert_lock.release()
+
+
+def maybe_alert_scan() -> None:
+    """Heartbeat hook: run the keyword-alert sweep at most ~every 20 min (08:00–23:00 IST), in a
+    background thread. Cheap no-op when the user has no alerts set."""
+    if _alert_lock.locked() or not scan.alert_scan_due():
+        return
+    threading.Thread(target=_alert_scan_worker, name="alert-scan", daemon=True).start()
+
+
 _last_mail_sweep: datetime | None = None
 
 
@@ -2647,6 +2770,7 @@ def main() -> None:
                 maybe_call_radar()   # heartbeat: weekly earnings-call radar push (Sat ≥18:00)
                 maybe_results_ingest()   # heartbeat: refresh just-reported names' financials (background, ~hourly)
                 maybe_results()      # heartbeat: weekly results-radar push (Sat ≥18:00)
+                maybe_alert_scan()   # heartbeat: keyword filing-alert sweep (background, ~20min, 8-23h IST)
                 maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
