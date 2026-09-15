@@ -17,22 +17,6 @@ engines** that surface stocks you didn't name. Bring your own LLM (any provider,
 
 Personal use. Not a hosted product.
 
-```mermaid
-flowchart LR
-    subgraph SRC["Primary sources"]
-        NSE["NSE / BSE<br/>filings · prices · SHP · derivatives"]
-        REG["SEBI · RBI · MOSPI · PIB"]
-        AMFI["AMFI · MCX · FBIL"]
-    end
-    SRC -->|"anti-bot scrapers"| DB[("DuckDB<br/>15 tables")]
-    DB --> AN["Deterministic analysis<br/>valuation · forensic · ownership · screeners"]
-    AN --> LLM{{"LLM (BYO, via .env)<br/>thesis · concall read · resolve"}}
-    LLM --> BOT["📬 email / Telegram bot"]
-    AN --> BOT
-    USER(("👤 you")) -->|"email a command"| BOT
-    BOT -->|"report · PDF · alert"| USER
-```
-
 ## 📖 What you can ask it (email commands)
 
 You drive the whole workbench by **emailing a command in the Subject line** from an allowlisted
