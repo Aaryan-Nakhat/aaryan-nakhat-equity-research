@@ -560,8 +560,12 @@ depth/readability as the deep stock report, uncapped): what the company does & h
 **offer structure — a fresh-issue vs OFS split table** (₹ cr + % of offer, summing to 100%) then
 what it signals (fresh → company funded = positive; heavy OFS → insiders exiting = caution) ·
 restated financials *with the trajectory read* ·
-**valuation at the band vs listed peers** (P/E · P/B · RoNW each explained) · use of proceeds ·
-key risks · demand (subscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. For every
+**valuation at the band vs listed peers** (P/E · P/B · RoNW each explained) · an **accounting &
+governance flag** (🟢 Clean / 🟡 Watch / 🟠 Concern / 🔴 Red flag — a qualitative RHP read of
+CFO-vs-PAT, related-party, receivables/inventory build, contingent liabilities, auditor
+qualifications/CARO, promoter pledge, restatements, since there's no filing history for the quant
+forensic scores) · use of proceeds · key risks · demand (subscription by category + **retail
+allotment odds** ≈ 1/oversubscription + anchor book) · **APPLY / AVOID / NEUTRAL verdict**. For every
 metric it says what it measures and a healthy/normal range so a first-time applicant can follow. Delivered as **email body +
 PDF**, alongside an **IPO metrics & terminology guide PDF** (`glossary.ipo_guide_pdf`, cached —
 fresh-issue vs OFS, QIB/NII/RII, anchor investors, price band/lot, P/E-at-band · P/B · RoNW · NAV,

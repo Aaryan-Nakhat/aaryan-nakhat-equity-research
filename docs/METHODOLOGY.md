@@ -324,9 +324,13 @@ with zero).
 - **Analysis — 🤖 LLM:** `ipo_analysis` feeds the RHP + price-band ad + anchor doc + verified issue
   facts to the LLM: snapshot · **offer structure (a Fresh-Issue vs OFS split table, ₹cr + %) and what
   it signals** · restated financials with the trajectory read · valuation-at-band vs listed peers ·
-  use of proceeds · RHP risks · demand (subscription + anchor) · **APPLY / AVOID / NEUTRAL** verdict.
-  Subscription %, band, lot size are structured facts; the interpretation is the LLM's. **No
-  grey-market/GMP** (against the primary-only rule).
+  an **accounting & governance flag** (🟢 Clean / 🟡 Watch / 🟠 Concern / 🔴 Red flag — a *qualitative*
+  read of the RHP since there's no filing history for the quant forensic scores: CFO-vs-PAT,
+  related-party, receivables/inventory build, contingent liabilities, auditor qualifications/CARO,
+  promoter pledge/loans, restatements) · use of proceeds · RHP risks · demand (subscription by category
+  + **retail allotment odds** ≈ 1/oversubscription + anchor) · **APPLY / AVOID / NEUTRAL** verdict.
+  Subscription %, band, lot size, allotment odds are structured facts; the interpretation is the LLM's.
+  **No grey-market/GMP** (against the primary-only rule).
 
 ---
 

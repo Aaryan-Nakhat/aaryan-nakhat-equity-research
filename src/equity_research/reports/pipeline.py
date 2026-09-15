@@ -484,6 +484,15 @@ def _ipo_facts(symbol: str, meta: dict | None, live: bool) -> list[str]:
             facts.append(f"Total subscription so far: {meta['subscription_x']:.2f}x")
         for row in ipo.subscription_detail(symbol):
             facts.append(f"  {row['category']}: {row['times']:.2f}x")
+            # retail allotment odds — a retail applicant's rough chance of the minimum lot ≈ 1/oversubscription
+            cat = (row.get("category") or "").lower()
+            times = row.get("times")
+            if times and any(k in cat for k in ("retail", "rii", "individual")):
+                if times <= 1:
+                    facts.append("  Retail allotment odds: ~full allotment likely (not oversubscribed)")
+                else:
+                    facts.append(f"  Retail allotment odds: ~{max(1, round(100 / times))} in 100 "
+                                 f"(retail oversubscribed {times:.1f}x)")
     return facts
 
 

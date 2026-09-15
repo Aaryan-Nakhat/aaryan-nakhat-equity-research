@@ -368,25 +368,38 @@ company's equity works) and then judge: is the issue cheap, fair, or richly pric
 **listed peers** in the ad and vs. its own growth? Cite the peer multiples. A high multiple can \
 be fine for a fast, clean compounder and dangerous for a slow or cyclical one — say which this is.
 
-### 5. Use of proceeds (objects of the issue)
+### 5. Accounting & governance flag
+A quick **read of the accounting quality & governance** from the RHP — since a pre-listing company \
+has no long filing history to run the usual forensic scores on, judge it *qualitatively* from the \
+prospectus. Open with a **flag chip on its own line** — one of **🟢 Clean** / **🟡 Watch** / \
+**🟠 Concern** / **🔴 Red flag** — then 2-4 bullets citing the specifics that drove it: **CFO-vs-PAT** \
+conversion (is profit cash-backed?), **related-party transactions**, **receivables/inventory build** \
+vs revenue, **contingent liabilities / material litigation**, **auditor qualifications / CARO / \
+emphasis-of-matter**, **promoter pledge or promoter loans**, and any large **restatement adjustments**. \
+If nothing material stands out, say so plainly (🟢 Clean) — don't manufacture concerns. Ground each in \
+the RHP ("RHP p.X"); never invent a figure.
+
+### 6. Use of proceeds (objects of the issue)
 What the fresh-issue money will actually fund — debt repayment / capex / acquisition / \
 general corporate purposes — and whether it's value-accretive. (Concrete growth/deleveraging \
 use > vague "general corporate purposes", which is a mild negative.)
 
-### 6. Key risks (from the RHP risk factors)
+### 7. Key risks (from the RHP risk factors)
 The 4-6 most material, investor-relevant risks — not boilerplate. Concentration, litigation/ \
 contingent liabilities, regulatory dependence, promoter/governance, working-capital stress. \
 Say why each one matters for *this* business.
 
-### 7. Demand signals
-**Subscription** so far (overall and QIB / NII / Retail, from the verified facts) and the \
+### 8. Demand signals
+**Subscription** so far (overall and QIB / NII / Retail, from the verified facts), the **retail \
+allotment odds** if supplied, and the \
 **anchor book** (who anchored and how much, from the anchor document). Explain the read: strong \
 QIB demand and marquee institutional anchors (long-only funds, insurers, sovereign funds) are \
 confidence signals; a weak QIB book, or a book stuffed with short-term money, is a warning.
 
-### 8. Verdict — APPLY / AVOID / NEUTRAL
+### 9. Verdict — APPLY / AVOID / NEUTRAL
 A clear call with the 3-4 reasons that drive it (quality × valuation × issue structure × \
-demand), plus who it suits (listing-gain punt vs. long-term hold) and the main risk to the call.
+accounting flag × demand), plus who it suits (listing-gain punt vs. long-term hold) and the main \
+risk to the call.
 
 **Explain as you go:** for every metric you cite (P/E, RoNW, margins, subscription multiples), \
 briefly say *what it measures* and what a *healthy/normal* value looks like for a business like \

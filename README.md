@@ -188,9 +188,10 @@ source → formula → model).
   monthly **holdings** are covered (PPFAS / HDFC / Nippon): concentration · **watchlist overlap** ·
   month-over-month churn.
 - **IPOs — `ipo: ongoing / upcoming / <name>`** — a pre-listing note: business, **fresh-issue vs OFS** and
-  what it signals, restated financials, **valuation at the band vs listed peers**, use of proceeds, RHP
-  risks, demand (subscription + anchor book), and an **APPLY / AVOID / NEUTRAL** verdict. Primary NSE docs
-  only — no grey-market / GMP.
+  what it signals, restated financials, **valuation at the band vs listed peers**, an **accounting &
+  governance flag** (🟢 Clean / 🟡 Watch / 🟠 Concern / 🔴 Red flag, read from the RHP), use of proceeds,
+  RHP risks, demand (subscription by category + **retail allotment odds** + anchor book), and an
+  **APPLY / AVOID / NEUTRAL** verdict. Primary NSE docs only — no grey-market / GMP.
 
 ### 📤 Reports & delivery
 
