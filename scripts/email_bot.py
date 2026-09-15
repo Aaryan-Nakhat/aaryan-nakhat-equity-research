@@ -614,9 +614,8 @@ def _alert_query(subject: str) -> tuple[str, str] | None:
 
 
 def _calls_query(subject: str) -> bool:
-    """True for a 🎙️ Concalls request ('calls', 'call radar', 'concall', 'concalls',
-    'earnings calls')."""
-    return bool(re.match(r"^\s*(?:re:\s*)?(?:calls?|call\s*radar|concalls?|earnings\s*calls?)"
+    """True for a 🎙️ Concalls request ('concalls', 'concall', 'calls', 'earnings calls')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:concalls?|calls?|earnings\s*calls?)"
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
@@ -2771,7 +2770,7 @@ def main() -> None:
                 maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
                 maybe_pickaxe()      # heartbeat: monthly surging-demand → indirect beneficiaries (1st Sat ≥18:00)
                 maybe_concall_ingest()   # heartbeat: incremental earnings-call scoring (background, ~hourly)
-                maybe_call_radar()   # heartbeat: weekly earnings-call radar push (Sat ≥18:00)
+                maybe_call_radar()   # heartbeat: weekly 🎙️ Concalls push (Sat ≥18:00)
                 maybe_results_ingest()   # heartbeat: refresh just-reported names' financials (background, ~hourly)
                 maybe_results()      # heartbeat: weekly results-radar push (Sat ≥18:00)
                 maybe_alert_scan()   # heartbeat: keyword filing-alert sweep (background, ~20min, 8-23h IST)

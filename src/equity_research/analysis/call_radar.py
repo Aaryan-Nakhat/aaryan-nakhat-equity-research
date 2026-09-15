@@ -1,4 +1,5 @@
-"""🎙️ Call Radar — market-wide earnings-call discovery.
+"""🎙️ Concalls — market-wide earnings-call discovery (the `concalls` command; this module is
+named ``call_radar`` internally).
 
 Surfaces the notable recent earnings calls across the market: it reads management's forward
 **Management Tone from the words** (an LLM read of the transcript) and cross-checks it against the

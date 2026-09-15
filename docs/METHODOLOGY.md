@@ -54,7 +54,7 @@ Scraping uses `scrapling`, in two tiers:
    balance sheet / cash flow are present FY2023+ (older result XBRLs omit them).
 
 ### A.2 Storage — DuckDB tables (`common/db.py`)
-Single local DuckDB file. Fifteen tables:
+Single local DuckDB file. Seventeen tables:
 
 | Table | Holds | Fed by |
 |---|---|---|
@@ -71,7 +71,9 @@ Single local DuckDB file. Fifteen tables:
 | `mf_holdings` | per-scheme monthly portfolio | `ingest_mf_holdings` |
 | `mf_amc` | AMC name → AMFI code | `build_mf_amc_map` |
 | `watchlist` | tracked symbols + `list_type` (holding/tracking) | `watchlist.py` |
-| `alert_state` | per-symbol dedup ledger + pending menus | `alerts.save_state` |
+| `alert_state` | per-symbol dedup ledger + pending menus + scan watermarks | `alerts.save_state` |
+| `concall_signals` | per-call scores (Management Tone · Execution · Say-Do Gap · signal) | `call_radar.score_one` (🎙️ Concalls) |
+| `alert_keywords` | user's standing filing-alert phrases | `keyword_alerts` (🔔 Announcements) |
 
 ### A.3 The model layer
 - **LLM: the configured LLM** (service-account auth, streaming). It touches only the

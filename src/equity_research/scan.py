@@ -503,7 +503,7 @@ def hotlist_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None
 
 
 def call_radar_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly 🎙️ Call Radar push hasn't fired this week."""
+    """True once per ISO week — the weekly 🎙️ Concalls push hasn't fired this week."""
     own = con is None
     con = con or connect()
     try:

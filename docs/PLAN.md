@@ -14,7 +14,7 @@ reply-a-number → deep report; details in [`REPORTS.md`](REPORTS.md) / [`METHOD
   `screen: institutions` (promoter/insider buying), and **`hotlist`** (multi-signal confluence).
 - **Fundamental screens** — `screen: margins` (Margin Momentum), `screen: deleverage` (Debt Payers),
   `screen: quality` (Compounders).
-- **🎙️ Concalls** (`concalls`) — market-wide earnings-call radar: Management Tone (words) vs Execution
+- **🎙️ Concalls** (`concalls`) — market-wide earnings-call scan: Management Tone (words) vs Execution
   (numbers) → Say-Do Gap; incremental background scoring → `concall_signals`; weekly push.
 - **📈 Results Radar** (`results`) — just-reported companies ranked by growth + acceleration; background
   financials refresh, computed on-the-fly; weekly push.

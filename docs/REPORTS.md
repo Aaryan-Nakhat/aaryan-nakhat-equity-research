@@ -472,7 +472,7 @@ PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screene
   *not* the open web), and its Section-1 snapshot is injected from the deterministic
   numbers (`_snapshot_facts`: mcap/CMP/TTM revenue & margins/ROE/ROCE/P·E/P·B/promoter
   holding) so they're exact. Delivered as **email body + a text PDF**. The menu is
-  armed via the same numbered-reply state (`_set_followup` → `GT:<SYM>` items), and
+  armed via the same numbered-reply state (`_set_followup` → `UD:<SYM>` items), and
   is **extensible** — add a row + a prefix branch for the next cut (bear case, etc.).
 - **Phone-readable HTML**: the email body and the PDF share one renderer
   (`pdf.render_html`), which was print-tuned and therefore unreadable on a phone

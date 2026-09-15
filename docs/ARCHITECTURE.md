@@ -241,7 +241,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
     Google Trends is best-effort — when throttled, the LLM/Search Analyst+Mapper carry the pipeline.)
 ```
 
-## Flow I — 🎙️ Concalls earnings-call radar (background ingest + weekly Sat push + on-demand `concalls`)
+## Flow I — 🎙️ Concalls: market-wide earnings-call scan (background ingest + weekly Sat push + on-demand `concalls`)
 
 ```
 INGEST  gate: ~hourly, background (scan.concall_ingest_due) — email_bot.maybe_concall_ingest (off-heartbeat
@@ -292,7 +292,7 @@ SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:0
 |---|---|---|
 | **Scrape** | pull primary data (anti-bot handled) + Tailwind signals + Pickaxe Google-Trends demand signals + AmbitionBox employer reviews | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,nseix,markets_global,fbil,mcx,amfi,mf_holdings,ipo,social,fedregister,trends,ambitionbox}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
-| **Store** | 15 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`, `concall_signals`, `alert_keywords`) | `common/db.py` → `data/processed/equity.duckdb` |
+| **Store** | 17 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`, `concall_signals`, `alert_keywords`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, **volume-breakout / market-beaters / institutional-buying discovery + 🔥 multi-signal Hotlist**, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🎙️ Concalls earnings-call tone-vs-execution**, **📈 Results Radar just-reported strength**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,technical_screen,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,fundamental_screens,momentum,leaders,accumulation,hotlist,investors,tailwind,pickaxe,call_radar,results_radar,keyword_alerts,employer_sentiment}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
