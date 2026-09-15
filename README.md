@@ -7,7 +7,7 @@
 ![Data](https://img.shields.io/badge/data-primary%20%2F%20official%20only-2E7D32)
 ![LLM](https://img.shields.io/badge/LLM-provider--agnostic%20(BYO)-6E56CF)
 ![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
-![Delivery](https://img.shields.io/badge/delivery-email%20%2F%20Telegram%20bot-0088CC)
+![Delivery](https://img.shields.io/badge/delivery-email%20bot-0088CC)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-yes-informational)
 
 Pulls **primary, official, government-backed data only** (exchanges, SEBI, RBI, MOSPI, company
@@ -96,7 +96,7 @@ the week's most notable earnings calls) · 📈 **Results Radar** (Sat — the s
 
 ## How it works
 
-Primary data → DuckDB → deterministic analysis + signals → an LLM writes the thesis → email/Telegram.
+Primary data → DuckDB → deterministic analysis + signals → an LLM writes the thesis → email.
 **Full detail per area in [`docs/`](docs/)** ([`METHODOLOGY.md`](docs/METHODOLOGY.md) traces every metric
 source → formula → model).
 
@@ -233,7 +233,7 @@ source → formula → model).
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on
   live data), the **weekly** screener-movements / sector-rotation / **💨 Tailwind** (Sat), the **monthly**
   **⛏️ Pickaxe** (1st Sat) + a **mid-week urgent** Tailwind break-in when a big shock lands.
-- **Delivery** — email and/or Telegram via the `CHANNELS` flag; **`help`** returns the whole command menu;
+- **Delivery** — email; **`help`** returns the whole command menu;
   the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
   mail untouched).
 - **LLM** (your configured provider) is used **only** for synthesis / filing-reading / name-resolution — every
@@ -242,16 +242,15 @@ source → formula → model).
 ## Status
 
 Working end-to-end (NSE/BSE/MCX/FBIL → DuckDB → fundamentals/forensics/technicals/
-valuation + signals → LLM report → email **or** Telegram bot, always-on). On-demand
-reports + a pre-market (08:30), midday (12:30) and full (18:00) watchlist digest; an email channel mirrors the
-Telegram one for when Telegram is ISP-blocked. Docs:
+valuation + signals → LLM report → email bot, always-on). On-demand
+reports + a pre-market (08:30), midday (12:30) and full (18:00) watchlist digest, all over email. Docs:
 
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) / [`docs/SCRAPING.md`](docs/SCRAPING.md) — sources + scrapability findings.
 - [`docs/FUNDAMENTALS.md`](docs/FUNDAMENTALS.md) — financials data path, ratios, forensic scores, valuation.
-- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — indicators. [`docs/REPORTS.md`](docs/REPORTS.md) — LLM synthesis, Telegram bot, PDF, email.
+- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — indicators. [`docs/REPORTS.md`](docs/REPORTS.md) — LLM synthesis, PDF, email.
 - [`docs/ALERTS.md`](docs/ALERTS.md) — watchlist alerts + the full push schedule.
 
 ## Layout
@@ -274,7 +273,6 @@ tests/         tests
 - `scrapling` (scraping, incl. Camoufox browser tier for NSE's anti-bot `/api/`)
 - DuckDB (analytics) · pandas
 - the LLM (configured via .env — any provider) — symbol resolution + report synthesis
-- `python-telegram-bot` (delivery) · `telegramify-markdown` (formatting) ·
   Playwright Chromium + `markdown` (HTML → PDF) · SMTP email
 
 ## Setup
@@ -289,7 +287,7 @@ Configure `.env` (all secrets are read from the environment; `.env` is gitignore
 [`.env.example`](.env.example) for every variable):
 - **LLM** — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
   (or `LLM_BASE_URL` for a custom endpoint). Runs on any provider via [LiteLLM](https://docs.litellm.ai).
-- **Delivery** — `CHANNELS=email` (Gmail SMTP/IMAP app password) and/or `telegram`
+- **Delivery** — Gmail SMTP/IMAP (app password)
   (a BotFather token + your allowed user IDs).
 
 Bootstrap the local data store, then run a report or the bot:

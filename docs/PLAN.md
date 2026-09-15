@@ -130,10 +130,10 @@ data already scrapable via `nse_archives`/`nse_api`); ADX.
 `brief`/`deep_brief` assemble all quant signals → `synthesize.synthesize_thesis`
 (**the configured LLM**, service-account auth, streaming, reads
 an optional concall/annual-report PDF) → delivered via:
-- **Telegram bot** (`scripts/telegram_bot.py`, always-on Windows scheduled task):
-  name → `resolve` (LLM+Search) → deep report, **formatted inline (MarkdownV2)
-  + styled PDF** (`reports/pdf.py`). Live-validated on RELIANCE.
-- **CLI** (`research_report.py`) and **email** (`reports/email.py`, SMTP).
+- **Email bot** (`scripts/email_bot.py`, always-on Windows scheduled task): you email a name →
+  `resolve` (LLM+Search) → deep report, **inline HTML + styled PDF** (`reports/pdf.py`), replied
+  in-thread. Ambiguous names get a numbered "which one?" reply.
+- **CLI** (`research_report.py`) for local runs.
 
 (The provider is configurable in `.env` — the whole synthesis layer is provider-agnostic and talks
 only to `common/llm.py`, so any LLM works.)
@@ -144,7 +144,7 @@ only to `common/llm.py`, so any LLM works.)
 **Built** (`analysis/alerts.py`, `scan.py`, `watchlist.py`; see [`ALERTS.md`](ALERTS.md)):
 a **self-healing daily scan** (fires once per trading day at the first heartbeat
 ≥18:00 IST; weekend/holiday-skipped) over the watchlist, delivered as a
-**company-name digest** (email or Telegram, lines-only, **no PDFs**), with a
+**company-name digest** (email, lines-only, **no PDFs**), with a
 **market-context header** (Nifty 50 / Nifty 500 day move):
 - **📅 Upcoming** — board-meeting/results dates, ex-dividend/split/bonus, AGM/fund-raising.
 - **Movers** — per-stock close · day %chg · delivery% · 52-week position · **P/E vs own 5-yr median** (always present).
@@ -153,11 +153,11 @@ a **self-healing daily scan** (fires once per trading day at the first heartbeat
   board meeting · AGM · credit rating · order win · pledge …), and **forensic/fundamental
   flips** (Altman/Beneish/Piotroski/CFO-PAT/pledge) — with `alert_state` dedup +
   first-sight seeding, and **inline LLM analysis** of notable filing PDFs (capped 5).
-Commands `/watch`, `/unwatch`, `/watchlist`, `/scan`. Watchlist populated from `.env` (WATCHLIST_HOLDINGS / WATCHLIST_TRACKING).
+Watchlist populated from `.env` (`WATCHLIST_HOLDINGS` / `WATCHLIST_TRACKING`, via `populate_watchlist.py`).
 
 ### Phase 6 — depth, quant, email channel & report enrichment — ✅ done
-- **Email channel** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP), via the `CHANNELS`
-  flag — runs while Telegram is ISP-blocked; same brains, full report in body + PDF.
+- **Email bot** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP) — the always-on delivery
+  channel; full report in the body + PDF, replied in-thread.
 - **Quant suite** (`analysis/quant.py`): Monte-Carlo DCF (margin of safety, P(undervalued)),
   reverse DCF, scenario DCF, Benford's-law, sector z-scores.
 - **Fundamental charts** in the PDF (`reports/charts.py`); **Sloan accruals** + **promoter
@@ -460,7 +460,7 @@ The quant layer (ratios, scores, technicals) is deterministic Python. The LLM
 - Digesting 200-page annual reports & concall transcripts.
 - YoY diffing risk factors / accounting policy / RPTs.
 - Synthesising everything into a readable thesis with a verdict and *reasons*,
-  delivered via Telegram (formatted + PDF) or email.
+  delivered by email (formatted + PDF).
 
 ## 5. Known risks / open questions
 

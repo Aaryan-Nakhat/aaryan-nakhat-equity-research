@@ -2,7 +2,7 @@
 
 Refreshes the latest EOD, runs every per-symbol detector (technical + fundamental
 from the DB, announcements via one batched browser session), and returns the
-fired alerts plus a market FII/DII note. The Telegram bot pushes the results and
+fired alerts plus a market FII/DII note. The email bot pushes the results and
 generates a deep report for any 'results filed' alert.
 """
 
@@ -1224,7 +1224,7 @@ def _level_alert_section(alerts_list: list[dict], names: dict) -> str | None:
 def format_digest(date_str: str, sr: ScanResult) -> str:
     """Build the digest markdown — Upcoming events, a per-stock Movers snapshot,
     and Events (with any inline filing analysis), all by company name (ticker in
-    parens). Shared by the email and Telegram channels."""
+    parens). Rendered for the email digest."""
     results, movers, upcoming = sr.results, sr.movers, sr.upcoming
     names = {m["symbol"]: m["company"] for m in movers}
     parts = [f"# Watchlist — {date_str}"]

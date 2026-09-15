@@ -1,7 +1,7 @@
 # Watchlist alerts (Phase 5)
 
 Daily *push*: a scan walks the watchlist, compares today's data against stored
-`alert_state`, and pushes an alert (Telegram **or email**, per the `CHANNELS`
+`alert_state`, and pushes an alert by email
 flag) only on a genuine change. Runs inside the always-on bot via a **self-healing
 gate** — a repeating job fires the scan once per trading day the first time the
 bot is up at/after **18:00 IST** (robust to the laptop sleeping through the exact
@@ -36,7 +36,7 @@ independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](R
 | Two buckets: **Your Holdings** (owned) vs **Your Tracking List** (watching) — `watchlist.list_type` | `watchlist.py` |
 | Per-symbol detectors (incl. promoter-pledge) | `analysis/alerts.py` |
 | Orchestrator (refresh EOD → announcements + pledge → detect) | `scan.py` |
-| Bot commands + self-healing schedule + push | `scripts/telegram_bot.py`, `scripts/email_bot.py` |
+| Bot commands + self-healing schedule + push | `scripts/email_bot.py` |
 | Bulk-add the initial list | `scripts/populate_watchlist.py` |
 
 **Holdings vs Tracking.** Every watchlist row carries a `list_type` — **`holding`** (a stock the user
@@ -114,7 +114,7 @@ emoji-tagged bullet per item) — then three parts. The header (all primary-sour
   doesn't flood. Fires only when a watchlist name actually files — most days, nothing.
 
 Built by `scan.format_digest`; all market-wide feeds come from `nse_api.market_feeds`
-in one browser session. Shared by the email + Telegram channels.
+in one browser session. Shared by the email digest.
 
 ## The midday digest (same-day, 12:30 IST)
 
@@ -216,7 +216,7 @@ instead of being silently consumed. (Seeding callers — `/watch`, `populate_wat
   watchlist (batched in-page XHR per symbol); bulk/block deals are one more single
   market-wide fetch — these browser calls are the slow part of the scan.
 - The **email digest is lines-only (no PDFs)** → sends in seconds even on heavy
-  results days; grouped by symbol. Telegram still attaches PDFs (parked channel).
+  results days; grouped by symbol.
 - The bot only runs while the laptop is on; a missed 18:00 slot is covered by the
   self-healing heartbeat (fires once the bot is next up after 18:00). True 24/7
   needs a small server. If the laptop was **off the whole day**, that day can't be

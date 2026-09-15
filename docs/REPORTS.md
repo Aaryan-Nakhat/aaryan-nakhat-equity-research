@@ -342,56 +342,24 @@ Every headline metric is annotated so the report stands on its own:
 - **Alert bodies** carry the same plain-English reading (what the number means +
   the threshold that matters).
 
-## Telegram bot (interactive, on-demand)
+## The email bot (`scripts/email_bot.py`)
 
-`scripts/telegram_bot.py` — message a company name, get a deep report back.
+The always-on delivery channel: you email a company name (or a command) from an allowlisted address
+and get a deep report back in-thread. One Gmail account both **reads requests** (IMAP IDLE) and
+**sends reports** (SMTP).
 
-```
-You: "Infosys"  ──►  resolve (LLM + web search) ──►  one match? run it
-                                                          └─► several? buttons → you pick
-   ──►  ensure-ingested (on demand) ──►  deep brief ──►  LLM forensic ──►  reply (formatted inline + PDF)
-```
+- **Resolver** (`reports/resolve.py`): LLM + web-search grounding maps free text → exact NSE
+  symbol(s). Returns **one** when certain, **up to 5 ranked** otherwise (handles small-cap /
+  newly-listed names, not just a fixed universe).
+- **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` — ingests financials on
+  demand for any NSE symbol, builds the brief, runs the LLM.
+- **Reply formatting**: the analysis is sent inline as **HTML** (bold, bullets, tables) and the full
+  report is attached as a **styled PDF** (`reports/pdf.py`: markdown → HTML → landscape-A4 via the
+  installed Playwright Chromium; falls back to a `.md` file on failure).
+- **Security**: only `EMAIL_ALLOWED_SENDERS` may request reports; SMTP/IMAP creds live in `.env`.
+  Add `consolidated` to a subject for the group view.
 
-- **Resolver** (`reports/resolve.py`): LLM + web-search grounding maps free
-  text → exact NSE symbol(s). Returns **one** when certain, **up to 5 ranked**
-  otherwise (handles small-cap / newly-listed names, not just a fixed universe).
-- **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` —
-  ingests financials on demand for any NSE symbol, builds the brief, runs the LLM.
-- **Reply formatting**: the analysis is sent inline as **Telegram MarkdownV2**
-  (via `telegramify-markdown` — bold, bullets, emojis, tables as aligned monospace
-  blocks; plain-text fallback if a chunk won't parse), and the full report is
-  attached as a **styled PDF** (`reports/pdf.py`: markdown → HTML → landscape-A4
-  via the installed Playwright Chromium; falls back to a `.md` file on failure).
-- **Security**: only `TELEGRAM_ALLOWED_USERS` (numeric IDs) are served; the bot
-  token lives in `.env`. Add `consolidated` to a message for the group view.
-
-Setup: create a bot via **@BotFather** (`/newbot`) → token; get your ID from
-**@userinfobot**; put both in `.env`; then `uv run python scripts/telegram_bot.py`
-(keep it running, or schedule it).
-
-### Always-on (Windows Task Scheduler)
-
-`scripts/run_bot.ps1` loads `.env` and runs the bot in an auto-restart loop. It's
-registered as scheduled task **`EquityResearchTelegramBot`** (trigger: at logon;
-restarts on failure). The bot logs to `data/processed/telegram_bot.log`; launcher
-restart markers go to `data/processed/bot_launcher.log`.
-
-```powershell
-Start-ScheduledTask  -TaskName EquityResearchTelegramBot   # start now
-Stop-ScheduledTask   -TaskName EquityResearchTelegramBot   # stop
-Get-ScheduledTask    -TaskName EquityResearchTelegramBot   # state
-Get-Content data\processed\telegram_bot.log -Tail 20 -Wait # live log
-```
-
-Re-register from scratch: see the `Register-ScheduledTask` call in the project
-history, or just run `scripts/run_bot.ps1` manually in a terminal.
-
-## Email channel (`scripts/email_bot.py`) — Telegram-blocked fallback
-
-When Telegram is unreachable (some Indian ISPs IP-block `api.telegram.org`), the
-**email channel** delivers the exact same brains over email instead. Selected by
-the **`CHANNELS`** env flag (`email` | `telegram` | `telegram,email`); the
-Telegram code stays intact and revives with `CHANNELS=telegram`.
+Full flow:
 
 ```
 PULL  you email a stock name (Subject) from an allowlisted address
@@ -481,14 +449,14 @@ PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screene
   table cells and fenced blocks and lets a genuinely wide table scroll inside its own
   `.tablewrap` box. `only screen` keeps all of it out of the **PDF**, which still prints
   A4-landscape with `nowrap` financial tables.
-- **Config**: `CHANNELS`, `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
+- **Config**: `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
   `REPORT_FROM` / `REPORT_TO`, and `EMAIL_ALLOWED_SENDERS`. Send requests *from*
   a different address you own (e.g. work) *to* the bot's Gmail, so requests never
   blur with notes-to-self.
 
-Always-on: `scripts/run_email_bot.ps1` (auto-restart loop, mirrors the Telegram
-launcher) → scheduled task **`EquityResearchEmailBot`**. Bot logs to
-`data/processed/email_bot.log`; launcher markers to `email_launcher.log`.
+Always-on: `scripts/run_email_bot.ps1` (auto-restart loop) → scheduled task
+**`EquityResearchEmailBot`**. Bot logs to `data/processed/email_bot.log`;
+launcher markers to `email_launcher.log`.
 
 ## Fund report (`reports/fund_brief.py`) — mutual funds
 

@@ -1,8 +1,7 @@
-"""Email channel for the equity-research workbench (Phase 5b).
+"""Email bot for the equity-research workbench — the always-on delivery channel.
 
-A drop-in alternative to the Telegram bot for when Telegram is blocked. Same
-brains (resolve -> deep report -> PDF, and the self-healing watchlist scan),
-delivered over email instead:
+resolve -> deep report -> PDF, plus the self-healing watchlist scan and all the
+discovery engines, delivered over email:
 
   PULL  you email a stock name (Subject) from an allowlisted address ->
         IMAP IDLE wakes the bot -> it resolves, builds the deep report, and
@@ -11,8 +10,7 @@ delivered over email instead:
   PUSH  once per trading day at/after 18:00 IST it runs the watchlist scan and
         emails a digest (with deep-report PDFs for any 'results filed' event).
 
-Gated by the CHANNELS env flag (must contain 'email'); Telegram code is left
-fully intact and revives by setting CHANNELS=telegram. Run via run_email_bot.ps1.
+Run via run_email_bot.ps1.
 """
 
 from __future__ import annotations
@@ -2735,10 +2733,6 @@ def maybe_mail_housekeeping() -> None:
 
 # ----------------- main loop -----------------
 def main() -> None:
-    channels = os.environ.get("CHANNELS", "email").lower()
-    if "email" not in channels:
-        log.info("email channel disabled (CHANNELS=%s) — exiting", channels)
-        return
     if not ALLOWED:
         log.error("EMAIL_ALLOWED_SENDERS is empty — refusing to start (no auth allowlist)")
         sys.exit(1)

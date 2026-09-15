@@ -2,7 +2,7 @@
 
 End to end: primary NSE/BSE/MCX/FBIL data → DuckDB → deterministic fundamental / forensic /
 technical / (sector-appropriate) valuation analysis + signals → LLM writes the thesis →
-delivered by email (or Telegram) either **on demand** (you name a stock) or **pushed** as a
+delivered by email either **on demand** (you name a stock) or **pushed** as a
 **pre-market (08:30)**, **midday (12:30)** and **full (18:00)** watchlist digest plus a **weekly
 (Sat 18:00) screener-movements** digest, with PDF reports and holiday-aware scheduling. Per-area detail lives
 in [`SCRAPING.md`](SCRAPING.md),
@@ -54,8 +54,8 @@ in [`SCRAPING.md`](SCRAPING.md),
                    └───────────────────────────────┬─────────────────────────────┘
                                                    ▼
                           ┌──────────────────────────────────────────┐
-                          │  DELIVERY  (CHANNELS env: telegram | email)│
-                          │  telegram_bot.py  ·  email_bot.py (IMAP)   │
+                          │  DELIVERY  (email bot)                     │
+                          │  email_bot.py  (IMAP IDLE + SMTP)          │
                           │  always-on: run_*.ps1 + Task Scheduler     │
                           └───────────────┬───────────────┬──────────┘
                                           │               │
@@ -65,7 +65,7 @@ in [`SCRAPING.md`](SCRAPING.md),
 ## Flow A — Pull: you ask for a stock
 
 ```
-You ▶ Telegram: "Infosys"  (or "Reliance consolidated")
+You ▶ email: "Infosys"  (or "Reliance consolidated")
         │
         ▼  resolve.py  → LLM+Search → NSE symbol(s)
    one match? ──run──┐        several? ──▶ buttons ──▶ you tap one ──┐
@@ -74,7 +74,7 @@ You ▶ Telegram: "Infosys"  (or "Reliance consolidated")
               → deep_brief (full IS/BS/CF + ratios + forensic + valuation)
               → synthesize.py  → LLM forensic write-up
         │
-        ▼  bot replies:  analysis inline (MarkdownV2)  +  full report as PDF
+        ▼  bot replies in-thread:  analysis inline (HTML)  +  full report as PDF
 ```
 
 ## Flow B — Push: watchlist alerts (daily 18:00 IST)
@@ -95,7 +95,7 @@ self-healing gate: first heartbeat >=18:00 IST, once per trading day (already_sc
                  (participant_oi) · USD/INR (FBIL) · gold/silver/crude (MCX)
         │   (alert_state dedup → only new events fire; insider deduped via the table)
         ▼
-   digest (email | telegram), by company name, lines-only, NO PDFs:
+   digest (email), by company name, lines-only, NO PDFs:
         market header · 📅 Upcoming · Movers · Events (inline analysis) · 🔬 Insider trades
         └─ reply with a company name → full on-demand deep report
 ```
@@ -296,4 +296,4 @@ SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:0
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, **volume-breakout / market-beaters / institutional-buying discovery + 🔥 multi-signal Hotlist**, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🎙️ Concalls earnings-call tone-vs-execution**, **📈 Results Radar just-reported strength**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,technical_screen,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,fundamental_screens,momentum,leaders,accumulation,hotlist,investors,tailwind,pickaxe,call_radar,results_radar,keyword_alerts,employer_sentiment}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind, ~hourly background Concalls + Results ingest; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind, ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu | `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |

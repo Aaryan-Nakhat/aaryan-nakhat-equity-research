@@ -1,6 +1,6 @@
 """Reusable report pipeline: ensure data → build brief → LLM → full report.
 
-Used by both the CLI (scripts/research_report.py) and the Telegram bot. Handles
+Used by the CLI (scripts/research_report.py) and the email bot. Handles
 on-demand ingestion so any NSE-listed symbol works, not just pre-ingested ones.
 """
 
