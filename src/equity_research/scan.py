@@ -502,6 +502,60 @@ def hotlist_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None
             con.close()
 
 
+def call_radar_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True once per ISO week — the weekly 🎙️ Call Radar push hasn't fired this week."""
+    own = con is None
+    con = con or connect()
+    try:
+        return _meta(con, "last_call_radar_week") != _iso_week(datetime.now(_IST))
+    finally:
+        if own:
+            con.close()
+
+
+def mark_call_radar(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_call_radar_week", _iso_week(datetime.now(_IST)))
+    finally:
+        if own:
+            con.close()
+
+
+_CONCALL_INGEST_MIN_GAP_MIN = 60
+
+
+def concall_ingest_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True if the incremental concall-scoring pass hasn't run in the last hour — the pass is
+    LLM-heavy, so it's gated to at most ~hourly (it scores only a bounded batch of new transcripts
+    each time, draining a results-season backlog over successive runs)."""
+    own = con is None
+    con = con or connect()
+    try:
+        last = _meta(con, "last_concall_ingest")
+        if not last:
+            return True
+        try:
+            gap = (datetime.now(_IST) - datetime.fromisoformat(last)).total_seconds() / 60
+        except (ValueError, TypeError):
+            return True
+        return gap >= _CONCALL_INGEST_MIN_GAP_MIN
+    finally:
+        if own:
+            con.close()
+
+
+def mark_concall_ingest(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, "last_concall_ingest", datetime.now(_IST).isoformat())
+    finally:
+        if own:
+            con.close()
+
+
 def _year_month(dt: datetime) -> str:
     return f"{dt.year}-{dt.month:02d}"
 

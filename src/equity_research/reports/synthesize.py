@@ -1164,6 +1164,57 @@ def extract_guidance(pdfs: list[tuple[str, bytes]] | None, *, model: str = MODEL
     return d
 
 
+_TONE_BANDS = ("Very Confident", "Confident", "Balanced", "Cautious", "Defensive")
+
+_CONCALL_SIGNAL_SYS = """You are a buy-side analyst reading the transcript of an Indian-listed \
+company's earnings call. Judge **Management Tone** — the confidence of MANAGEMENT'S FORWARD-LOOKING \
+commentary about the NEXT few quarters (demand, orders, capacity, pricing, margins, guidance) — NOT \
+how the just-reported quarter went. Base it strictly on what management actually said; a specific, \
+committed outlook reads more confident than vague reassurance, and hedging / flagging pressure reads \
+more defensive.
+
+Reply with ONLY a JSON object:
+{
+  "tone": "Very Confident" | "Confident" | "Balanced" | "Cautious" | "Defensive",
+  "tone_reason": "one crisp sentence citing what drove the read",
+  "quarter": "Q1 FY27",                 // the reported quarter, if stated; else null
+  "takeaways": ["**Demand:** ...", "**Margins:** ...", "**Orders:** ..."],  // 3-5 bullets, each a
+                                        // bold-led topic label then what management said, from their words
+  "guidance": {"fy_label":"FY27","revenue_cr":5000,"ebitda_cr":1200,"ebit_margin":19.0,"pat_cr":800,"source":"this call"}
+}
+Rules: "tone" is a 5-band forward read — **Very Confident** (raising ambition, committing to specific \
+upside), **Confident** (positive, backing it with specifics), **Balanced** (steady, in line with the \
+recent run-rate), **Cautious** (hedged, flagging some pressure), **Defensive** (guarded, warning of \
+cuts / headwinds). Every takeaway must come from the transcript — no filler, no invented numbers; cite \
+figures only where management stated them. For "guidance" use null when management gave no explicit \
+forward full-year number; use the midpoint of any range. Never invent."""
+
+
+def concall_signal(pdfs: list[tuple[str, bytes]] | None, *, model: str = MODEL) -> dict | None:
+    """Read an earnings-call transcript PDF → the **Management Tone** (5-band, from the words) plus
+    takeaway bullets and any explicit guidance, as a dict. ``None`` on any failure. Best-effort,
+    forces JSON, never invents. The *Execution* read (from the numbers) is computed separately by the
+    caller — this looks only at what management said."""
+    docs = list(pdfs or [])
+    if not docs:
+        return None
+    try:
+        text = llm.generate(_CONCALL_SIGNAL_SYS, "Read the attached transcript and return the JSON.",
+                            files=docs, json=True, model_name=model)
+    except Exception:  # noqa: BLE001 — best-effort
+        return None
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(d, dict) or d.get("tone") not in _TONE_BANDS:
+        return None
+    return d
+
+
 _PREMARKET_SYS = """You are a markets-desk analyst writing the "overnight & pre-open" note for an \
 Indian equity investor, delivered before the 9:15 AM NSE open. You are given a structured brief: \
 overnight moves in US and Asian indices, the GIFT Nifty implied-open read (GIFT Nifty is the Nifty-50 \

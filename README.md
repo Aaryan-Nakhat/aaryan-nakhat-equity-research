@@ -62,6 +62,7 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 | `tailwind --latest` *(or `fresh`)* | Same, but forces a brand-new live scan instead of the 24h-cached result. |
 | `pickaxe` *(or `demand`)* | **⛏️ Pickaxe** — surging Indian demand (Google-Trends 'buy' searches + demand-surge news) → the indirect **"sell the pickaxes"** listed beneficiaries + the direct plays. Each name carries **exact price / P/E-vs-sector / support-resistance** and a **filing-grounded revenue-share now → next-FY + growth (with sources)**, plus a **Google-Trends chart** per theme in a PDF. A deep build (~10-15 min): acked instantly, lands when ready. **Cached 24h.** |
 | `pickaxe --latest` | Same, but forces a brand-new live scan instead of the 24h-cached result. |
+| `concalls` *(or `calls`)* | **🎙️ Concalls** — the most notable recent earnings calls market-wide: **Management Tone** (from the transcript) vs the quarter's **Execution** (from our numbers), ranked by how far the two diverge (upbeat talk on soft numbers = caution; quiet talk on strong numbers = under-radar). Reply a number → deep report. *(Also pushed weekly.)* |
 
 **📈 Levels · 🟢 IPOs · 💵 funds · ❓ help**
 
@@ -75,7 +76,8 @@ into that item**). Email **`help`** any time to get this same menu in your inbox
 **📬 Arrives automatically** (no command): 🌅 **pre-market** (08:30, GIFT Nifty implied open) · 🔔
 **midday** (12:30, live) · 📊 **full digest** (18:00) · 📡 **screener movements** (Sat) · 🔄 **sector
 rotation** (Sat) · 💨 **Tailwind** (Sat + a mid-week urgent break-in when a big shock lands) · ⛏️
-**Pickaxe** (monthly, 1st Sat — surging demand → indirect beneficiaries).
+**Pickaxe** (monthly, 1st Sat — surging demand → indirect beneficiaries) · 🎙️ **Concalls** (Sat —
+the week's most notable earnings calls).
 *Tip: add **consolidated** / **standalone** to a stock to force the basis; numbered menus stay live 24h.*
 
 ## How it works
@@ -166,6 +168,13 @@ source → formula → model).
   leaders · accumulation · value+forensic · small-cap capex) and ranks names by **how many engines flag
   the same stock** — confluence being a higher-conviction lead than any single screen. A heavier
   multi-engine run, so it's built once and **cached 24h**; `--latest` forces fresh.
+- **🎙️ `concalls`** — scores recent earnings calls **market-wide** and surfaces the notable ones by
+  comparing **Management Tone** (an LLM read of the transcript's forward words — *Very Confident →
+  Defensive*) against the quarter's **Execution** (computed from our own financials, not the words —
+  *Firing → Struggling*). The **say-do gap** is the edge — *Talk > Numbers* flags over-promising,
+  *Numbers > Talk* flags a quiet compounder. Transcripts are scored **incrementally in the background**
+  and persisted, so the command reads a ranked table instantly. Reply a number → deep report; also a
+  weekly Saturday digest.
 - **Mutual funds — `fund: <name>`** — a deep report for any of ~14.5k schemes: returns · risk
   (Sharpe / Sortino / drawdown) · rolling consistency · **SIP/XIRR** (₹10k/mo) · **benchmark-relative
   alpha / beta / up-down-capture / tracking-error** · category percentile · an LLM verdict. Where SEBI

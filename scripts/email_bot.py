@@ -35,12 +35,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import (accumulation, booking_risk, holdco, hotlist,  # noqa: E402
-                                      investors, leaders, momentum, policy,
+from equity_research.analysis import (accumulation, booking_risk, call_radar, holdco,  # noqa: E402
+                                      hotlist, investors, leaders, momentum, policy,
                                       screener, sector_analysis, sell_advisor, smallcap,
                                       supply_chain, technical, technical_screen)
 from equity_research import mail_cleanup  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
+from equity_research.reports import call_radar_brief  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
@@ -579,6 +580,13 @@ def _hotlist_query(subject: str) -> bool:
                          r"(?:(?:--?\s*)?(?:latest|fresh|refresh|new|now))?\s*$", subject, flags=re.I))
 
 
+def _calls_query(subject: str) -> bool:
+    """True for a 🎙️ Concalls request ('calls', 'call radar', 'concall', 'concalls',
+    'earnings calls')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:calls?|call\s*radar|concalls?|earnings\s*calls?)"
+                         r"\s*[:\-]?\s*$", subject, flags=re.I))
+
+
 def _wants_latest(subject: str) -> bool:
     """True if a Tailwind / Pickaxe / Hotlist request asks to bypass the 24h cache
     ('--latest' / 'fresh')."""
@@ -730,6 +738,13 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`hotlist`",
          "The names lighting up across **several** discovery engines at once (momentum, leaders, "
          "accumulation, value, small-cap) — highest-conviction leads first. Reply a number → deep report."],
+    ]),
+    ("🎙️ Concalls — notable earnings calls", "Also pushed weekly (Sat ≥18:00).", [
+        ["`concalls` (or `calls`)",
+         "The most notable recent earnings calls market-wide: **Management Tone** (from the transcript) "
+         "vs the quarter's **Execution** (from our numbers) — ranked by how far the two diverge (upbeat "
+         "talk on soft numbers = caution; quiet talk on strong numbers = under-radar). "
+         "Reply a number → deep report."],
     ]),
     ("🧭 Sector analysis", "Top-down, one sectoral index at a time.", [
         ["`sector: <name>` e.g. `sector: defence`, `sector: pharma`",
@@ -1434,6 +1449,28 @@ def _send_hotlist(req: EmailRequest) -> None:
     log.info("sent Hotlist (%d names, cache=%s) to %s", len(rep["picks"]), from_cache, req.sender)
 
 
+def _send_call_radar(req: EmailRequest) -> None:
+    """🎙️ Concalls — the most notable recent earnings calls (forward tone vs delivered numbers),
+    read from the pre-scored `concall_signals` table (no LLM at request time). Reply a number →
+    that name's deep report."""
+    log.info("running Concalls (req from %s)", req.sender)
+    con = connect()
+    try:
+        rep = call_radar_brief.build_call_radar(con)
+    finally:
+        con.close()
+    if not rep or not rep.get("picks"):
+        _reply_text(req, "🎙️ No earnings calls have been scored in the recent window yet — the radar "
+                         "fills in as companies file transcripts (heaviest during results season). "
+                         "Try again in a bit.")
+        return
+    _set_pending(req, "calls", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+    emailer.send_report(_re_subject(req.subject), rep["markdown"], to=req.sender,
+                        html=emailer.body_html(rep["markdown"], "Concalls"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent Concalls (%d calls) to %s", len(rep["picks"]), req.sender)
+
+
 def _send_policy_screen(req: EmailRequest) -> None:
     """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
     sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
@@ -1932,6 +1969,11 @@ def handle_request(req: EmailRequest) -> None:
         _send_hotlist(req)
         return
 
+    # 1e-non) 🎙️ Concalls — notable earnings calls (tone vs delivery) ('calls', 'concall')
+    if _calls_query(req.subject):
+        _send_call_radar(req)
+        return
+
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
     lq = _levels_query(req.subject)
     if lq:
@@ -2251,6 +2293,71 @@ def maybe_pickaxe() -> None:
         name="pickaxe-monthly", daemon=True).start()
 
 
+_concall_lock = threading.Lock()
+
+
+def _concall_ingest_worker() -> None:
+    """Background pass: score a bounded batch of newly-filed transcripts into `concall_signals`.
+    LLM-heavy (reads a PDF per call), so it runs off the heartbeat thread and only a bounded batch
+    per pass — a results-season backlog drains over successive hourly runs. Holds `_concall_lock`
+    so passes never overlap."""
+    if not _concall_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        n = call_radar.ingest_new(con, max_new=8)
+        scan.mark_concall_ingest(con)
+        if n:
+            log.info("Concalls: scored %d new transcript(s) this pass", n)
+    except Exception:  # noqa: BLE001 — never let the ingest crash the bot
+        log.exception("Concalls ingest pass failed")
+    finally:
+        con.close()
+        _concall_lock.release()
+
+
+def maybe_concall_ingest() -> None:
+    """Heartbeat hook: kick off the incremental concall-scoring pass at most ~hourly, in a
+    background thread so it never blocks the IMAP loop. On-demand `calls` reads whatever's scored."""
+    if _concall_lock.locked() or not scan.concall_ingest_due():
+        return
+    threading.Thread(target=_concall_ingest_worker, name="concall-ingest", daemon=True).start()
+
+
+def maybe_call_radar() -> None:
+    """Fire the 🎙️ Concalls push once per ISO week (Saturday ≥18:00 IST): the week's most notable
+    earnings calls (forward tone vs delivered numbers). Reads the pre-scored table, so it's cheap.
+    On-demand `calls` runs any time."""
+    now = datetime.now(IST)
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:
+        return
+    if not scan.call_radar_due():
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send Concalls")
+        return
+    con = connect()
+    try:
+        rep = call_radar_brief.build_call_radar(con)
+    except Exception:  # noqa: BLE001
+        log.exception("Concalls build failed")                # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    if not rep or not rep.get("picks"):
+        scan.mark_call_radar()                                  # nothing scored — don't retry all evening
+        log.info("weekly Concalls: nothing scored this week — no email")
+        return
+    today = datetime.now(IST).date().isoformat()
+    note = ("\n\n_(Weekly digest — email **`calls`** any time for the interactive radar where you can "
+            "reply a number for a name's deep report.)_")
+    emailer.send_report(f"🎙️ Concalls — {today}", rep["markdown"] + note, to=to,
+                        html=emailer.body_html(rep["markdown"] + note, "Concalls"))
+    scan.mark_call_radar()                                       # advance week-marker ONLY after send
+    log.info("weekly Concalls push sent (%d calls) to %s", len(rep["picks"]), to)
+
+
 _last_mail_sweep: datetime | None = None
 
 
@@ -2315,6 +2422,8 @@ def main() -> None:
                 maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
                 maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
                 maybe_pickaxe()      # heartbeat: monthly surging-demand → indirect beneficiaries (1st Sat ≥18:00)
+                maybe_concall_ingest()   # heartbeat: incremental earnings-call scoring (background, ~hourly)
+                maybe_call_radar()   # heartbeat: weekly earnings-call radar push (Sat ≥18:00)
                 maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired

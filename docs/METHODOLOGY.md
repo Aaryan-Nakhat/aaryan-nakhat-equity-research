@@ -288,6 +288,19 @@ with zero).
   timeline-tagged, conviction-rated catalysts (₹cr & % impact), each cited to a filing. Numbers it's
   given (mcap, TTM revenue) are ours; the ₹-impact estimates are the LLM's, explicitly labelled.
 
+### 🎙️ Concalls (`concalls`) — 🤖 LLM (words) + deterministic (numbers)
+- **Management Tone** — `synthesize.concall_signal` reads the earnings-call **transcript** and returns
+  a 5-band read of management's *forward-looking* confidence (`Very Confident`/`Confident`/`Balanced`/
+  `Cautious`/`Defensive`) + takeaway bullets + guidance. Words only.
+- **Execution** — `call_radar._execution_band` is **computed from `financials`** (latest quarter YoY rev
+  & PAT growth + net-margin trend vs the company's own run-rate → `Firing`/`Delivering`/`Holding`/
+  `Slipping`/`Struggling`). Never the LLM — it's the objective cross-check on the tone.
+- **Say-Do Gap + Signal (0–100)** — the divergence of tone vs execution (`Talk > Numbers` /
+  `Numbers > Talk` / `Aligned`); the score weights divergence most, so the widest gaps rank first.
+- **Incremental & persisted** — only newly-filed transcripts (market-wide sweep, symbols with financials)
+  are scored, a bounded batch per ~hourly background pass, into `concall_signals`; the command/weekly push
+  read that table (no LLM at request time). An idea generator, cited to the transcript — never a call.
+
 ---
 
 ## Part C — IPO note (`scrapers/ipo.py`, `pipeline.generate_ipo_report`, `synthesize.ipo_analysis`)

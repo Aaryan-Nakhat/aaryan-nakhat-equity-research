@@ -221,15 +221,20 @@ def market_feeds(horizon_days: int = 35) -> dict[str, Any]:
     }
 
 
-def corporate_announcements(index: str = "equities", symbol: str | None = None) -> Any:
+def corporate_announcements(index: str = "equities", symbol: str | None = None,
+                            from_date: str | None = None, to_date: str | None = None) -> Any:
     """Corporate announcements / filings feed (results, transcripts, PPTs).
 
-    With ``symbol`` set, returns that company's recent announcements (the
+    With ``symbol`` set, returns that company's recent announcements (the bare
     market-wide feed only returns the latest ~20, so per-symbol is needed for
-    watchlist coverage)."""
+    watchlist coverage). With ``from_date``/``to_date`` (``dd-mm-YYYY``) set, returns
+    the whole market's announcements over that window in ONE call — the cheap way to
+    sweep recent filings market-wide (each row carries its own ``symbol``)."""
     path = f"/api/corporate-announcements?index={index}"
     if symbol:
         path += f"&symbol={q(symbol)}"
+    if from_date and to_date:
+        path += f"&from_date={from_date}&to_date={to_date}"
     return fetch_api(path)
 
 

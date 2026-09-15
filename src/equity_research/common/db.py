@@ -220,6 +220,23 @@ _SCHEMA = [
         PRIMARY KEY (symbol, key)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS concall_signals (
+        symbol        VARCHAR,
+        filed_date    DATE,       -- when the transcript was filed with the exchange
+        quarter       VARCHAR,    -- e.g. 'Q1 FY27' (best-effort label from the filing)
+        tone          VARCHAR,    -- Management Tone from the words: Very Confident … Defensive (5-band)
+        execution     VARCHAR,    -- Execution from OUR numbers: Firing … Struggling (5-band)
+        gap           VARCHAR,    -- say-do gap: Talk > Numbers / Aligned / Numbers > Talk
+        signal_score  DOUBLE,     -- 0-100, how notable the call is (drives ranking)
+        summary_md    VARCHAR,    -- 3-5 takeaway bullets (markdown)
+        guidance_json VARCHAR,    -- forward guidance JSON (or null), reused from extract_guidance
+        source_url    VARCHAR,    -- the transcript PDF
+        model         VARCHAR,    -- the LLM model string that scored it
+        updated_at    TIMESTAMP DEFAULT now(),
+        PRIMARY KEY (symbol, filed_date)
+    )
+    """,
 ]
 
 

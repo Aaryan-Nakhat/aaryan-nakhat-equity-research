@@ -669,6 +669,31 @@ screen — with per-engine rank + weight breaking ties. It's a heavier multi-eng
 once and cached 24h** (via `scan.hotlist_cache_get/put`, mirroring Tailwind), served instantly on repeat
 calls. Columns: signal count · which engines flagged it · price · sector. Reply a number → deep report.
 
+### 🎙️ Concalls — `concalls` (earnings-call discovery)
+
+**`concalls`** (aliases `calls`, `concall`) → surfaces the most notable recent earnings calls
+**market-wide** by contrasting two independent reads of the same call:
+
+- **Management Tone** — `analysis/call_radar.py` → `synthesize.concall_signal` reads the **transcript
+  PDF** and returns a 5-band read of management's *forward-looking* confidence (`Very Confident` /
+  `Confident` / `Balanced` / `Cautious` / `Defensive`) + 3–5 takeaway bullets + any explicit guidance.
+  This is the **words**.
+- **Execution** — `call_radar._execution_band` computes `Firing` / `Delivering` / `Holding` / `Slipping`
+  / `Struggling` **deterministically from our `financials`** (latest quarter's YoY revenue & profit
+  growth + net-margin trend vs the company's own run-rate) — the **numbers**, never the LLM.
+- **Say-Do Gap** — the divergence: **Talk > Numbers** (upbeat tone on soft results — a caution flag) ·
+  **Numbers > Talk** (delivering more than management talks up — under-the-radar) · **Aligned**. A 0–100
+  **Signal** ranks the calls, weighting the divergence most (the edge) with a bonus for overall strength.
+
+**Pipeline (cost-bounded).** A cheap market-wide date-ranged announcement sweep
+(`nse_api.corporate_announcements(from_date, to_date)`, ~1 call) finds new **transcript** filings
+(classified via `alerts._categorise`) for symbols **with financials**, deduped against what's already
+scored. `maybe_concall_ingest()` scores a **bounded batch** (~8) per **~hourly background pass**
+(`_concall_lock`, off the heartbeat thread), persisting to the **`concall_signals`** table — so a
+results-season backlog drains over successive passes and off-season costs ≈ nothing. The `concalls`
+command and the **weekly Saturday push** (`maybe_call_radar`) just **read + rank the table** (no LLM at
+request time). Reply a number → that name's full deep report. A discovery screen, not a call.
+
 ### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
 
 **`sell`** (aliases `raise`, `trim`) → `analysis/sell_advisor.sell_ranking` answers a different
