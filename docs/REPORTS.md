@@ -694,6 +694,29 @@ results-season backlog drains over successive passes and off-season costs ≈ no
 command and the **weekly Saturday push** (`maybe_call_radar`) just **read + rank the table** (no LLM at
 request time). Reply a number → that name's full deep report. A discovery screen, not a call.
 
+### 📈 Results Radar — `results` (just-reported strength)
+
+**`results`** (aliases `movers`, `reported`) → the companion to Concalls: where Concalls reads what
+management *said*, this surfaces who *delivered*. It ranks the companies that **just reported** by a
+0-100 **Results Score** from `analysis/results_radar.py`, computed from `fundamentals.quarterly_metrics`:
+
+- **Magnitude** — the latest quarter's YoY revenue & profit growth.
+- **Acceleration** — latest PAT-YoY minus the mean of the prior ~3 quarters' → an **Accelerating /
+  Steady / Decelerating** tag (is growth speeding up?).
+- **Margin inflection** — net margin vs the trailing quarter.
+Plus the shared **Execution** band (`fundamentals.execution_band`, same vocabulary as Concalls).
+
+**Pipeline (no LLM, no new table).** `financials.filing_date` already marks "just reported"; a background
+**~hourly** pass (`maybe_results_ingest` → `results_radar.refresh_new`) lands the fresh quarter via
+`ingest.ingest_financials` for a **bounded batch** of names that just filed but whose stored quarter is
+stale (found by the same market-wide date-ranged sweep Concalls uses, filtered to "Results filed"). The
+`results` command and the **weekly Sat push** (`maybe_results`) then **read + rank on-the-fly** from the
+numbers. Reply a number → deep report.
+
+**Honest caveat (in the email):** we hold **no analyst-consensus** data (primary-only) — so it ranks by
+*biggest / accelerating growth vs the company's own history*, **not** "beat vs street"; watch base
+effects on tiny year-ago numbers. Bounded to names with financials history until the universe backfill.
+
 ### Sell-priority advisor — `sell` / `raise` / `trim` (your holdings)
 
 **`sell`** (aliases `raise`, `trim`) → `analysis/sell_advisor.sell_ranking` answers a different

@@ -264,6 +264,28 @@ SERVE   on-demand `concalls` (email_bot._send_call_radar) and the WEEKLY Sat ≥
    (A discovery screen, not a call — every read is cited to the transcript.)
 ```
 
+## Flow J — 📈 Results Radar just-reported strength (background refresh + weekly Sat push + on-demand `results`)
+
+```
+REFRESH gate: ~hourly, background (scan.results_ingest_due) — email_bot.maybe_results_ingest (off-heartbeat,
+        _results_lock). No LLM, no new table — financials.filing_date IS the "just reported" marker.
+        ▼  results_radar.recent_filers — the SAME market-wide date-ranged sweep Concalls uses
+              (nse_api.corporate_announcements(from_date,to_date)), filtered to "Results filed"
+              (alerts._categorise is_result) for symbols WITH FINANCIALS
+        ▼  results_radar.refresh_new — for a BOUNDED batch (~6) whose stored latest quarter is STALE:
+              ingest.ingest_financials(symbol, max_filings=2) → lands the fresh quarter
+
+SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:00 push
+        (scan.results_radar_due / email_bot.maybe_results) both COMPUTE + RANK on-the-fly:
+        ▼  results_radar.radar — names whose latest quarter filed within ~35d, scored by
+              magnitude (YoY growth) + acceleration (vs prior ~3 quarters) + margin inflection,
+              with the shared fundamentals.execution_band (Firing..Struggling) — ranked best-first
+        →  results_brief.build_results
+        ▼
+   📈 ranked list of the strongest just-reported quarters; reply a number → deep report.
+   (No analyst consensus — growth vs the company's OWN history, not beat-vs-street. A discovery screen.)
+```
+
 ## Component → file map
 
 | Layer | Does | Files |
@@ -271,7 +293,7 @@ SERVE   on-demand `concalls` (email_bot._send_call_radar) and the WEEKLY Sat ≥
 | **Scrape** | pull primary data (anti-bot handled) + Tailwind signals + Pickaxe Google-Trends demand signals + AmbitionBox employer reviews | `scrapers/{bse,nse_archives,nse_api,nse_financials,nse_shp,nseix,markets_global,fbil,mcx,amfi,mf_holdings,ipo,social,fedregister,trends,ambitionbox}.py`, `common/http.py` |
 | **Ingest** | land into DuckDB, idempotent | `ingest.py` |
 | **Store** | 14 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`, `concall_signals`) | `common/db.py` → `data/processed/equity.duckdb` |
-| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, **momentum-breakout / relative-strength-leaders / accumulation discovery + 🔥 multi-signal Hotlist**, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🎙️ Concalls earnings-call tone-vs-execution**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,technical_screen,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,momentum,leaders,accumulation,hotlist,investors,tailwind,pickaxe,call_radar,employer_sentiment}.py` |
-| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
+| **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, **momentum-breakout / relative-strength-leaders / accumulation discovery + 🔥 multi-signal Hotlist**, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🎙️ Concalls earnings-call tone-vs-execution**, **📈 Results Radar just-reported strength**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,technical_screen,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,momentum,leaders,accumulation,hotlist,investors,tailwind,pickaxe,call_radar,results_radar,employer_sentiment}.py` |
+| **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind, ~hourly background Concalls ingest; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·momentum·leaders·accumulation·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in upside-drivers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind, ~hourly background Concalls + Results ingest; **mailbox housekeeping**; channel via `CHANNELS`. Commands: `fund:`/`ipo:`/`screen: value·momentum·leaders·accumulation·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`levels:`/`help`; opt-in upside-drivers menu | `scripts/telegram_bot.py`, `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_bot.ps1`, `run_email_bot.ps1` |

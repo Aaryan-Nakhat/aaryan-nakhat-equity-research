@@ -73,6 +73,54 @@ def quarterly_metrics(con: duckdb.DuckDBPyConnection, symbol: str,
     return m.replace([np.inf, -np.inf], np.nan)
 
 
+def latest_quarters(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
+    """The per-quarter metrics frame preferring **consolidated**, falling back to standalone
+    (empty if neither exists) — the shared basis for the earnings-quality reads below."""
+    m = quarterly_metrics(con, symbol, consolidated=True)
+    if m.empty:
+        m = quarterly_metrics(con, symbol, consolidated=False)
+    return m
+
+
+def execution_band_from_metrics(m: pd.DataFrame) -> str | None:
+    """How the latest reported quarter **executed**, from the numbers alone (never words):
+    ``Firing`` / ``Delivering`` / ``Holding`` / ``Slipping`` / ``Struggling`` — from the latest
+    quarter's YoY revenue & profit growth plus the net-margin trend vs the prior quarter. ``None``
+    when it can't be computed. Shared by 🎙️ Concalls (the cross-check on management tone) and
+    📈 Results Radar (the delivery read)."""
+    if m is None or m.empty:
+        return None
+    last = m.iloc[-1]
+    rev_yoy, net_yoy = last.get("rev_yoy_%"), last.get("net_yoy_%")
+    if (rev_yoy is None or rev_yoy != rev_yoy) and (net_yoy is None or net_yoy != net_yoy):
+        return None
+    rev = rev_yoy if (rev_yoy is not None and rev_yoy == rev_yoy) else 0.0
+    net = net_yoy if (net_yoy is not None and net_yoy == net_yoy) else 0.0
+    margin = 0.0                                       # net-margin trend vs the prior quarter (nudge)
+    if len(m) >= 2:
+        nm, nm_prev = m.iloc[-1].get("net_margin_%"), m.iloc[-2].get("net_margin_%")
+        if nm == nm and nm_prev == nm_prev:
+            margin = 0.5 if nm >= nm_prev + 0.5 else (-0.5 if nm <= nm_prev - 0.5 else 0.0)
+    score = 0.0                                        # profit growth leads, revenue confirms
+    score += 2 if net >= 30 else 1 if net >= 15 else 0 if net >= 0 else -1 if net > -20 else -2
+    score += 1 if rev >= 12 else 0 if rev >= 0 else -1
+    score += margin
+    if score >= 2.5:
+        return "Firing"
+    if score >= 1:
+        return "Delivering"
+    if score >= -0.5:
+        return "Holding"
+    if score >= -2:
+        return "Slipping"
+    return "Struggling"
+
+
+def execution_band(con: duckdb.DuckDBPyConnection, symbol: str) -> str | None:
+    """``execution_band_from_metrics`` for ``symbol`` (loads the preferred quarterly frame)."""
+    return execution_band_from_metrics(latest_quarters(con, symbol))
+
+
 def ttm(con: duckdb.DuckDBPyConnection, symbol: str,
         consolidated: bool = False) -> dict[str, float]:
     """Trailing-twelve-month aggregates from the last 4 quarters."""

@@ -110,42 +110,6 @@ def _pdf_has_pages(data: bytes) -> bool:
         return False
 
 
-def _execution_band(con: duckdb.DuckDBPyConnection, symbol: str) -> str | None:
-    """The quarter's **Execution**, computed from our numbers (never the words): Firing / Delivering /
-    Holding / Slipping / Struggling, from the latest quarter's YoY revenue & profit growth plus the
-    net-margin trend. ``None`` if we can't compute it. Prefers consolidated, falls back to standalone."""
-    m = fundamentals.quarterly_metrics(con, symbol, consolidated=True)
-    if m.empty:
-        m = fundamentals.quarterly_metrics(con, symbol, consolidated=False)
-    if m.empty or len(m) < 1:
-        return None
-    last = m.iloc[-1]
-    rev_yoy, net_yoy = last.get("rev_yoy_%"), last.get("net_yoy_%")
-    if (rev_yoy is None or rev_yoy != rev_yoy) and (net_yoy is None or net_yoy != net_yoy):
-        return None
-    rev = rev_yoy if (rev_yoy is not None and rev_yoy == rev_yoy) else 0.0
-    net = net_yoy if (net_yoy is not None and net_yoy == net_yoy) else 0.0
-    # margin trend: latest net margin vs the prior quarter's (a tie-breaker nudge)
-    margin = 0.0
-    if len(m) >= 2:
-        nm, nm_prev = m.iloc[-1].get("net_margin_%"), m.iloc[-2].get("net_margin_%")
-        if nm == nm and nm_prev == nm_prev:
-            margin = 0.5 if nm >= nm_prev + 0.5 else (-0.5 if nm <= nm_prev - 0.5 else 0.0)
-    score = 0.0                                        # profit growth leads, revenue confirms
-    score += 2 if net >= 30 else 1 if net >= 15 else 0 if net >= 0 else -1 if net > -20 else -2
-    score += 1 if rev >= 12 else 0 if rev >= 0 else -1
-    score += margin
-    if score >= 2.5:
-        return "Firing"
-    if score >= 1:
-        return "Delivering"
-    if score >= -0.5:
-        return "Holding"
-    if score >= -2:
-        return "Slipping"
-    return "Struggling"
-
-
 def _gap(tone: str, execution: str | None) -> str:
     """The say-do gap: the forward Management Tone vs the delivered Execution (both 0-4 ordinals)."""
     if execution is None:
@@ -185,7 +149,7 @@ def score_one(con: duckdb.DuckDBPyConnection, symbol: str, url: str, filed_date:
     if not sig:
         return None
     tone = sig["tone"]
-    execution = _execution_band(con, symbol)
+    execution = fundamentals.execution_band(con, symbol)
     gap = _gap(tone, execution)
     score = _signal_score(tone, execution)
     takeaways = sig.get("takeaways") or []

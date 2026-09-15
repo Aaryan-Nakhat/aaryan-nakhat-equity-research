@@ -301,6 +301,18 @@ with zero).
   are scored, a bounded batch per ~hourly background pass, into `concall_signals`; the command/weekly push
   read that table (no LLM at request time). An idea generator, cited to the transcript — never a call.
 
+### 📈 Results Radar (`results`) — deterministic (numbers only)
+- **Results Score (0-100)** — `results_radar._score` from `fundamentals.quarterly_metrics`: profit-growth
+  **magnitude** (latest-quarter PAT/rev YoY) + **acceleration** (`_acceleration`: latest PAT-YoY vs the
+  mean of the prior ~3 quarters → Accelerating/Steady/Decelerating) + **margin inflection** (net margin
+  vs prior quarter), each a clamped weight so no leg dominates. Plus the shared `fundamentals.execution_band`.
+- **No LLM, no new table** — `financials.filing_date` marks "just reported"; a bounded ~hourly background
+  pass (`results_radar.refresh_new` → `ingest.ingest_financials`) lands the fresh quarter for just-filed
+  names (same market-wide sweep as Concalls, filtered to "Results filed"); the command/weekly push read +
+  rank on-the-fly.
+- **No analyst consensus** (primary-only) → it's *growth vs the company's own history*, not beat-vs-street;
+  bounded to names with financials history until the backfill. A discovery screen, never a call.
+
 ---
 
 ## Part C — IPO note (`scrapers/ipo.py`, `pipeline.generate_ipo_report`, `synthesize.ipo_analysis`)

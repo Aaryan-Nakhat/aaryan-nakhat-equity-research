@@ -37,11 +37,12 @@ from equity_research import scan  # noqa: E402
 from equity_research import screen_digest  # noqa: E402
 from equity_research.analysis import (accumulation, booking_risk, call_radar, holdco,  # noqa: E402
                                       hotlist, investors, leaders, momentum, policy,
-                                      screener, sector_analysis, sell_advisor, smallcap,
-                                      supply_chain, technical, technical_screen)
+                                      results_radar, screener, sector_analysis, sell_advisor,
+                                      smallcap, supply_chain, technical, technical_screen)
 from equity_research import mail_cleanup  # noqa: E402
 from equity_research.common.db import connect  # noqa: E402
 from equity_research.reports import call_radar_brief  # noqa: E402
+from equity_research.reports import results_brief  # noqa: E402
 from equity_research.reports import charts  # noqa: E402
 from equity_research.reports import deep_brief  # noqa: E402
 from equity_research.reports import glossary  # noqa: E402
@@ -587,6 +588,12 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _results_query(subject: str) -> bool:
+    """True for a 📈 Results Radar request ('results', 'results radar', 'movers', 'reported')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:results?(?:\s*radar)?|movers?|reported|"
+                         r"earnings\s*movers?)\s*[:\-]?\s*$", subject, flags=re.I))
+
+
 def _wants_latest(subject: str) -> bool:
     """True if a Tailwind / Pickaxe / Hotlist request asks to bypass the 24h cache
     ('--latest' / 'fresh')."""
@@ -745,6 +752,12 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "vs the quarter's **Execution** (from our numbers) — ranked by how far the two diverge (upbeat "
          "talk on soft numbers = caution; quiet talk on strong numbers = under-radar). "
          "Reply a number → deep report."],
+    ]),
+    ("📈 Results Radar — strongest just-reported quarters", "Also pushed weekly (Sat ≥18:00).", [
+        ["`results` (or `movers`)",
+         "Companies that **just reported**, ranked by how strong the quarter was — YoY growth + whether "
+         "it's **accelerating** + margin inflection (from the numbers; no analyst consensus, so it's "
+         "growth-vs-own-history). Reply a number → deep report."],
     ]),
     ("🧭 Sector analysis", "Top-down, one sectoral index at a time.", [
         ["`sector: <name>` e.g. `sector: defence`, `sector: pharma`",
@@ -1471,6 +1484,29 @@ def _send_call_radar(req: EmailRequest) -> None:
     log.info("sent Concalls (%d calls) to %s", len(rep["picks"]), req.sender)
 
 
+def _send_results(req: EmailRequest) -> None:
+    """📈 Results Radar — the strongest just-reported quarters (growth + acceleration), computed from
+    the numbers. Reply a number → that name's deep report."""
+    log.info("running Results Radar (req from %s)", req.sender)
+    con = connect()
+    try:
+        rep = _screen_run(lambda: results_brief.build_results(con))
+    finally:
+        con.close()
+    if rep is None:
+        _reply_text(req, "The Results Radar timed out this time — please resend `results` shortly.")
+        return
+    if not rep.get("picks"):
+        _reply_text(req, "📈 No companies have reported in the recent window yet — the radar fills in "
+                         "as results are filed (heaviest during earnings season). Try again in a bit.")
+        return
+    _set_pending(req, "results", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+    emailer.send_report(_re_subject(req.subject), rep["markdown"], to=req.sender,
+                        html=emailer.body_html(rep["markdown"], "Results Radar"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent Results Radar (%d names) to %s", len(rep["picks"]), req.sender)
+
+
 def _send_policy_screen(req: EmailRequest) -> None:
     """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
     sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
@@ -1974,6 +2010,11 @@ def handle_request(req: EmailRequest) -> None:
         _send_call_radar(req)
         return
 
+    # 1e-dec) 📈 Results Radar — strongest just-reported quarters ('results', 'movers')
+    if _results_query(req.subject):
+        _send_results(req)
+        return
+
     # 1f) explicit technical levels ('levels: <name>' / 'technical: <name>' / 'setup:' / 'chart:')
     lq = _levels_query(req.subject)
     if lq:
@@ -2358,6 +2399,69 @@ def maybe_call_radar() -> None:
     log.info("weekly Concalls push sent (%d calls) to %s", len(rep["picks"]), to)
 
 
+_results_lock = threading.Lock()
+
+
+def _results_ingest_worker() -> None:
+    """Background pass: refresh the fresh quarter's financials for a bounded batch of names that just
+    filed results (XBRL per name — off the heartbeat thread). Holds `_results_lock` so passes never
+    overlap; the radar reads whatever's landed."""
+    if not _results_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        n = results_radar.refresh_new(con, max_new=6)
+        scan.mark_results_ingest(con)
+        if n:
+            log.info("Results Radar: refreshed %d just-reported name(s) this pass", n)
+    except Exception:  # noqa: BLE001 — never let the refresh crash the bot
+        log.exception("Results Radar refresh pass failed")
+    finally:
+        con.close()
+        _results_lock.release()
+
+
+def maybe_results_ingest() -> None:
+    """Heartbeat hook: refresh just-reported names' financials at most ~hourly, in a background thread
+    so it never blocks the IMAP loop. On-demand `results` reads whatever's landed."""
+    if _results_lock.locked() or not scan.results_ingest_due():
+        return
+    threading.Thread(target=_results_ingest_worker, name="results-ingest", daemon=True).start()
+
+
+def maybe_results() -> None:
+    """Fire the 📈 Results Radar push once per ISO week (Saturday ≥18:00 IST): the strongest
+    just-reported quarters. Reads the numbers (no LLM), so it's cheap. On-demand `results` any time."""
+    now = datetime.now(IST)
+    if now.weekday() != 5 or now.hour < SCAN_HOUR:
+        return
+    if not scan.results_radar_due():
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        log.error("no REPORT_TO / allowlist — cannot send Results Radar")
+        return
+    con = connect()
+    try:
+        rep = results_brief.build_results(con)
+    except Exception:  # noqa: BLE001
+        log.exception("Results Radar build failed")            # no mark → retried next heartbeat
+        return
+    finally:
+        con.close()
+    if not rep or not rep.get("picks"):
+        scan.mark_results_radar()                              # nothing reported — don't retry all evening
+        log.info("weekly Results Radar: nothing in the window — no email")
+        return
+    today = datetime.now(IST).date().isoformat()
+    note = ("\n\n_(Weekly digest — email **`results`** any time for the live radar where you can reply a "
+            "number for a name's deep report.)_")
+    emailer.send_report(f"📈 Results Radar — {today}", rep["markdown"] + note, to=to,
+                        html=emailer.body_html(rep["markdown"] + note, "Results Radar"))
+    scan.mark_results_radar()                                  # advance week-marker ONLY after send
+    log.info("weekly Results Radar push sent (%d names) to %s", len(rep["picks"]), to)
+
+
 _last_mail_sweep: datetime | None = None
 
 
@@ -2424,6 +2528,8 @@ def main() -> None:
                 maybe_pickaxe()      # heartbeat: monthly surging-demand → indirect beneficiaries (1st Sat ≥18:00)
                 maybe_concall_ingest()   # heartbeat: incremental earnings-call scoring (background, ~hourly)
                 maybe_call_radar()   # heartbeat: weekly earnings-call radar push (Sat ≥18:00)
+                maybe_results_ingest()   # heartbeat: refresh just-reported names' financials (background, ~hourly)
+                maybe_results()      # heartbeat: weekly results-radar push (Sat ≥18:00)
                 maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
