@@ -499,8 +499,9 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 # ----------------- screeners (idea generation) -----------------
 def _screen_query(subject: str) -> str | None:
     """Parse a screener request → one of 'holdco' | 'investors' | 'smallcap' | 'policy' |
-    'technical' | 'momentum' | 'leaders' | 'accumulation' | 'hotlist' | 'value' (default), or None
-    if not a screen. Accepts 'screen: <name>' and bare 'screen' (→ value)."""
+    'technical' | 'volume' | 'beaters' | 'institutions' | 'margins' | 'deleverage' | 'quality' |
+    'hotlist' | 'value' (default), or None if not a screen. Accepts 'screen: <name>' and bare
+    'screen' (→ value)."""
     m = re.match(r"^\s*(?:re:\s*)?screen\s*[:\-]?\s*(.*)$", subject, flags=re.I)
     if not m:
         return None
@@ -514,14 +515,13 @@ def _screen_query(subject: str) -> str | None:
     if val in ("policy", "policies", "scheme", "schemes", "govt", "government", "gov",
                "policy radar", "scheme radar", "budget"):
         return "policy"
-    if val in ("volume", "volume breakout", "volume breakouts", "breakout", "breakouts",
-               "momentum", "momentum breakout", "momentum breakouts"):
+    if val in ("volume", "volume breakout", "volume breakouts", "breakout", "breakouts"):
         return "volume"
-    if val in ("beaters", "market beaters", "leaders", "leader", "relative strength", "rs",
-               "strength", "outperformers", "outperformer"):
+    if val in ("beaters", "market beaters", "relative strength", "rs", "strength",
+               "outperformers", "outperformer"):
         return "beaters"
-    if val in ("institutions", "institutional", "institutional buying", "accumulation", "accumulate",
-               "adding", "smart money", "smartmoney", "promoter buying"):
+    if val in ("institutions", "institutional", "institutional buying", "smart money", "smartmoney",
+               "promoter buying", "adding"):
         return "institutions"
     if val in ("hotlist", "hot list", "hot", "multisignal", "multi-signal", "confluence", "top"):
         return "hotlist"
