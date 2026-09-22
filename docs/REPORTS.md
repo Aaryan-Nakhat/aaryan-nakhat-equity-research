@@ -855,7 +855,7 @@ gain) or **export-share gain** (a rival exporter is knocked out → Indian expor
 list** — broad generic probes + the Analyst's open-ended detection catch the long tail (onion, wheat, coal,
 PVC…). It surfaces these **autonomously** — you never name a material. On-demand **`tailwind`** (aliases
 `catalysts`, `supply shock`) and **pushed weekly (Saturday ≥18:00 IST**, `scan.tailwind_due`/`mark_tailwind`,
-`email_bot.maybe_tailwind`) + a **mid-week urgent break-in** (below).
+`email_bot.maybe_tailwind`) + **urgent break-ins** at pre-market / midday / evening (below).
 
 **Three materiality reads on every catalyst** (all Analyst/Mapper estimates, grounded where possible, 🟡
 verify): **🌍 the dominant supplier's % of world supply** (bigger = harder to switch = stronger tailwind);
@@ -886,14 +886,16 @@ Output: a 💨 section, each catalyst carrying its **source link**, downstream s
 verified names (🟢 curated / 🟡 **AI-verified, confirm** / ⭐ on your watchlist) — reply with a symbol/name
 → that stock's deep report. Catalysts rank watchlist-hits → severity → #beneficiaries.
 
-**Delivery — weekly + mid-week urgent break-in:** the full pipeline pushes **weekly (Saturday ≥18:00 IST**,
-`scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`). On **trading days Mon–Fri ≥18:00**, a
-**lighter urgent pass** (`tailwind.run_tailwind_urgent`, `email_bot.maybe_tailwind_urgent`) runs Scout +
-Analyst only, keeps just **fresh, high-severity, in-effect/proposed** shocks **not already surfaced**
-(a ~2-week `scan.tailwind_seen_keys` set that both the weekly and prior urgents feed via
-`add_tailwind_seen`), maps+audits only those, and sends a compact **"💨 Fresh supply shock"** email
-alongside the daily digest **only when something big actually lands** (most days: nothing → silent). It
-marks done once/evening so the ~1–2 min pipeline runs at most once per trading day. On-demand **`tailwind`**
+**Delivery — weekly + urgent break-ins:** the full pipeline pushes **weekly (Saturday ≥18:00 IST**,
+`scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`). On **trading days Mon–Fri**, a
+**lighter urgent pass** (`tailwind.run_tailwind_urgent`, `email_bot.maybe_tailwind_urgent`) fires at **three
+slots — pre-market 08:30, midday 12:30, evening 18:00** (`_current_urgent_slot`, once per slot via
+`scan.tailwind_urgent_slot_done`; catch-up-friendly if the laptop was asleep). It runs Scout + Analyst only,
+keeps **fresh, in-effect/proposed** shocks **not already surfaced** (a ~2-week `scan.tailwind_seen_keys`
+set that both the weekly and prior urgents feed via `add_tailwind_seen`), maps+audits a bounded set, and
+sends a compact **"💨 Fresh supply shock — <date> (<slot>)"** email **only when a fresh actionable shock
+lands** — one that is **high-severity OR carries a small/mid-cap beneficiary** (< ₹25k cr; the non-obvious
+names a smaller shock still moves). Most slots: nothing → silent. On-demand **`tailwind`**
 works any time and is **cached for 24h** (`scan.tailwind_cache_get`/`put`; a re-run within a day returns the
 stored result instantly — no re-fetch, no token cost, since the news barely moves hour to hour) — **`tailwind
 --latest`** (or `fresh`) forces a live re-scan; every fresh run (on-demand-latest or the weekly push)

@@ -346,8 +346,9 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   material); each catalyst **source-cited**; reply a number → deep report. Verified live: DRC cobalt ban →
   HINDCOPPER/HINDALCO, US tungsten-scrap curb → KENNAMET/MIDHANI, China Ge/Ga curb → HINDZINC/NATIONALUM.
   **Since extended — ✅:** **US Federal Register** API merged into the Scout (official US leg incl.
-  proposed rules); **mid-week urgent break-in** (`maybe_tailwind_urgent`, fresh high-severity only,
-  `tailwind_seen_keys` dedup); **X/Twitter** best-effort (nitter, mostly down); **Mapper tightened** to
+  proposed rules); **urgent break-ins** (`maybe_tailwind_urgent`, three slots — pre-market/midday/evening;
+  fresh + high-severity OR carrying a small/mid-cap name; `tailwind_seen_keys` dedup); **X/Twitter**
+  best-effort (nitter, mostly down); **Mapper tightened** to
   existing-producer small/mid-caps (kills "merely bid" giants; market-cap tier + intent-only flags);
   **full-commodity coverage** (~30 goods — metals/agri/pharma/chemicals/fertiliser/energy + dual
   import-substitution / export-share mechanism); **three materiality reads** (supplier world-share +

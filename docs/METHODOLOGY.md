@@ -453,7 +453,8 @@ with zero).
   `equity_master` (reuses `supply_chain._verify`/`_implausible`), drop implausible/blocklisted, tag
   market-cap tier (via `valuation.snapshot`) + **⚠ intent-only** language, rank watchlist→severity→count.
   **Cached 24h** (`scan.tailwind_cache_get/put`; `--latest` forces fresh). Weekly Sat push +
-  **mid-week urgent break-in** (fresh high-severity only, `run_tailwind_urgent`, `tailwind_seen_keys` dedup).
+  **urgent break-ins** at pre-market / midday / evening on trading days (`run_tailwind_urgent`: fresh,
+  in-effect/proposed, high-severity OR carrying a small/mid-cap name; `tailwind_seen_keys` dedup).
   **Honest:** an idea *generator* — `supplier_share`/`revenue_share`/`market_share` are LLM/grounded
   estimates (shown 🟡 verify; honest `n/a` when unknown); every catalyst is source-cited.
 - **`pickaxe` / `demand` — ⛏️ surging-demand radar (`analysis/pickaxe.py`; `scrapers/trends.py` + `social.py`)** —

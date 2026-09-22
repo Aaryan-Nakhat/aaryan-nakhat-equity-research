@@ -69,6 +69,11 @@ PREMARKET_CUTOFF_HOUR = 12             # catch-up: laptop is asleep at 08:30, so
                                        # heartbeat after 08:30 (typically your ~09:25 login), up to
                                        # noon (the 12:30 midday digest takes over past that). Past the
                                        # 09:15 open the digest self-relabels to a "gap so far" snapshot.
+# Urgent Tailwind break-in slots (IST) — the mid-week supply-shock alert fires once per slot on a
+# trading day (deduped so no shock repeats): pre-market (names in hand before the open), midday
+# (still intra-session), and post-close evening. Reuses the digest hour constants so they stay in sync.
+URGENT_SLOTS = [(PREMARKET_HOUR, PREMARKET_MIN, "premarket"),
+                (INTRADAY_HOUR, INTRADAY_MIN, "midday"), (SCAN_HOUR, 0, "evening")]
 IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
 PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
 MAIL_BIN_AFTER_MIN = 30     # server-account: bin workbench mail this old (sending is long done)
@@ -860,7 +865,7 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["📊 Full digest (18:00)", "Market header + watchlist alerts + events (with filing analysis) + insider."],
         ["📡 Screener movements (Sat 18:00)", "What newly crossed the screens this week."],
         ["🔄 Sector rotation (Sat 18:00)", "Sector leaders / laggards / value-turning."],
-        ["💨 Tailwind (Sat + mid-week urgent)", "Global supply-shock → Indian beneficiaries."],
+        ["💨 Tailwind (Sat + urgent pre-market/midday/evening)", "Global supply-shock → Indian beneficiaries."],
         ["⛏️ Pickaxe (monthly, 1st Sat 18:00)", "Surging Indian demand → indirect 'sell the pickaxes' beneficiaries."],
     ]),
 ]
@@ -2487,18 +2492,34 @@ def maybe_tailwind() -> None:
     log.info("weekly Tailwind push sent to %s (%d catalysts)", to, rep["n_catalysts"])
 
 
+def _current_urgent_slot(now: datetime) -> str | None:
+    """The urgent-Tailwind slot currently 'due' — the latest ``URGENT_SLOTS`` entry whose start time
+    has passed today, or ``None`` before the first slot. Slots run in order, so this also gives free
+    catch-up: if the laptop was asleep through pre-market and wakes mid-morning, 'premarket' is still
+    the due slot and fires on the first heartbeat (until midday takes over)."""
+    slot = None
+    for h, m, name in URGENT_SLOTS:
+        if (now.hour, now.minute) >= (h, m):
+            slot = name
+    return slot
+
+
 def maybe_tailwind_urgent() -> None:
-    """Mid-week urgent break-in: on a trading day (Mon–Fri) ≥18:00 IST, once/day, run the lighter
-    Tailwind pass and — only if a FRESH, high-severity shock with a verified Indian beneficiary just
-    landed — send a compact '💨 Fresh supply shock' email alongside the daily digest. Saturday is
-    skipped (the full weekly push covers it). Marks done each evening whether or not it sent, so the
-    ~1–2 min pipeline runs at most once per trading day; the seen-set stops it repeating a shock."""
+    """Mid-week urgent break-in: on a trading day (Mon–Fri), at each of three IST slots (pre-market
+    08:30, midday 12:30, evening 18:00), run the lighter Tailwind pass and — only if a FRESH shock
+    with a verified Indian beneficiary just landed (high-severity, or carrying a small/mid-cap name) —
+    send a compact '💨 Fresh supply shock' email. Saturday is skipped (the full weekly push covers
+    it). Marks each slot done whether or not it sent, so the ~1–2 min pipeline runs at most once per
+    slot; the seen-set stops it repeating a shock across slots and days."""
     now = datetime.now(IST)
-    if now.weekday() == 5 or now.hour < SCAN_HOUR:          # Sat → weekly handles it; else evening only
+    if now.weekday() == 5:                                  # Sat → the weekly push handles it
         return
-    if scan.already_tailwind_urgent_today() or not scan.market_open_today():
+    slot = _current_urgent_slot(now)
+    if slot is None:                                        # before pre-market — nothing due yet
         return
-    log.info("mid-week urgent Tailwind check firing")
+    if scan.tailwind_urgent_slot_done(slot) or not scan.market_open_today():
+        return
+    log.info("urgent Tailwind check firing (%s slot)", slot)
     con = connect()
     try:
         seen = scan.tailwind_seen_keys(con)
@@ -2508,18 +2529,19 @@ def maybe_tailwind_urgent() -> None:
         return
     finally:
         con.close()
-    scan.mark_tailwind_urgent()                             # ran today — don't re-run all evening
+    scan.mark_tailwind_urgent_slot(slot)                    # this slot ran — don't re-run it today
     if not rep:
-        return                                              # quiet day — the common, correct outcome
+        return                                              # quiet slot — the common, correct outcome
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
     if not to:
         log.error("no REPORT_TO / allowlist — cannot send urgent Tailwind")
         return
     today = datetime.now(IST).date().isoformat()
-    emailer.send_report(f"💨 Fresh supply shock — {today}", rep["markdown"], to=to,
+    label = {"premarket": "pre-market", "midday": "midday", "evening": "evening"}.get(slot, slot)
+    emailer.send_report(f"💨 Fresh supply shock — {today} ({label})", rep["markdown"], to=to,
                         html=emailer.body_html(rep["markdown"], "Fresh supply shock"))
     scan.add_tailwind_seen(rep.get("keys", []))            # don't re-alert this shock the rest of the week
-    log.info("urgent Tailwind break-in sent to %s (%d catalysts)", to, rep["n_catalysts"])
+    log.info("urgent Tailwind break-in sent to %s (%s slot, %d catalysts)", to, slot, rep["n_catalysts"])
 
 
 def maybe_pickaxe() -> None:

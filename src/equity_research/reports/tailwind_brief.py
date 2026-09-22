@@ -38,7 +38,7 @@ _LEGEND = (
     "- **♻️ Fresh vs cached** — a scan is **cached for 24 hours**: email `tailwind` again within a "
     "day and you get the *same* result instantly (no re-fetch, no token cost — the news barely moves "
     "hour to hour). Email **`tailwind --latest`** to force a brand-new live scan. The weekly Saturday "
-    "push and the mid-week urgent alert are always fresh.\n"
+    "push and the urgent break-in alerts (pre-market / midday / evening) are always fresh.\n"
     "- **Status** — 🔴 in effect · 🟠 proposed / imminent · 🟡 rumored. **Severity** — 🔥 high · ▲ "
     "medium · • low.\n"
     "- **Tier** — 🟢 hand-curated · 🟡 **AI-suggested, verify** · ⭐ on your watchlist; the size tag "
@@ -139,16 +139,16 @@ def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
 
 def build_tailwind_urgent(con: duckdb.DuckDBPyConnection, seen_keys: set[str], *,
                           days: int = 7) -> dict | None:
-    """Compact mid-week break-in for the daily digest: only a FRESH, high-severity shock (not in
-    ``seen_keys``) with a verified beneficiary. Returns ``{markdown, picks, keys, n_catalysts}`` or
-    ``None`` (the usual quiet-day result). The markdown is a short block, not a full report."""
+    """Compact urgent break-in: a FRESH shock (not in ``seen_keys``) with a verified beneficiary —
+    high-severity, or carrying a small/mid-cap name. Returns ``{markdown, picks, keys, n_catalysts}``
+    or ``None`` (the usual quiet result). The markdown is a short block, not a full report."""
     res = tailwind.run_tailwind_urgent(con, seen_keys=seen_keys, days=days)
     cats = res.get("catalysts") or []
     if not cats:
         return None
 
-    parts = ["## 💨 Fresh supply shock (mid-week)",
-             "_A big global supply/policy move just landed — with Indian names that benefit. "
+    parts = ["## 💨 Fresh supply shock",
+             "_A global supply/policy move just landed — with Indian names that benefit. "
              "Reply with a stock's symbol or name for its deep report. The full weekly 💨 Tailwind "
              "still runs Saturday._"]
     picks: list = []

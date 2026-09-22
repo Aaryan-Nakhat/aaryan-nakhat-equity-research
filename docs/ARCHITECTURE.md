@@ -163,7 +163,7 @@ heartbeat gate: once/ISO-week, Saturday ≥18:00 IST (scan.sector_rotation_due);
         only after a successful send. Reply `sector: <name>` for the full read on any one.
 ```
 
-## Flow G — Push: 💨 Tailwind global supply-shock radar (weekly Sat + mid-week urgent break-in)
+## Flow G — Push: 💨 Tailwind global supply-shock radar (weekly Sat + urgent break-ins pre-market/midday/evening)
 
 ```
 WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
@@ -187,16 +187,19 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
    💨 ONE "Tailwind" email (also on-demand via `tailwind`); week-marker advances only after a
         successful send (or a clean empty result). Reply with a symbol/name → that stock's deep report.
 
-URGENT  gate: trading day Mon–Fri, ≥18:00 IST, once/day (scan.already_tailwind_urgent_today);
-        Saturday skipped (weekly covers it). email_bot.maybe_tailwind_urgent
+URGENT  gate: trading day Mon–Fri, at 3 IST slots — pre-market 08:30 / midday 12:30 / evening 18:00,
+        once per slot (scan.tailwind_urgent_slot_done); Saturday skipped (weekly covers it).
+        email_bot.maybe_tailwind_urgent (_current_urgent_slot picks the due slot; catch-up-friendly)
         │
-        ▼  tailwind.run_tailwind_urgent() — the LIGHTER pass: Scout + Analyst only (cheap), keep just
-              FRESH, high-severity, in-effect/proposed disruptions NOT in scan.tailwind_seen_keys, then
-              map+audit only those; keep only catalysts with ≥1 verified beneficiary
+        ▼  tailwind.run_tailwind_urgent() — the LIGHTER pass: Scout + Analyst only (cheap), keep FRESH,
+              in-effect/proposed disruptions NOT in scan.tailwind_seen_keys, map+audit a bounded set
+              (highest-severity first), then keep a catalyst only if it has ≥1 verified beneficiary AND
+              is high-severity OR carries a small/mid-cap name (mcap < ₹25k cr)
         ▼
-   💨 "Fresh supply shock" email ONLY when a big new shock lands (most days: nothing → silent). Runs
-        the ~1–2 min pipeline at most once/trading-evening (marks done regardless); the seen-set
-        (scan.add_tailwind_seen, ~2-wk TTL) stops it re-alerting a shock the weekly or a prior day showed.
+   💨 "Fresh supply shock — <date> (<slot>)" email ONLY when a fresh actionable shock lands (most
+        slots: nothing → silent). Runs the ~1–2 min pipeline at most once per slot (marks done
+        regardless); the seen-set (scan.add_tailwind_seen, ~2-wk TTL) stops it re-alerting a shock a
+        prior slot, day, or the weekly already showed.
 
    (An idea generator — every catalyst is source-cited; "no clean listed beneficiary" is a valid,
     un-forced answer. Reddit is best-effort; Google News carries global sourcing, Federal Register the US leg.)

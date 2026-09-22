@@ -287,27 +287,46 @@ def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
             "n_signals": len(signals), "n_catalysts": len(out)}
 
 
+_SMALLMID_CEIL_CR = 25_000                                 # mid-cap ceiling (see _SIZE_BANDS)
+_URGENT_MAP_CAP = 6                                        # bound the mapper cost per urgent pass
+
+
+def _has_smallmid_beneficiary(catalyst: dict) -> bool:
+    """True if the catalyst has ≥1 verified small/mid-cap beneficiary (``mcap_cr`` under the mid-cap
+    ceiling). Those are the non-obvious names that move hardest on a shock — worth an urgent alert
+    even when the shock itself isn't high-severity. Unknown-cap names (``None``) don't qualify."""
+    return any(b.get("mcap_cr") is not None and b["mcap_cr"] < _SMALLMID_CEIL_CR
+               for b in (catalyst.get("beneficiaries") or []))
+
+
 def run_tailwind_urgent(con: duckdb.DuckDBPyConnection, *, seen_keys: set[str],
                         days: int = 7, max_catalysts: int = 2) -> dict:
     """Lighter mid-week pass for the daily digest's urgent break-in. Runs Scout + Analyst (cheap),
-    keeps only **fresh, high-severity, in-effect/proposed** disruptions NOT already surfaced
-    (``seen_keys``), then maps+audits just those. Returns the same shape as ``run_tailwind``, and
-    only catalysts that have at least one verified beneficiary (an alert with no actionable name is
-    noise). Empty is the common, correct result on a quiet day."""
+    keeps **fresh, in-effect/proposed** disruptions NOT already surfaced (``seen_keys``), maps+audits
+    a bounded set of them (``_URGENT_MAP_CAP``, highest-severity first), then surfaces a catalyst only
+    if it has ≥1 verified beneficiary **and** it is either **high-severity** OR carries a **small/mid-
+    cap** beneficiary (the non-obvious names a low-severity shock still moves — e.g. a niche
+    export-substitution play). Same shape as ``run_tailwind``. Empty is the common, correct result on
+    a quiet day. Cost stays bounded because we drop already-seen shocks *before* mapping, so only
+    genuinely new disruptions ever reach the (expensive) mapper."""
     signals = _scout_signals(days)
     if not signals:
         return {"catalysts": [], "keys": [], "n_signals": 0, "n_catalysts": 0}
     disruptions = synthesize.tailwind_analyst(
         signals, chokepoints=[c["material"] for c in _CHOKEPOINTS])
     fresh = [d for d in disruptions
-             if d.get("severity") == "high" and d.get("status") in _FRESH_STATUS
+             if d.get("status") in _FRESH_STATUS
              and d.get("source_url") and catalyst_key(d) not in seen_keys]
     if not fresh:
-        log.info("tailwind-urgent: nothing fresh & high-severity (of %d disruptions)", len(disruptions))
+        log.info("tailwind-urgent: nothing fresh & unseen (of %d disruptions)", len(disruptions))
         return {"catalysts": [], "keys": [], "n_signals": len(signals), "n_catalysts": 0}
 
+    fresh.sort(key=lambda d: _SEV_RANK.get(d.get("severity", ""), 3))   # never starve a high-sev shock
     watch = {s for (s,) in con.execute("SELECT symbol FROM watchlist").fetchall()}
-    out = [c for c in _map_and_audit(con, fresh[:max_catalysts], watch) if c["beneficiaries"]]
-    log.info("tailwind-urgent: %d actionable fresh catalyst(s)", len(out))
+    mapped = _map_and_audit(con, fresh[:_URGENT_MAP_CAP], watch)
+    out = [c for c in mapped if c["beneficiaries"]
+           and (c.get("severity") == "high" or _has_smallmid_beneficiary(c))][:max_catalysts]
+    log.info("tailwind-urgent: %d actionable fresh catalyst(s) (of %d fresh, %d disruptions)",
+             len(out), len(fresh), len(disruptions))
     return {"catalysts": out, "keys": [catalyst_key(c) for c in out],
             "n_signals": len(signals), "n_catalysts": len(out)}

@@ -24,7 +24,7 @@ independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](R
 | 📊 **Full digest** | first wake **≥18:00**, once/trading-day | `maybe_scan` | The watchlist scan (this doc). |
 | 📡 **Screener movements** | **Sat ≥18:00**, once/ISO-week | `maybe_screen_digest` | Trigger-based deltas across the screens (nothing crossed → no email). |
 | 🔄 **Sector rotation** | **Sat ≥18:00**, once/ISO-week | `maybe_sector_rotation` | All sectors ranked — leaders/laggards/value-turning. |
-| 💨 **Tailwind** | **Sat ≥18:00** weekly + **Mon–Fri ≥18:00** urgent break-in | `maybe_tailwind` / `maybe_tailwind_urgent` | Global supply-shock → verified Indian beneficiaries; the urgent pass only sends when a fresh high-severity shock lands. |
+| 💨 **Tailwind** | **Sat ≥18:00** weekly + **Mon–Fri** urgent break-ins at **08:30 / 12:30 / 18:00** | `maybe_tailwind` / `maybe_tailwind_urgent` | Global supply-shock → verified Indian beneficiaries; the urgent pass sends only when a fresh shock lands (high-severity, or carrying a small/mid-cap name). |
 | 🧹 **Mailbox housekeeping** | every heartbeat (≤ every 15 min) | `maybe_mail_housekeeping` | Moves processed **workbench** mail (requests handled + reports sent, matched by the `X-EquityBot` header) on the bot's own Gmail to Trash **~30 min after sending**, scoped to the client address so personal mail is untouched. `mail_cleanup.sweep_server_mailbox`. |
 
 ## Pieces

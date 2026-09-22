@@ -348,23 +348,27 @@ def mark_tailwind(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
-def already_tailwind_urgent_today(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True if the mid-week urgent-Tailwind check already ran today (the pipeline is ~1–2 min, so
-    it runs at most once per trading evening regardless of whether it found anything)."""
+def tailwind_urgent_slot_done(slot: str, con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True if the urgent-Tailwind check already ran for today's ``slot`` (e.g. 'premarket' / 'midday'
+    / 'evening'). Slots run in time order, so a single 'date:slot' marker is enough — we only ever
+    test the current slot, never an earlier one. Keeps each ~1–2 min pass to once per slot per day,
+    whether or not it found anything."""
     own = con is None
     con = con or connect()
     try:
-        return _meta(con, "last_tailwind_urgent_date") == datetime.now(_IST).date().isoformat()
+        today = datetime.now(_IST).date().isoformat()
+        return _meta(con, "last_tailwind_urgent_slot") == f"{today}:{slot}"
     finally:
         if own:
             con.close()
 
 
-def mark_tailwind_urgent(con: duckdb.DuckDBPyConnection | None = None) -> None:
+def mark_tailwind_urgent_slot(slot: str, con: duckdb.DuckDBPyConnection | None = None) -> None:
     own = con is None
     con = con or connect()
     try:
-        _set_meta(con, "last_tailwind_urgent_date", datetime.now(_IST).date().isoformat())
+        today = datetime.now(_IST).date().isoformat()
+        _set_meta(con, "last_tailwind_urgent_slot", f"{today}:{slot}")
     finally:
         if own:
             con.close()
