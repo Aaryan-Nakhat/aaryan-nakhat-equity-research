@@ -298,5 +298,32 @@ SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:0
 | **Store** | 17 tables (incl. `shareholding`, `insider_trades`, `mf_scheme`/`mf_nav`/`mf_amc`/`mf_holdings`, `concall_signals`, `alert_keywords`) | `common/db.py` → `data/processed/equity.duckdb` |
 | **Analyse** | deterministic Python (sector-lens valuation, MC/reverse-DCF, forensic, FII positioning, MF returns/risk, ownership-diff + **smart-money cost/booking-risk**, holdco-discount + fundamental screeners, **volume-breakout / market-beaters / institutional-buying discovery + 🔥 multi-signal Hotlist**, marquee-investor tracking, **top-down sector analysis + rotation**, **supply-chain mapping**, **💨 Tailwind global supply-shock → beneficiaries**, **⛏️ Pickaxe surging-demand → indirect beneficiaries**, **🎙️ Concalls earnings-call tone-vs-execution**, **📈 Results Radar just-reported strength**, **🏢 employer sentiment**) | `analysis/{fundamentals,forensic,valuation,sector,sector_analysis,supply_chain,technical,technical_screen,quant,alerts,positioning,funds,ownership,booking_risk,holdco,screener,fundamental_screens,momentum,leaders,accumulation,hotlist,investors,tailwind,pickaxe,call_radar,results_radar,keyword_alerts,employer_sentiment}.py` |
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
+| **Config** | single source of truth for every tunable knob — timezone, schedule, feature toggles, cache TTLs, timeouts, market-cap bands, analytical thresholds; read from env with defaults = original behaviour | `config.py`, `.env.example` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, mid-week urgent Tailwind, ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu | `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, urgent Tailwind break-ins (pre-market/midday/evening on trading days), ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu | `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
+
+## Configuration (`config.py`)
+
+Every tunable knob lives in one place — **`src/equity_research/config.py`** — read from the
+environment (a gitignored `.env`) via small typed helpers (`env_str/int/float/bool/csv/time/times/
+weekday`). **Every value has a default equal to the original behaviour**, so a fresh clone runs
+identically with zero configuration; modules `from equity_research import config` and read
+`config.EOD_HOUR`, `config.TZ`, etc. rather than hardcoding. Two documentation tiers in
+[`.env.example`](../.env.example) (the split is only how prominently a var appears — all are equally
+overridable):
+
+- **Tier 1 (headline).** `TIMEZONE`; the delivery schedule (`PUSH_PREMARKET`, `PUSH_MIDDAY`,
+  `PUSH_EOD_HOUR`, `WEEKLY_PUSH_DAY`, `TAILWIND_URGENT_SLOTS` — empty disables urgent alerts,
+  `HEARTBEAT_SECONDS`, `MENU_TTL_HOURS`); per-push **feature toggles** (`ENABLE_PREMARKET … ENABLE_
+  MAIL_HOUSEKEEPING`, all default on, gated at the heartbeat call sites so on-demand email commands
+  still work when a push is off); cache TTLs; render/screen timeouts; market-cap bands
+  (`SMALLCAP/MIDCAP/LARGECAP_MAX_CR`); `RISK_FREE_RATE`; `BIG_MOVE_PCT`.
+- **Tier 2 (advanced).** Deep analytical thresholds — background-pass cadence gaps, result caps,
+  screen liquidity/turnover floors, ownership deltas, radar windows, projection horizon, fund knobs.
+
+**India-market structural assumptions are NOT config** — Nifty benchmarks, the ₹-crore scale, the
+data sources (NSE/BSE/PIB/AMFI/FBIL/MCX), `geo=IN` and SEBI-disclosure concepts are baked in; this is
+an India (NSE/BSE) build, and `TIMEZONE` mainly shifts *delivery* times rather than making it a
+different market's tool. Secrets/identity (SMTP/IMAP, `LLM_*`, allowlist, watchlist) are read directly
+by their own modules; the ToS opt-ins (`NSE_SCRAPING_ENABLED`, `EMPLOYER_REVIEWS_ENABLED`) stay where
+they are enforced.
