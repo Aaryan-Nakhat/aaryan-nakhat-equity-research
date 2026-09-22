@@ -19,6 +19,7 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.reports import synthesize
 from equity_research.scrapers import nse_shp, pib
 
@@ -32,7 +33,7 @@ _GATE = ("scheme", "pli", "production linked", "production-linked", "incentive",
          "duty", "tariff", "manufactur", "corridor", "package", "launch", "boost", "invest",
          "crore", "₹", "incentivis", "fund for", "capital", "hydrogen", "semiconductor",
          "renewable", "infrastructure", "ethanol", "defence production")
-_MAX_CLASSIFY = 55          # cap releases sent to the LLM in one call (token / latency guard)
+_MAX_CLASSIFY = config.POLICY_MAX_CLASSIFY          # cap releases sent to the LLM in one call (token / latency guard)
 
 
 def _looks_economic(text: str) -> bool:

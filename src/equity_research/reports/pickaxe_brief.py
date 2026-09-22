@@ -16,17 +16,17 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import pickaxe
 from equity_research.reports import charts
 from equity_research.scrapers import trends
 
 log = logging.getLogger("equity-research.pickaxe")
 
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = config.TZ
 _DUR_EMOJI = {"structural": "🌳", "emerging": "🌱", "faddish": "⚡"}
 
 _LEGEND = (
@@ -199,7 +199,7 @@ def _theme_block(t: dict, start_no: int, detail: dict | None) -> tuple[str, list
 
 
 def build_pickaxe_report(con: duckdb.DuckDBPyConnection, *, days: int = 21,
-                         max_themes: int = 6, use_cache: bool = False) -> dict | None:
+                         max_themes: int = config.PICKAXE_MAX_THEMES, use_cache: bool = False) -> dict | None:
     """Run the pipeline, deep-enrich every name, fetch a Google-Trends chart per theme, and format
     it all. Returns ``{markdown, picks, keys, n_themes, images}`` (``images`` = (caption, png) for the
     PDF) or ``None`` when nothing surfaced. 24h-cached; ``use_cache=False`` always runs fresh."""

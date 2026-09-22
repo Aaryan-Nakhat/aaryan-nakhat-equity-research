@@ -29,6 +29,8 @@ import logging
 import time
 from urllib.parse import quote
 
+from equity_research import config
+
 log = logging.getLogger("equity-research.pickaxe")
 
 # Consumer-demand categories (Google Trends numeric category IDs) — where a retail buying surge
@@ -178,7 +180,7 @@ def _collect(targets: list[dict]) -> dict[str, dict]:
     return results
 
 
-def scout_buy_surges(*, per_cat: int = 10, max_signals: int = 40) -> list[dict]:
+def scout_buy_surges(*, per_cat: int = config.TRENDS_PER_CAT, max_signals: int = config.TRENDS_MAX_SIGNALS) -> list[dict]:
     """Sweep every consumer category (ONE browser session) for rising "buy" queries and merge into a
     deduped list of demand signals ``[{phrase, change, category}]``. ``[]`` if Trends is unavailable
     (the pipeline then runs LLM-only). The raw list is deliberately unfiltered (spam/fad queries

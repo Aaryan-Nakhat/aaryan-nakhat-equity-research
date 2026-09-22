@@ -9,14 +9,14 @@ where ``picks`` drives the numbered-reply → deep-report flow. ``None`` when no
 from __future__ import annotations
 
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import tailwind
 from equity_research.reports import md
 
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = config.TZ
 
 _STATUS_EMOJI = {"in-effect": "🔴", "proposed": "🟠", "rumored": "🟡"}
 _SEV_EMOJI = {"high": "🔥", "medium": "▲", "low": "•"}
@@ -91,7 +91,7 @@ def _catalyst_block(c: dict, start_no: int) -> tuple[str, list]:
 
 
 def build_tailwind_report(con: duckdb.DuckDBPyConnection, *, days: int = 14,
-                          max_catalysts: int = 8, use_cache: bool = False) -> dict | None:
+                          max_catalysts: int = config.TAILWIND_MAX_CATALYSTS, use_cache: bool = False) -> dict | None:
     """Run the pipeline and format it. Returns ``{markdown, picks, keys, n_catalysts}`` (plus
     ``from_cache``/``cached_at`` when served from cache) or ``None`` when nothing surfaced.
 

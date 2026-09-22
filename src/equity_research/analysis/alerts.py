@@ -20,11 +20,12 @@ from datetime import datetime
 import duckdb
 import numpy as np
 
+from equity_research import config
 from equity_research.analysis import forensic, fundamentals, technical, valuation
 
 # Thresholds
 DELIV_SPIKE = 1.5        # today deliv% / 20d avg
-BIG_MOVE = 0.06          # |1-day return|
+BIG_MOVE = config.BIG_MOVE_PCT          # |1-day return|
 PLEDGE_RISE_PP = 1.0     # promoter-pledge rise (percentage points of promoter holding) to alert on
 
 EMOJI = {"red": "🔴", "green": "🟢", "warn": "⚠️", "info": "🔔", "filing": "📄",

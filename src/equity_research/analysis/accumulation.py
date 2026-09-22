@@ -17,12 +17,13 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import ownership
 
 log = logging.getLogger(__name__)
 
-_MIN_PROMOTER_DELTA = 0.10     # promoter stake up ≥ 0.10 pp QoQ to qualify on the promoter leg
-_ENRICH_CAP = 40               # how many top candidates get the (heavier) holder-level enrichment
+_MIN_PROMOTER_DELTA = config.ACCUM_MIN_PROMOTER_DELTA     # promoter stake up ≥ 0.10 pp QoQ to qualify on the promoter leg
+_ENRICH_CAP = config.ACCUM_ENRICH_CAP               # how many top candidates get the (heavier) holder-level enrichment
 
 
 def scan(con: duckdb.DuckDBPyConnection, *, limit: int = 20) -> list[dict]:

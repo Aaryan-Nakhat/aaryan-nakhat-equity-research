@@ -26,7 +26,6 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 # make src/ importable when run as a plain script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -59,25 +58,24 @@ from equity_research.reports.synthesize import fund_thesis  # noqa: E402
 from equity_research.scrapers import ipo  # noqa: E402
 from equity_research.reports.resolve import resolve  # noqa: E402
 from equity_research.reports import fund_brief  # noqa: E402
+from equity_research import config  # noqa: E402
 
-IST = ZoneInfo("Asia/Kolkata")
-SCAN_HOUR = 18
-INTRADAY_HOUR, INTRADAY_MIN = 12, 30    # midday same-day digest (12:30 IST)
-INTRADAY_CUTOFF_HOUR = 14               # don't fire a stale "midday" digest after 2pm
-PREMARKET_HOUR, PREMARKET_MIN = 8, 30   # pre-open GIFT Nifty digest (08:30 IST)
-PREMARKET_CUTOFF_HOUR = 12             # catch-up: laptop is asleep at 08:30, so fire on the FIRST
-                                       # heartbeat after 08:30 (typically your ~09:25 login), up to
-                                       # noon (the 12:30 midday digest takes over past that). Past the
-                                       # 09:15 open the digest self-relabels to a "gap so far" snapshot.
-# Urgent Tailwind break-in slots (IST) — the mid-week supply-shock alert fires once per slot on a
-# trading day (deduped so no shock repeats): pre-market (names in hand before the open), midday
-# (still intra-session), and post-close evening. Reuses the digest hour constants so they stay in sync.
-URGENT_SLOTS = [(PREMARKET_HOUR, PREMARKET_MIN, "premarket"),
-                (INTRADAY_HOUR, INTRADAY_MIN, "midday"), (SCAN_HOUR, 0, "evening")]
-IDLE_TIMEOUT = 300          # IDLE wait + daily-scan heartbeat (< Gmail's ~29 min cap)
-PENDING_TTL_H = 24          # how long a "which one?" choice stays answerable
-MAIL_BIN_AFTER_MIN = 30     # server-account: bin workbench mail this old (sending is long done)
-MAIL_SWEEP_EVERY_MIN = 15   # how often the housekeeping pass runs (a cheap IMAP search)
+# Delivery schedule, toggles and cadence all come from equity_research.config (env-driven, defaults =
+# original behaviour). These module-level aliases keep the rest of the file terse. See config.py.
+IST = config.TZ
+SCAN_HOUR = config.EOD_HOUR                             # full daily digest + all weekly pushes
+INTRADAY_HOUR, INTRADAY_MIN = config.MIDDAY             # midday same-day digest
+INTRADAY_CUTOFF_HOUR = config.MIDDAY_CUTOFF_HOUR        # don't fire a stale "midday" digest after this
+PREMARKET_HOUR, PREMARKET_MIN = config.PREMARKET        # pre-open GIFT Nifty digest
+PREMARKET_CUTOFF_HOUR = config.PREMARKET_CUTOFF_HOUR    # latest a catch-up pre-market digest may fire
+# Urgent Tailwind break-in slots — the supply-shock alert fires once per slot on a trading day
+# (deduped so no shock repeats). Empty (TAILWIND_URGENT_SLOTS=) disables urgent alerts entirely.
+URGENT_SLOTS = config.URGENT_SLOTS
+WEEKLY_PUSH_WEEKDAY = config.WEEKLY_PUSH_WEEKDAY        # weekday (Mon=0…Sun=6) the weekly pushes fire
+IDLE_TIMEOUT = config.HEARTBEAT_SECONDS     # IDLE wait + heartbeat (< Gmail's ~29 min cap)
+PENDING_TTL_H = config.MENU_TTL_HOURS       # how long a "which one?" choice stays answerable
+MAIL_BIN_AFTER_MIN = config.MAIL_BIN_AFTER_MIN     # server-account: bin workbench mail this old
+MAIL_SWEEP_EVERY_MIN = config.MAIL_SWEEP_EVERY_MIN # how often the housekeeping pass runs
 
 ALLOWED = {a.strip().lower() for a in os.environ.get("EMAIL_ALLOWED_SENDERS", "").split(",") if a.strip()}
 
@@ -230,7 +228,7 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
         con.close()
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, symbol, images).result(timeout=150)
+        return ex.submit(report_to_pdf, report_md, symbol, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
     except Exception:  # noqa: BLE001 — timeout or render failure
         log.exception("report PDF generation failed/timed out for %s — sending body-only", symbol)
         return None
@@ -344,7 +342,7 @@ def _text_pdf(report_md: str, title: str) -> bytes | None:
     timeout so a hung Chromium render never blocks; the note is already in the email body."""
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, title, []).result(timeout=150)
+        return ex.submit(report_to_pdf, report_md, title, []).result(timeout=config.PDF_RENDER_TIMEOUT_S)
     except Exception:  # noqa: BLE001 — timeout or render failure
         log.exception("PDF failed/timed out for %r — sending body-only", title)
         return None
@@ -353,7 +351,7 @@ def _text_pdf(report_md: str, title: str) -> bytes | None:
 
 
 # ----------------- IPO (pre-listing) -----------------
-def _ipo_list_safe(fn, *, timeout: int = 150):
+def _ipo_list_safe(fn, *, timeout: int = config.PDF_RENDER_TIMEOUT_S):
     """Run a browser-tier IPO list fetch under a HARD timeout so a wedged Camoufox session
     can never freeze the request loop. Returns ``None`` (== fetch failure, so the caller
     replies 'try again') on timeout or error; the healthy fetch takes ~60-90s."""
@@ -670,7 +668,7 @@ def _levels_pdf(report_md: str, symbol: str, images: list) -> bytes | None:
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
         return ex.submit(report_to_pdf, report_md, f"{symbol} — Trading levels",
-                         images).result(timeout=90)
+                         images).result(timeout=config.LEVELS_PDF_TIMEOUT_S)
     except Exception:  # noqa: BLE001
         log.exception("levels PDF failed for %s", symbol)
         return None
@@ -722,7 +720,7 @@ def _send_levels(query: str, req: EmailRequest) -> None:
     log.info("sent levels for %s to %s", symbol, req.sender)
 
 
-def _screen_run(fn, *, timeout: int = 300):
+def _screen_run(fn, *, timeout: int = config.SCREEN_TIMEOUT_S):
     """Run a screener under a HARD timeout (they loop the universe with per-symbol analysis).
     Returns None on timeout/error so the caller replies honestly instead of hanging."""
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -905,7 +903,7 @@ def _send_fundamental_screen(req: EmailRequest) -> None:
                      "the Nifty-500 (~1–2 min). The ranked list will land in this thread.")
     con = connect()
     try:
-        rows = _screen_run(lambda: screener.fundamental_screen(con, limit=20))
+        rows = _screen_run(lambda: screener.fundamental_screen(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1006,7 +1004,7 @@ def _send_tailwind(req: EmailRequest) -> None:
     con = connect()
     try:
         rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con, use_cache=not latest),
-                          timeout=420)
+                          timeout=config.TAILWIND_TIMEOUT_S)
     finally:
         con.close()
     if not rep:
@@ -1224,7 +1222,7 @@ def _send_smallcap_screen(req: EmailRequest) -> None:
                      "**capex cycle**, with traps gated out. ~1–2 min; the ranked list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: smallcap.smallcap_screen(con, limit=20))
+        rows = _screen_run(lambda: smallcap.smallcap_screen(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1290,7 +1288,7 @@ def _send_technical_screen(req: EmailRequest) -> None:
                      "~1 min; the ranked list lands in this thread.")
     con = connect()
     try:
-        rows = _screen_run(lambda: technical_screen.technical_screen(con, limit=15))
+        rows = _screen_run(lambda: technical_screen.technical_screen(con, limit=config.TECHNICAL_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1342,7 +1340,7 @@ def _send_volume_screen(req: EmailRequest) -> None:
                      "uptrend intact, with a volume surge). ~1 min; the ranked list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: momentum.scan(con, limit=20))
+        rows = _screen_run(lambda: momentum.scan(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1380,7 +1378,7 @@ def _send_beaters_screen(req: EmailRequest) -> None:
                      "3/6/12 months, still trending up). ~1 min; the list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: leaders.scan(con, limit=20))
+        rows = _screen_run(lambda: leaders.scan(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1416,7 +1414,7 @@ def _send_institutions_screen(req: EmailRequest) -> None:
                      "promoters raised their own stake last quarter, and who's adding alongside. ~1 min.")
     con = connect()
     try:
-        rows = _screen_run(lambda: accumulation.scan(con, limit=20))
+        rows = _screen_run(lambda: accumulation.scan(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1453,7 +1451,7 @@ def _send_margins_screen(req: EmailRequest) -> None:
                      "revenue). ~1 min; the ranked list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: fundamental_screens.margin_momentum(con, limit=20))
+        rows = _screen_run(lambda: fundamental_screens.margin_momentum(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1486,7 +1484,7 @@ def _send_deleverage_screen(req: EmailRequest) -> None:
                      "while staying profitable). ~1 min; the list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: fundamental_screens.debt_payers(con, limit=20))
+        rows = _screen_run(lambda: fundamental_screens.debt_payers(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1520,7 +1518,7 @@ def _send_quality_screen(req: EmailRequest) -> None:
                      "clean books). ~1-2 min; the list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: fundamental_screens.compounders(con, limit=20))
+        rows = _screen_run(lambda: fundamental_screens.compounders(con, limit=config.SCREEN_RESULT_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -1580,7 +1578,8 @@ def _send_hotlist(req: EmailRequest) -> None:
         if cached and cached.get("report", {}).get("picks"):
             rep, from_cache, cached_at = cached["report"], True, cached.get("cached_at")
         else:
-            rows = _screen_run(lambda: hotlist.build(con, limit=25), timeout=420)
+            rows = _screen_run(lambda: hotlist.build(con, limit=config.HOTLIST_LIMIT),
+                               timeout=config.HOTLIST_TIMEOUT_S)
             if rows is None:
                 _reply_text(req, "The Hotlist timed out this time — please resend `hotlist` shortly.")
                 return
@@ -1722,7 +1721,8 @@ def _send_policy_screen(req: EmailRequest) -> None:
                      "listed companies it affects. ~1 min; the list lands here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: policy.policy_scan(con, limit_releases=120), timeout=300)
+        rows = _screen_run(lambda: policy.policy_scan(con, limit_releases=config.POLICY_LIMIT_RELEASES),
+                           timeout=config.POLICY_TIMEOUT_S)
     finally:
         con.close()
     if rows is None:
@@ -1786,7 +1786,7 @@ def _send_holdco_screen(req: EmailRequest) -> None:
                      "listed stakes (the Elcid pattern). ~1 min; the ranked list will land here.")
     con = connect()
     try:
-        rows = _screen_run(lambda: holdco.holdco_discounts(con, limit=20))
+        rows = _screen_run(lambda: holdco.holdco_discounts(con, limit=config.HOLDCO_LIMIT))
     finally:
         con.close()
     if rows is None:
@@ -2020,7 +2020,7 @@ def _fund_pdf(con, scheme_code: int, report_md: str, name: str) -> bytes | None:
         images = []
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, name, images).result(timeout=150)
+        return ex.submit(report_to_pdf, report_md, name, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
     except Exception:  # noqa: BLE001
         log.exception("fund PDF failed/timed out for scheme %s — body-only", scheme_code)
         return None
@@ -2402,7 +2402,7 @@ def maybe_screen_digest() -> None:
     threshold. Fingerprints advance ONLY after a successful send, so a delivery failure
     re-surfaces the same deltas next time rather than eating them."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:      # Saturday evening, weekly
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:      # Saturday evening, weekly
         return
     if not screen_digest.due_this_week():
         return
@@ -2429,7 +2429,7 @@ def maybe_sector_rotation() -> None:
     value-turning candidates. Reads the latest EOD, so a weekend fire is fine. The week-marker
     advances only after a successful send."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:      # Saturday evening, weekly
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:      # Saturday evening, weekly
         return
     if not scan.sector_rotation_due():
         return
@@ -2463,7 +2463,7 @@ def maybe_tailwind() -> None:
     email if nothing genuine surfaced; the week-marker advances only after a successful send (or a
     clean empty result), so a delivery failure re-surfaces it next heartbeat."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening, weekly
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:          # Saturday evening, weekly
         return
     if not scan.tailwind_due():
         return
@@ -2505,14 +2505,14 @@ def _current_urgent_slot(now: datetime) -> str | None:
 
 
 def maybe_tailwind_urgent() -> None:
-    """Mid-week urgent break-in: on a trading day (Mon–Fri), at each of three IST slots (pre-market
-    08:30, midday 12:30, evening 18:00), run the lighter Tailwind pass and — only if a FRESH shock
-    with a verified Indian beneficiary just landed (high-severity, or carrying a small/mid-cap name) —
-    send a compact '💨 Fresh supply shock' email. Saturday is skipped (the full weekly push covers
-    it). Marks each slot done whether or not it sent, so the ~1–2 min pipeline runs at most once per
-    slot; the seen-set stops it repeating a shock across slots and days."""
+    """Urgent break-in: on a trading day (not the weekly-push day), at each configured slot
+    (`config.URGENT_SLOTS`, default pre-market / midday / evening), run the lighter Tailwind pass and —
+    only if a FRESH shock with a verified Indian beneficiary just landed (high-severity, or carrying a
+    small/mid-cap name) — send a compact '💨 Fresh supply shock' email. The weekly-push day is skipped
+    (the full push covers it). Marks each slot done whether or not it sent, so the ~1–2 min pipeline
+    runs at most once per slot; the seen-set stops it repeating a shock across slots and days."""
     now = datetime.now(IST)
-    if now.weekday() == 5:                                  # Sat → the weekly push handles it
+    if now.weekday() == WEEKLY_PUSH_WEEKDAY:                # weekly-push day → the full push handles it
         return
     slot = _current_urgent_slot(now)
     if slot is None:                                        # before pre-market — nothing due yet
@@ -2537,8 +2537,7 @@ def maybe_tailwind_urgent() -> None:
         log.error("no REPORT_TO / allowlist — cannot send urgent Tailwind")
         return
     today = datetime.now(IST).date().isoformat()
-    label = {"premarket": "pre-market", "midday": "midday", "evening": "evening"}.get(slot, slot)
-    emailer.send_report(f"💨 Fresh supply shock — {today} ({label})", rep["markdown"], to=to,
+    emailer.send_report(f"💨 Fresh supply shock — {today} ({slot})", rep["markdown"], to=to,
                         html=emailer.body_html(rep["markdown"], "Fresh supply shock"))
     scan.add_tailwind_seen(rep.get("keys", []))            # don't re-alert this shock the rest of the week
     log.info("urgent Tailwind break-in sent to %s (%s slot, %d catalysts)", to, slot, rep["n_catalysts"])
@@ -2551,7 +2550,7 @@ def maybe_pickaxe() -> None:
     month-marker advances only inside the worker after a successful send (or a clean empty result),
     so a delivery failure re-surfaces it next heartbeat. On-demand `pickaxe` runs any time."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:          # Saturday evening (monthly due-gate below)
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:          # Saturday evening (monthly due-gate below)
         return
     if not scan.pickaxe_due() or _pickaxe_lock.locked():
         return
@@ -2580,7 +2579,7 @@ def _concall_ingest_worker() -> None:
         return
     con = connect()
     try:
-        n = call_radar.ingest_new(con, max_new=8)
+        n = call_radar.ingest_new(con, max_new=config.CALL_RADAR_MAX_NEW)
         scan.mark_concall_ingest(con)
         if n:
             log.info("Concalls: scored %d new transcript(s) this pass", n)
@@ -2604,7 +2603,7 @@ def maybe_call_radar() -> None:
     earnings calls (forward tone vs delivered numbers). Reads the pre-scored table, so it's cheap.
     On-demand `calls` runs any time."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:
         return
     if not scan.call_radar_due():
         return
@@ -2644,7 +2643,7 @@ def _results_ingest_worker() -> None:
         return
     con = connect()
     try:
-        n = results_radar.refresh_new(con, max_new=6)
+        n = results_radar.refresh_new(con, max_new=config.RESULTS_MAX_NEW)
         scan.mark_results_ingest(con)
         if n:
             log.info("Results Radar: refreshed %d just-reported name(s) this pass", n)
@@ -2667,7 +2666,7 @@ def maybe_results() -> None:
     """Fire the 📈 Results Radar push once per ISO week (Saturday ≥18:00 IST): the strongest
     just-reported quarters. Reads the numbers (no LLM), so it's cheap. On-demand `results` any time."""
     now = datetime.now(IST)
-    if now.weekday() != 5 or now.hour < SCAN_HOUR:
+    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:
         return
     if not scan.results_radar_due():
         return
@@ -2776,27 +2775,40 @@ def main() -> None:
                 # request sent while busy (or one IDLE simply misses) would otherwise wait for
                 # a *later* email to nudge it. An unconditional drain each loop guarantees every
                 # UNSEEN request is picked up within one cycle — no more "send it 3-4 times".
+                # Each scheduled push is gated by its config.ENABLE_* flag (all default on); the
+                # on-demand email commands stay available regardless. Disable a push in .env to skip it.
                 _drain(inbox)
-                maybe_premarket()    # heartbeat: pre-open GIFT Nifty digest (08:30–09:00 IST)
-                maybe_intraday()     # heartbeat: midday same-day digest (12:30–14:00 IST)
-                maybe_scan()         # heartbeat: full digest, fires at most once/day ≥18:00
-                maybe_screen_digest()  # heartbeat: weekly screener-movements digest (Sat ≥18:00)
-                maybe_sector_rotation()  # heartbeat: weekly sector-rotation push (Sat ≥18:00)
-                maybe_tailwind()     # heartbeat: weekly global supply-shock → beneficiaries (Sat ≥18:00)
-                maybe_tailwind_urgent()  # heartbeat: mid-week urgent break-in on a fresh big shock (Mon–Fri ≥18:00)
-                maybe_pickaxe()      # heartbeat: monthly surging-demand → indirect beneficiaries (1st Sat ≥18:00)
-                maybe_concall_ingest()   # heartbeat: incremental earnings-call scoring (background, ~hourly)
-                maybe_call_radar()   # heartbeat: weekly 🎙️ Concalls push (Sat ≥18:00)
-                maybe_results_ingest()   # heartbeat: refresh just-reported names' financials (background, ~hourly)
-                maybe_results()      # heartbeat: weekly results-radar push (Sat ≥18:00)
-                maybe_alert_scan()   # heartbeat: keyword filing-alert sweep (background, ~20min, 8-23h IST)
-                maybe_mail_housekeeping()  # heartbeat: bin processed workbench mail >30min on this server account
+                if config.ENABLE_PREMARKET:
+                    maybe_premarket()    # pre-open GIFT Nifty digest
+                if config.ENABLE_MIDDAY:
+                    maybe_intraday()     # midday same-day digest
+                if config.ENABLE_EOD_DIGEST:
+                    maybe_scan()         # full daily digest (once/day ≥ EOD_HOUR)
+                if config.ENABLE_SCREEN_DIGEST:
+                    maybe_screen_digest()  # weekly screener-movements digest
+                if config.ENABLE_SECTOR_ROTATION:
+                    maybe_sector_rotation()  # weekly sector-rotation push
+                if config.ENABLE_TAILWIND:
+                    maybe_tailwind()         # weekly global supply-shock → beneficiaries
+                    maybe_tailwind_urgent()  # urgent break-in on a fresh shock (per URGENT_SLOTS)
+                if config.ENABLE_PICKAXE:
+                    maybe_pickaxe()      # monthly surging-demand → indirect beneficiaries
+                if config.ENABLE_CONCALLS:
+                    maybe_concall_ingest()   # incremental earnings-call scoring (background)
+                    maybe_call_radar()       # weekly 🎙️ Concalls push
+                if config.ENABLE_RESULTS_RADAR:
+                    maybe_results_ingest()   # refresh just-reported names' financials (background)
+                    maybe_results()          # weekly results-radar push
+                if config.ENABLE_KEYWORD_ALERTS:
+                    maybe_alert_scan()   # keyword filing-alert sweep (background)
+                if config.ENABLE_MAIL_HOUSEKEEPING:
+                    maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout
         except Exception:  # noqa: BLE001 — connection dropped / IDLE expired
-            log.exception("inbox session error — reconnecting in 15s")
+            log.exception("inbox session error — reconnecting in %ds", config.RECONNECT_BACKOFF_S)
         finally:
             inbox.logout()
-        time.sleep(15)
+        time.sleep(config.RECONNECT_BACKOFF_S)
 
 
 def _dedupe(reqs: list) -> tuple[list, list]:

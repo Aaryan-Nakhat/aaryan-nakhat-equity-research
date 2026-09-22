@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import sector_analysis, supply_chain
 from equity_research.reports import md, synthesize
 
@@ -258,11 +259,10 @@ def build_sector_rotation(con: duckdb.DuckDBPyConnection) -> str | None:
     """Weekly (and on-demand) sector-rotation digest: leaders / laggards / value-turning across all
     sectors. ``None`` if nothing ranked. Deterministic — no LLM, no network."""
     from datetime import datetime
-    from zoneinfo import ZoneInfo
     r = sector_analysis.rank_all_sectors(con)
     if not r["all"]:
         return None
-    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    today = datetime.now(config.TZ).date()
     parts = [f"# 🔄 Sector rotation — week of {today:%d-%b-%Y}",
              "_Where money is rotating (relative strength vs Nifty) and where value is starting to "
              "turn. Reply `sector: <name>` for the full read on any one._"]

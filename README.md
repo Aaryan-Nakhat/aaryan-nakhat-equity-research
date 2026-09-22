@@ -287,8 +287,14 @@ Configure `.env` (all secrets are read from the environment; `.env` is gitignore
 [`.env.example`](.env.example) for every variable):
 - **LLM** — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
   (or `LLM_BASE_URL` for a custom endpoint). Runs on any provider via [LiteLLM](https://docs.litellm.ai).
-- **Delivery** — Gmail SMTP/IMAP (app password)
-  (a BotFather token + your allowed user IDs).
+- **Delivery** — one Gmail for both sending and reading requests (SMTP/IMAP app password), plus
+  `EMAIL_ALLOWED_SENDERS` (who may request reports) and `REPORT_TO` (where pushes go).
+- **Schedule, toggles & tuning** — every delivery time, the weekly-push day, per-feature on/off
+  switches, the timezone, cache TTLs, timeouts and analytical thresholds are read from `.env` by
+  [`src/equity_research/config.py`](src/equity_research/config.py) — **all optional, each defaulting
+  to the built-in behaviour**, so nothing here is required to get started. `.env.example` documents
+  them in two tiers (headline vs advanced). E.g. `TAILWIND_URGENT_SLOTS=` disables urgent alerts;
+  `ENABLE_PICKAXE=false` skips that push.
 
 Bootstrap the local data store, then run a report or the bot:
 

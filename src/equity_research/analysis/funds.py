@@ -18,11 +18,13 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-_RF_DEFAULT = 0.065          # ~India 1y risk-free
-_TRADING_DAYS = 252
+from equity_research import config
+
+_RF_DEFAULT = config.RISK_FREE_RATE          # ~India 1y risk-free
+_TRADING_DAYS = config.FUNDS_TRADING_DAYS
 # horizon label -> lookback in days (None = since inception)
 _HORIZONS = {"1m": 30, "3m": 91, "6m": 182, "1y": 365, "3y": 1095, "5y": 1825, "incep": None}
-_ASOF_TOL_DAYS = 12          # accept a NAV within this many days of the target date
+_ASOF_TOL_DAYS = config.FUNDS_ASOF_TOL_DAYS          # accept a NAV within this many days of the target date
 
 
 def nav_series(con: duckdb.DuckDBPyConnection, scheme_code: int) -> pd.Series:
@@ -136,7 +138,7 @@ def _xirr(flows: list[tuple[date, float]], lo: float = -0.95, hi: float = 10.0) 
     return (lo + hi) / 2
 
 
-def sip_returns(series: pd.Series, monthly: float = 10_000.0,
+def sip_returns(series: pd.Series, monthly: float = config.FUNDS_SIP_MONTHLY,
                 horizons: tuple[int, ...] = (1, 3, 5)) -> dict[str, dict]:
     """Simulate a monthly SIP of ``monthly`` into this scheme for each horizon —
     what you'd have invested, what it'd be worth, and the **XIRR** (money-weighted

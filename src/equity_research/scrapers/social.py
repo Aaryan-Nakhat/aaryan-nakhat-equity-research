@@ -25,6 +25,7 @@ import logging
 import re
 from xml.etree import ElementTree as ET
 
+from equity_research import config
 from equity_research.common.http import fetch_json, fetch_text
 
 log = logging.getLogger("equity-research.tailwind")
@@ -150,7 +151,7 @@ def twitter_search(query: str, *, limit: int = 6) -> list[dict]:
 
 
 def scout(queries: list[str], *, days: int = 14, per_query: int = 8,
-          with_reddit: bool = True, with_x: bool = True, max_signals: int = 70) -> list[dict]:
+          with_reddit: bool = True, with_x: bool = True, max_signals: int = config.NEWS_MAX_SIGNALS) -> list[dict]:
     """Run the Scout: fan ``queries`` out over Google News (+ Reddit + X/Twitter, both best-effort)
     and return a deduped, recency-scoped list of raw signals ``[{title, url, source, published}]``.
     Best-effort — a source that fails is simply skipped; the pipeline runs on whatever came back."""

@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import alerts, fundamentals
 from equity_research.common.http import fetch_bytes
 from equity_research.reports import synthesize
@@ -29,14 +30,14 @@ from equity_research.scrapers import nse_api
 
 log = logging.getLogger(__name__)
 
-_LOOKBACK_DAYS = 45          # how far back the market-wide announcement sweep looks
-_RADAR_WINDOW_DAYS = 35      # how recent a scored call must be to appear on the radar
+_LOOKBACK_DAYS = config.CALL_RADAR_LOOKBACK_DAYS          # how far back the market-wide announcement sweep looks
+_RADAR_WINDOW_DAYS = config.CALL_RADAR_WINDOW_DAYS      # how recent a scored call must be to appear on the radar
 
 # Management Tone (words) / Execution (numbers) → a 0-4 ordinal, so the say-do gap and the signal
 # score are computable. Higher = more confident / stronger.
 _TONE_VAL = {"Very Confident": 4, "Confident": 3, "Balanced": 2, "Cautious": 1, "Defensive": 0}
 _EXEC_VAL = {"Firing": 4, "Delivering": 3, "Holding": 2, "Slipping": 1, "Struggling": 0}
-_GAP_THRESHOLD = 2          # tone-vs-execution ordinal gap that counts as a real divergence
+_GAP_THRESHOLD = config.CALL_RADAR_GAP_THRESHOLD          # tone-vs-execution ordinal gap that counts as a real divergence
 
 
 def _universe(con: duckdb.DuckDBPyConnection) -> set[str]:

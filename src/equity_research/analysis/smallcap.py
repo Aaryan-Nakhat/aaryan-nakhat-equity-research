@@ -36,12 +36,13 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from equity_research import config
 from equity_research.analysis import forensic, ownership, screener, valuation
 
 log = logging.getLogger(__name__)
 
 # Band (₹ crore) that defines "small cap" for this screen.
-_BAND_LO, _BAND_HI = 1_000.0, 10_000.0
+_BAND_LO, _BAND_HI = config.SMALLCAP_BAND_LO_CR, config.SMALLCAP_BAND_HI_CR
 
 _WEIGHTS = {"capex": 0.30, "efficiency": 0.25, "cashbs": 0.20, "forensic": 0.15, "smart": 0.10}
 

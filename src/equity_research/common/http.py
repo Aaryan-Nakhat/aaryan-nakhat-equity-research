@@ -12,7 +12,9 @@ from typing import Any
 
 from scrapling.fetchers import Fetcher
 
-DEFAULT_TIMEOUT = 30
+from equity_research import config
+
+DEFAULT_TIMEOUT = config.HTTP_TIMEOUT_S
 
 
 class ScrapeError(RuntimeError):

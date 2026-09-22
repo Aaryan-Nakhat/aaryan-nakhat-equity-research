@@ -20,12 +20,13 @@ from datetime import datetime, timezone
 
 import duckdb
 
+from equity_research import config
 from equity_research.scrapers import ambitionbox
 
 log = logging.getLogger("equity-research.employer")
 
 _CACHE_KEY = "employer_sentiment"
-_CACHE_TTL_DAYS = 30
+_CACHE_TTL_DAYS = config.EMPLOYER_CACHE_TTL_DAYS
 
 
 def _clamp(x: float, lo: float = 0, hi: float = 100) -> float:

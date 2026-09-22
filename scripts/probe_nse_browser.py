@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 
-from scrapling.fetchers import StealthySession, StealthyFetcher
+from scrapling.fetchers import StealthyFetcher
 
 API = "https://www.nseindia.com/api/quote-equity?symbol=RELIANCE"
 PAGE = "https://www.nseindia.com/get-quotes/equity?symbol=RELIANCE"

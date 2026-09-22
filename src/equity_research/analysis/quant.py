@@ -17,19 +17,19 @@ Pieces:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
 import duckdb
 import numpy as np
 import pandas as pd
 
+from equity_research import config
 from equity_research.analysis import sector, valuation
 from equity_research.analysis.fundamentals import load_annual, load_quarters, ttm
 
 CR = 1e7
-_MARKET_INDEX = "Nifty 50"
-_PROJ_YEARS = 10
+_MARKET_INDEX = config.MARKET_INDEX
+_PROJ_YEARS = config.PROJ_YEARS
 
 
 # --------------------------------------------------------------------------- #
@@ -193,7 +193,7 @@ def dcf_inputs(con: duckdb.DuckDBPyConnection, symbol: str,
     mcap = (snap.get("market_cap_cr") or np.nan) * CR
 
     # WACC via CAPM
-    rf = risk_free if risk_free is not None else float(os.environ.get("RISK_FREE_RATE", "0.07"))
+    rf = risk_free if risk_free is not None else config.RISK_FREE_RATE
     inp.beta = _beta(con, symbol)
     beta = inp.beta if inp.beta is not None else 1.0
     if inp.beta is None:

@@ -19,6 +19,7 @@ from collections import defaultdict
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import valuation
 
 CR = 1e7
@@ -57,7 +58,7 @@ def _reverse_index(con: duckdb.DuckDBPyConnection) -> dict[str, list[tuple[str, 
 
 
 def holdco_discounts(con: duckdb.DuckDBPyConnection, *, min_nav_ratio: float = 0.5,
-                     min_nav_cr: float = 500.0, limit: int = 30) -> list[dict]:
+                     min_nav_cr: float = config.HOLDCO_MIN_NAV_CR, limit: int = config.HOLDCO_LIMIT) -> list[dict]:
     """Listed holders ranked by holdco discount (stake NAV vs own market cap).
 
     ``min_nav_ratio`` keeps only holders whose disclosed listed-stake NAV is at least this

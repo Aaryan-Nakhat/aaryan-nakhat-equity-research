@@ -18,16 +18,17 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import forensic, screener
 
 log = logging.getLogger(__name__)
 
-_MIN_TURNOVER_CR = 2.0      # avg daily traded value floor (₹ cr) over the liquidity window
-_LIQ_WINDOW = 20            # sessions the liquidity average is taken over
-_MIN_DAYS = 150             # need enough history for a real 52w high + 200-DMA
-_NEAR_HIGH = -0.04          # within 4% of the 52-week high counts as "breaking out"
-_MIN_VOL_SURGE = 1.3        # latest volume ≥ 1.3× its 20-day average
-_SHORTLIST_CAP = 60         # how far down the ranked list the trap gate walks
+_MIN_TURNOVER_CR = config.MOMENTUM_MIN_TURNOVER_CR      # avg daily traded value floor (₹ cr) over the liquidity window
+_LIQ_WINDOW = config.MOMENTUM_LIQ_WINDOW            # sessions the liquidity average is taken over
+_MIN_DAYS = config.MOMENTUM_MIN_DAYS             # need enough history for a real 52w high + 200-DMA
+_NEAR_HIGH = config.MOMENTUM_NEAR_HIGH          # within 4% of the 52-week high counts as "breaking out"
+_MIN_VOL_SURGE = config.MOMENTUM_MIN_VOL_SURGE        # latest volume ≥ 1.3× its 20-day average
+_SHORTLIST_CAP = config.SHORTLIST_CAP         # how far down the ranked list the trap gate walks
 
 # Composite weights (sum 1.0): proximity to the high leads, then the volume thrust confirming it.
 _WEIGHTS = {"prox": 0.40, "vol_surge": 0.35, "deliv_ratio": 0.25}

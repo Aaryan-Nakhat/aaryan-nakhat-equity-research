@@ -15,15 +15,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from datetime import time as _time
-from zoneinfo import ZoneInfo
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import positioning
 from equity_research.reports import md, synthesize
 from equity_research.scrapers import markets_global, nseix
 
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = config.TZ
 
 
 # ----------------- implied-gap read -----------------

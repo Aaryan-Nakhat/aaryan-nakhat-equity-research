@@ -13,7 +13,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 import duckdb
 
@@ -27,10 +26,10 @@ from equity_research.ingest import (
     store_pledge,
 )
 from equity_research.scrapers import fbil, mcx, nse_api, nse_shp
-from equity_research import watchlist
+from equity_research import config, watchlist
 
 
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = config.TZ
 log = logging.getLogger("equity_research.scan")
 
 # Event types whose attached filing PDF is worth an inline LLM read — the
@@ -374,7 +373,7 @@ def mark_tailwind_urgent_slot(slot: str, con: duckdb.DuckDBPyConnection | None =
             con.close()
 
 
-_TAILWIND_SEEN_TTL_DAYS = 14
+_TAILWIND_SEEN_TTL_DAYS = config.TAILWIND_SEEN_TTL_DAYS
 
 
 def tailwind_seen_keys(con: duckdb.DuckDBPyConnection | None = None) -> set[str]:
@@ -420,7 +419,7 @@ def add_tailwind_seen(keys: list[str], con: duckdb.DuckDBPyConnection | None = N
             con.close()
 
 
-_TAILWIND_CACHE_TTL_H = 24
+_TAILWIND_CACHE_TTL_H = config.TAILWIND_CACHE_TTL_H
 
 
 def tailwind_cache_get(con: duckdb.DuckDBPyConnection | None = None) -> dict | None:
@@ -463,7 +462,7 @@ def tailwind_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = Non
             con.close()
 
 
-_HOTLIST_CACHE_TTL_H = 24
+_HOTLIST_CACHE_TTL_H = config.HOTLIST_CACHE_TTL_H
 
 
 def hotlist_cache_get(con: duckdb.DuckDBPyConnection | None = None) -> dict | None:
@@ -527,7 +526,7 @@ def mark_call_radar(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
-_CONCALL_INGEST_MIN_GAP_MIN = 60
+_CONCALL_INGEST_MIN_GAP_MIN = config.CONCALL_INGEST_GAP_MIN
 
 
 def concall_ingest_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
@@ -581,7 +580,7 @@ def mark_results_radar(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
-_RESULTS_INGEST_MIN_GAP_MIN = 60
+_RESULTS_INGEST_MIN_GAP_MIN = config.RESULTS_INGEST_GAP_MIN
 
 
 def results_ingest_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
@@ -613,8 +612,8 @@ def mark_results_ingest(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
-_ALERT_SCAN_MIN_GAP_MIN = 20
-_ALERT_HOURS = range(8, 23)          # 08:00–22:59 IST — nothing pings overnight
+_ALERT_SCAN_MIN_GAP_MIN = config.ALERT_SCAN_GAP_MIN
+_ALERT_HOURS = range(config.ALERT_ACTIVE_START_HOUR, config.ALERT_ACTIVE_END_HOUR)  # local; nothing pings overnight
 
 
 def alert_scan_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
@@ -696,7 +695,7 @@ def mark_pickaxe(con: duckdb.DuckDBPyConnection | None = None) -> None:
             con.close()
 
 
-_PICKAXE_CACHE_TTL_H = 24
+_PICKAXE_CACHE_TTL_H = config.PICKAXE_CACHE_TTL_H
 
 
 def pickaxe_cache_get(con: duckdb.DuckDBPyConnection | None = None) -> dict | None:

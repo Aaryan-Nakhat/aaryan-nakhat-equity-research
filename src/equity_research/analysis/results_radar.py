@@ -18,15 +18,15 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
-from equity_research import ingest
+from equity_research import config, ingest
 from equity_research.analysis import alerts, fundamentals
 from equity_research.scrapers import nse_api
 
 log = logging.getLogger(__name__)
 
-_LOOKBACK_DAYS = 45        # market-wide announcement sweep window
-_FRESH_DAYS = 35           # a quarterly filing this recent = "just reported" (the radar window)
-_STALE_DAYS = 100          # our stored latest quarter older than this ⇒ we're missing the new one
+_LOOKBACK_DAYS = config.RESULTS_LOOKBACK_DAYS        # market-wide announcement sweep window
+_FRESH_DAYS = config.RESULTS_FRESH_DAYS           # a quarterly filing this recent = "just reported" (the radar window)
+_STALE_DAYS = config.RESULTS_STALE_DAYS          # our stored latest quarter older than this ⇒ we're missing the new one
 
 
 def _universe(con: duckdb.DuckDBPyConnection) -> set[str]:

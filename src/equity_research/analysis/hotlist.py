@@ -16,12 +16,13 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import accumulation, leaders, momentum, screener, smallcap
 
 log = logging.getLogger(__name__)
 
 # Each engine and how far down its ranked list a name still counts as "flagged".
-_ENGINE_DEPTH = 30
+_ENGINE_DEPTH = config.HOTLIST_ENGINE_DEPTH
 
 # Engine → a per-engine weight (some signals are higher-conviction than others). Sum need not be 1;
 # the aggregate score is weight-sum × position, so more engines + higher ranks = a higher score.

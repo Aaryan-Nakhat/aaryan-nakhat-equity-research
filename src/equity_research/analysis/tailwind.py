@@ -27,6 +27,7 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import supply_chain
 from equity_research.reports import synthesize
 from equity_research.scrapers import fedregister, social
@@ -140,7 +141,7 @@ def _scout_queries() -> list[str]:
 
 # ── Tier ④ — the Auditor ──
 # Market-cap tiers (₹ cr) — the radar prefers non-obvious small/mid-caps over crowded heavyweights.
-_SIZE_BANDS = [(5_000, "small-cap"), (25_000, "mid-cap"), (75_000, "large-cap")]
+_SIZE_BANDS = config.SIZE_BANDS
 # Language that betrays an ASPIRATION rather than an existing producer (deprioritised, not dropped —
 # an early entrant can still be a real theme play, but it shouldn't outrank an actual producer).
 _ASPIRATIONAL = ("bid", "bidder", "plans to", "planning", "to set up", "will set up", "mou",
@@ -262,7 +263,7 @@ def _map_and_audit(con: duckdb.DuckDBPyConnection, disruptions: list[dict],
 
 
 def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
-                 max_catalysts: int = 8) -> dict:
+                 max_catalysts: int = config.TAILWIND_MAX_CATALYSTS) -> dict:
     """Run the full 4-tier pipeline. Returns
     ``{catalysts: [{material, imposer, action, status, severity, sectors, headline, source_url,
     source_name, date, beneficiaries: [...]}], keys, n_signals, n_catalysts}``.
@@ -287,8 +288,8 @@ def run_tailwind(con: duckdb.DuckDBPyConnection, *, days: int = 14,
             "n_signals": len(signals), "n_catalysts": len(out)}
 
 
-_SMALLMID_CEIL_CR = 25_000                                 # mid-cap ceiling (see _SIZE_BANDS)
-_URGENT_MAP_CAP = 6                                        # bound the mapper cost per urgent pass
+_SMALLMID_CEIL_CR = config.TAILWIND_SMALLMID_CEIL_CR       # mid-cap ceiling (see _SIZE_BANDS)
+_URGENT_MAP_CAP = config.TAILWIND_URGENT_MAP_CAP           # bound the mapper cost per urgent pass
 
 
 def _has_smallmid_beneficiary(catalyst: dict) -> bool:
@@ -300,7 +301,8 @@ def _has_smallmid_beneficiary(catalyst: dict) -> bool:
 
 
 def run_tailwind_urgent(con: duckdb.DuckDBPyConnection, *, seen_keys: set[str],
-                        days: int = 7, max_catalysts: int = 2) -> dict:
+                        days: int = 7,
+                        max_catalysts: int = config.TAILWIND_URGENT_MAX_CATALYSTS) -> dict:
     """Lighter mid-week pass for the daily digest's urgent break-in. Runs Scout + Analyst (cheap),
     keeps **fresh, in-effect/proposed** disruptions NOT already surfaced (``seen_keys``), maps+audits
     a bounded set of them (``_URGENT_MAP_CAP``, highest-severity first), then surfaces a catalyst only

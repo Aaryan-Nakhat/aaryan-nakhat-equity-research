@@ -19,10 +19,12 @@ import re
 
 import duckdb
 
+from equity_research import config
+
 # below this a new/exited holder is noise (tiny odd-lot promoter accounts, sub-1% public)
-_APPEAR_FLOOR = 0.20        # % of shares
+_APPEAR_FLOOR = config.OWNERSHIP_APPEAR_FLOOR        # % of shares
 # below this a change in an existing holder's stake is noise
-_DELTA_FLOOR = 0.10         # percentage points
+_DELTA_FLOOR = config.OWNERSHIP_DELTA_FLOOR         # percentage points
 
 _NOTABLE_CATEGORIES = {"mutual fund", "insurance company", "FPI", "bank / FI"}
 

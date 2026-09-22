@@ -33,6 +33,7 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import forensic, screener, technical
 
 log = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ _SIGNALS = list(_WEIGHTS)
 
 _MIN_TURNOVER_CR = 2.0      # avg daily traded value floor (₹ cr) over the liquidity window
 _LIQ_WINDOW = 20            # sessions the liquidity average is taken over
-_SHORTLIST_CAP = 60         # how far down the ranked list stage-2 will walk (bounds the time)
+_SHORTLIST_CAP = config.SHORTLIST_CAP         # how far down the ranked list stage-2 will walk (bounds the time)
 
 
 def _liquid_universe(con: duckdb.DuckDBPyConnection, min_turnover_cr: float) -> dict[str, float]:

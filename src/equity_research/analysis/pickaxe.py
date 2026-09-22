@@ -31,6 +31,7 @@ import re
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import ownership, supply_chain, tailwind
 from equity_research.reports import synthesize
 from equity_research.scrapers import social, trends
@@ -291,8 +292,8 @@ def _map_and_audit(con: duckdb.DuckDBPyConnection, themes: list[dict],
     return out
 
 
-def run_pickaxe(con: duckdb.DuckDBPyConnection, *, days: int = 21,
-                max_themes: int = 6) -> dict:
+def run_pickaxe(con: duckdb.DuckDBPyConnection, *, days: int = config.PICKAXE_DAYS,
+                max_themes: int = config.PICKAXE_MAX_THEMES) -> dict:
     """Run the full 4-tier demand pipeline. Returns
     ``{themes: [{theme, category, driver, cotrends, india_supply, durability, headline, source_url,
     source_name, beneficiaries: [...]}], keys, n_signals, n_themes}``. Themes with a watchlist hit

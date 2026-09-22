@@ -16,14 +16,15 @@ import logging
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import forensic, screener
 
 log = logging.getLogger(__name__)
 
-_BENCHMARK = "Nifty 500"
-_MIN_TURNOVER_CR = 10.0     # higher floor than the breakout screen — relative-strength leadership is
-_LIQ_WINDOW = 20            # only meaningful for names that are actually tradeable / institution-sized
-_SHORTLIST_CAP = 60
+_BENCHMARK = config.LEADERS_BENCHMARK
+_MIN_TURNOVER_CR = config.LEADERS_MIN_TURNOVER_CR     # higher floor than the breakout screen — relative-strength leadership is
+_LIQ_WINDOW = config.LEADERS_LIQ_WINDOW            # only meaningful for names that are actually tradeable / institution-sized
+_SHORTLIST_CAP = config.SHORTLIST_CAP
 _W3M, _W6M, _W1Y = 63, 126, 252        # trading-day windows (~3 / 6 / 12 months)
 
 # Composite weights (sum 1.0): recent leadership counts most, but reward durable multi-horizon strength.

@@ -15,15 +15,15 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
 import duckdb
 
+from equity_research import config
 from equity_research.analysis import holdco, investors, screener
 from equity_research.common.db import connect
 from equity_research.reports import md
 
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = config.TZ
 
 # --- trigger thresholds (tune here) ---
 HOLDCO_WIDEN = 5.0        # pp — report a holdco whose discount deepened by at least this

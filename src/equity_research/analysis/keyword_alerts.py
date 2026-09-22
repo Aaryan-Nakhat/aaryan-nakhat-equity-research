@@ -15,12 +15,12 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
-from equity_research import scan
+from equity_research import config, scan
 from equity_research.scrapers import nse_api
 
 log = logging.getLogger(__name__)
 
-_SWEEP_DAYS = 3            # market-wide announcement window each sweep (covers weekends/overnight)
+_SWEEP_DAYS = config.KEYWORD_SWEEP_DAYS            # market-wide announcement window each sweep (covers weekends/overnight)
 
 
 def add_keyword(con: duckdb.DuckDBPyConnection, keyword: str) -> str:
