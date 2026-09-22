@@ -134,6 +134,21 @@ def _signal_score(tone: str, execution: str | None) -> float:
     return float(min(100, 40 + divergence * 10 + strength * 2.5))
 
 
+_UNREADABLE = "Unreadable"   # tombstone tone: a structurally-broken PDF, so we stop re-fetching it
+
+
+def _mark_unreadable(con: duckdb.DuckDBPyConnection, symbol: str, filed_date: date, url: str) -> None:
+    """Tombstone a transcript whose PDF won't parse, so ``pending_transcripts`` stops re-queuing it
+    every cycle. Written as a ``concall_signals`` row with a sentinel tone and no score; ``radar``
+    filters these out. (A malformed archived PDF is deterministic — it won't become readable later.)"""
+    con.execute(
+        """INSERT OR REPLACE INTO concall_signals
+           (symbol, filed_date, quarter, tone, execution, gap, signal_score,
+            summary_md, guidance_json, source_url, model, updated_at)
+           VALUES (?,?,NULL,?,NULL,NULL,NULL,NULL,NULL,?,'',now())""",
+        [symbol, filed_date, _UNREADABLE, url])
+
+
 def score_one(con: duckdb.DuckDBPyConnection, symbol: str, url: str, filed_date: date, *,
               model: str | None = None) -> dict | None:
     """Fetch + score one transcript and upsert it into ``concall_signals``. Returns the stored row
@@ -144,7 +159,8 @@ def score_one(con: duckdb.DuckDBPyConnection, symbol: str, url: str, filed_date:
         log.warning("call-radar: fetch failed for %s (%s)", symbol, url)
         return None
     if not data or not _pdf_has_pages(data):
-        log.warning("call-radar: unreadable transcript for %s — skipping", symbol)
+        log.warning("call-radar: unreadable transcript for %s — tombstoning (won't retry)", symbol)
+        _mark_unreadable(con, symbol, filed_date, url)
         return None
     kwargs = {"model": model} if model else {}
     sig = synthesize.concall_signal([(f"{symbol} transcript", data)], **kwargs)
@@ -204,9 +220,9 @@ def radar(con: duckdb.DuckDBPyConnection, *, limit: int = 25,
     cutoff = (date.today() - timedelta(days=days))
     rows = con.execute(
         """SELECT symbol, filed_date, quarter, tone, execution, gap, signal_score, summary_md
-           FROM concall_signals WHERE filed_date >= ?
+           FROM concall_signals WHERE filed_date >= ? AND tone <> ?
            ORDER BY signal_score DESC, filed_date DESC LIMIT ?""",
-        [cutoff, limit]).fetchall()
+        [cutoff, _UNREADABLE, limit]).fetchall()
     if not rows:
         return []
     names = dict(con.execute("SELECT symbol, company_name FROM equity_master").fetchall())
