@@ -260,7 +260,7 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
           + (f" — {name}" if name else "") + " is in the previous email (body + PDF).\n\n"
           "**Want a deeper cut?** Just reply to this email with the number:\n\n"
           "  **1) Upside Drivers 1-pager** — forward-looking catalysts, each quantified, "
-          f"timeline-tagged and rated Contracted / Guided / Optional certainty, grounded in {grounded}.\n\n"
+          f"timeline-tagged and rated Secured / In Progress / Aspirational certainty, grounded in {grounded}.\n\n"
           "_(More deeper cuts coming soon.)_")
     emailer.send_report(
         _re_subject(req.subject),

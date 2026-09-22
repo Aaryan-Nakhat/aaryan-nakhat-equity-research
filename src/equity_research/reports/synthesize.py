@@ -257,9 +257,9 @@ the multiple). Write "*not estimable from filings*" only for the leg that genuin
 disclosed — never invent, and never skip the whole line when the revenue leg IS estimable.
 - **When it hits the P&L:** when it starts flowing into revenue/earnings (e.g. "H2 FY27", \
 "commissioning Q1 FY28").
-- **How sure:** **Contracted** (already visible in order book / capex incurred / policy \
-notified), **Guided** (management-guided, not yet contracted), or **Optional** (asymmetric \
-upside, not in consensus).
+- **How sure:** **Secured** (already visible in order book / capex incurred / policy \
+notified), **In Progress** (management-guided, not yet contracted), or **Aspirational** \
+(asymmetric upside, not in consensus).
 
 Order the drivers by this priority: (1) capacity/capex-led volume, (2) new \
 product/segment/geography, (3) margin-expansion drivers, (4) policy/regulatory catalysts, \
@@ -271,16 +271,16 @@ product/segment/geography, (3) margin-expansion drivers, (4) policy/regulatory c
 What is consensus already discounting, and where is the incremental surprise vs. street.
 
 ### What breaks it (3–4 bullets)
-What can delay or derail each Contracted/Guided driver — execution, regulatory, input-cost, \
+What can delay or derail each Secured/In Progress driver — execution, regulatory, input-cost, \
 demand-cyclicality, or balance-sheet risk.
 
 ### Driver scoreboard
 A markdown table:
 | # | Driver | Est. impact (₹ cr) | % of TTM revenue | ≈ Mcap upside | When | Certainty |
 **Sort the scoreboard by estimated ₹ cr impact (largest first) — NOT by certainty** — so a \
-big Guided driver is never buried under small Contracted ones. After the table add one line — \
-**Priority read:** — naming any Guided/Optional driver whose estimated impact ranks in the \
-top 3, e.g. "Driver #2 is only Guided but carries the largest ₹ impact — size it on \
+big In Progress driver is never buried under small Secured ones. After the table add one line — \
+**Priority read:** — naming any In Progress/Aspirational driver whose estimated impact ranks in the \
+top 3, e.g. "Driver #2 is only In Progress but carries the largest ₹ impact — size it on \
 probability, don't ignore it."
 
 **Quality & sourcing rules (strict):**

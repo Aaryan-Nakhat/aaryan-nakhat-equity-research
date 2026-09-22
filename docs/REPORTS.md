@@ -428,7 +428,7 @@ PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screene
   end of the long report so it's actually seen.) Today: **`1) Upside Drivers 1-pager`** —
   `pipeline.generate_upside_drivers` → `synthesize.upside_drivers`, a
   forward-looking catalysts note (5–7 concrete triggers, each quantified +
-  timeline + **Contracted / Guided / Optional** conviction tag, a "what's in the
+  timeline + **Secured / In Progress / Aspirational** conviction tag, a "what's in the
   price" read, risks, and a scoreboard table). Every trigger also carries an
   **estimated business impact in ₹ cr and %** — incremental annual revenue as ₹X cr
   (≈Y% of TTM revenue) and, where estimable, the potential market-cap impact %
