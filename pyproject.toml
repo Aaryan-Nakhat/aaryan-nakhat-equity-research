@@ -20,6 +20,9 @@ dependencies = [
     "pypdf>=5.0",             # validate filing PDFs before the LLM reads them (drop broken docs)
 ]
 
+[project.scripts]
+eqr = "equity_research.cli:main"          # the workbench from your terminal (same commands as email)
+
 [project.optional-dependencies]
 # Extra SDKs some LiteLLM providers need for service-account / cloud auth — install only if the
 # model you configure in .env requires it (API-key providers need nothing beyond the base install).

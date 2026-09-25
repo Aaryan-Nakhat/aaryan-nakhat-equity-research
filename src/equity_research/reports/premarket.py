@@ -1,6 +1,6 @@
 """Pre-market digest — a before-the-open read of what the overnight tape implies for Nifty.
 
-Fires ~8:30 AM IST (see ``email_bot.maybe_premarket``). Assembles four best-effort
+Fires ~8:30 AM IST (see ``bot.app.maybe_premarket``). Assembles four best-effort
 inputs — GIFT Nifty (the Nifty future that trades overnight on NSE IX), the overnight
 US/Asia indices, FII index-futures positioning + India VIX, and the latest market
 headlines — computes the **implied gap** (GIFT Nifty vs Nifty-50's previous close), and

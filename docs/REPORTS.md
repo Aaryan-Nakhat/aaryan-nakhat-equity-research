@@ -295,7 +295,7 @@ gets the story before the reference tables; the confluence "built from" column u
   entry/stop/target lives in the text section.
 
 **`levels: <name>` command (on-demand, no LLM).** A quick technical read outside a full report:
-`email_bot._send_levels` resolves the name, computes the same levels, and replies with the section
+`bot.app._send_levels` resolves the name, computes the same levels, and replies with the section
 + an annotated chart (here the chart *does* draw the entry/stop/target overlay, since no
 fundamental verdict is being claimed). Aliases: `technical:`, `setup:`, `chart:`. Also surfaced as
 watchlist **level alerts** in the digests (see `docs/ALERTS.md`).
@@ -308,7 +308,7 @@ than standalone's (don't trade a complete *entity* for an incomplete *history*).
 keeps the statement tables aligned with the (consolidated-based) business overview /
 thesis — e.g. EIEL, whose renewables growth sits entirely in acquired subsidiaries, now
 shows consolidated tables instead of standalone ones that omit that business. Override by
-putting **"consolidated"/"standalone"** in the email subject (`email_bot._basis`).
+putting **"consolidated"/"standalone"** in the email subject (`bot.app._basis`).
 
 ### Charts in the PDF (`reports/charts.py`)
 
@@ -342,7 +342,7 @@ Every headline metric is annotated so the report stands on its own:
 - **Alert bodies** carry the same plain-English reading (what the number means +
   the threshold that matters).
 
-## The email bot (`scripts/email_bot.py`)
+## The email bot (`bot/app.py` (launched by `scripts/email_bot.py`))
 
 The always-on delivery channel: you email a company name (or a command) from an allowlisted address
 and get a deep report back in-thread. One Gmail account both **reads requests** (IMAP IDLE) and
@@ -745,7 +745,7 @@ pending-menu UX). Reuses the deterministic analysis layer — nothing re-derives
 **Version B (planned)** layers on **LTCG/STCG** and **"raise ₹X" sizing** once holdings carry
 quantity + average cost + buy date. Framed as decision *support*; the call is the user's.
 
-**Weekly digest** (`src/equity_research/screen_digest.py`, `email_bot.maybe_screen_digest`): once per
+**Weekly digest** (`src/equity_research/screen_digest.py`, `bot.app.maybe_screen_digest`): once per
 ISO week (Saturday ≥18:00 IST) the bot runs all three screens and emails **ONE "Screener movements"**
 message with **only the deltas** vs the last run — a holdco newly discounted / widening ≥5pp, a stock
 entering the top-15 or climbing ≥10 ranks, a tracked investor's fresh moves. Fingerprints live in
@@ -765,7 +765,7 @@ else" universe for `screen: smallcap` (Nifty-500 is all large/mid). Pair with **
 skip the already-ingested Nifty-500 and do just the ~500 new small-cap names. This is a multi-hour
 browser-tier run — launch it as a Windows scheduled task with the bot stopped, per the ingest note.
 
-## Pre-market digest (`reports/premarket.py`, `email_bot.maybe_premarket`)
+## Pre-market digest (`reports/premarket.py`, `bot.app.maybe_premarket`)
 
 A **before-the-open** read pushed once per trading day in the **08:30–09:00 IST** window (fires after
 market open ~09:15 is pointless, so it's cut off at 09:00; `last_premarket_date` in `alert_state`
@@ -829,7 +829,7 @@ The report (all from data we already refresh daily):
 hallucinated ticker like "PNC"→Pritish Nandy). Rows labelled 🖐️ curated vs 🤖 **AI-suggested (verify)**.
 A discovery aid, not a confirmed supplier ledger.
 
-**Sector rotation (`sector_brief.build_sector_rotation`, `email_bot.maybe_sector_rotation`):** ranks
+**Sector rotation (`sector_brief.build_sector_rotation`, `bot.app.maybe_sector_rotation`):** ranks
 **every** sector by relative strength vs Nifty + trend + valuation vs its own history →
 **leaders / laggards / 💎 turning-up-from-cheap** (value+momentum inflection). On-demand
 **`sector: rotation`**, and **pushed weekly (Saturday ≥18:00 IST**, once/ISO-week via
@@ -855,7 +855,7 @@ gain) or **export-share gain** (a rival exporter is knocked out → Indian expor
 list** — broad generic probes + the Analyst's open-ended detection catch the long tail (onion, wheat, coal,
 PVC…). It surfaces these **autonomously** — you never name a material. On-demand **`tailwind`** (aliases
 `catalysts`, `supply shock`) and **pushed weekly (Saturday ≥18:00 IST**, `scan.tailwind_due`/`mark_tailwind`,
-`email_bot.maybe_tailwind`) + **urgent break-ins** at pre-market / midday / evening (below).
+`bot.app.maybe_tailwind`) + **urgent break-ins** at pre-market / midday / evening (below).
 
 **Three materiality reads on every catalyst** (all Analyst/Mapper estimates, grounded where possible, 🟡
 verify): **🌍 the dominant supplier's % of world supply** (bigger = harder to switch = stronger tailwind);
@@ -887,8 +887,8 @@ verified names (🟢 curated / 🟡 **AI-verified, confirm** / ⭐ on your watch
 → that stock's deep report. Catalysts rank watchlist-hits → severity → #beneficiaries.
 
 **Delivery — weekly + urgent break-ins:** the full pipeline pushes **weekly (Saturday ≥18:00 IST**,
-`scan.tailwind_due`/`mark_tailwind`, `email_bot.maybe_tailwind`). On **trading days Mon–Fri**, a
-**lighter urgent pass** (`tailwind.run_tailwind_urgent`, `email_bot.maybe_tailwind_urgent`) fires at **three
+`scan.tailwind_due`/`mark_tailwind`, `bot.app.maybe_tailwind`). On **trading days Mon–Fri**, a
+**lighter urgent pass** (`tailwind.run_tailwind_urgent`, `bot.app.maybe_tailwind_urgent`) fires at **three
 slots — pre-market 08:30, midday 12:30, evening 18:00** (`_current_urgent_slot`, once per slot via
 `scan.tailwind_urgent_slot_done`; catch-up-friendly if the laptop was asleep). It runs Scout + Analyst only,
 keeps **fresh, in-effect/proposed** shocks **not already surfaced** (a ~2-week `scan.tailwind_seen_keys`
@@ -927,7 +927,7 @@ earnings and is usually still off the mainstream radar. An egg/poultry boom is c
 but the listed maker of **poultry vaccines / feed additives** benefits with far less cyclicality. It
 surfaces these **autonomously** — you never name a theme. On-demand **`pickaxe`** (aliases `demand`,
 `buy trends`) and **pushed monthly (first Saturday ≥18:00 IST**, `scan.pickaxe_due`/`mark_pickaxe`,
-`email_bot.maybe_pickaxe`).
+`bot.app.maybe_pickaxe`).
 
 A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tailwind):
 1. **① Scout** (`pickaxe._scout_signals`) — **Google Trends** rising **"buy"** queries by consumer
@@ -971,7 +971,7 @@ Output: an ⛏️ section, each theme carrying its **Trends line + source**, co-
 beneficiaries as **readable per-stock blocks** (quant · revenue-from-theme now→next · growth · sources ·
 why) — ⛏️ pickaxe-first, then 🎯 direct; reply a number → that stock's full deep report. **Delivery is
 async:** the full build (ingest + a grounded read per name + charts) is ~10-15 min, so the on-demand
-`pickaxe` **acks instantly and delivers the report + PDF from a background thread** (`email_bot._pickaxe_worker`,
+`pickaxe` **acks instantly and delivers the report + PDF from a background thread** (`bot.app._pickaxe_worker`,
 a single-build lock) when ready; likewise the **monthly push** (first Saturday, `maybe_pickaxe`) runs off-heartbeat.
 **Cached 24h** (`scan.pickaxe_cache_get`/`put`); **`pickaxe --latest`** forces fresh. **Honest by design:**
 an idea *generator*, not a call — every theme source-cited, AI names 🟡-flagged, and a **genuine demand
@@ -979,7 +979,7 @@ theme always has listed beneficiaries** (the mapper is required to name them; an
 surfaced). **Phase 2 (deferred):** a mid-week urgent break-in (like Tailwind's), a curated seed of known
 demand→pickaxe chains, and a paid Trends/SerpApi source only if the browser tier proves too rate-limited.
 
-## `help` — the command menu (`email_bot._send_help`)
+## `help` — the command menu (`bot.app._send_help`)
 
 Email **`help`** (aliases `commands` / `menu` / `?` / `what can you do`) → the **complete command
 surface, section by section, each as a table** (Subject → what you get): stock deep report, portfolio
@@ -988,7 +988,7 @@ surface, section by section, each as a table** (Subject → what you get): stock
 tips. The content lives in `_HELP_SECTIONS` right next to the dispatch so it can't drift; the parser is
 anchored so `help` never shadows a real stock (e.g. "helping hand ltd" still resolves as a company).
 
-## Mailbox housekeeping (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`)
+## Mailbox housekeeping (`mail_cleanup.py`, `bot.app.maybe_mail_housekeeping`)
 
 The bot's own Gmail (`IMAP_USER`) is also a personal account, so it keeps itself tidy **without touching
 personal mail**: on the heartbeat (≤ every 15 min) it moves processed **workbench** mail to Trash once

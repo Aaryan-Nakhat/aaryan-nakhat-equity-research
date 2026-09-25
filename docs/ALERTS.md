@@ -10,7 +10,7 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 (CM) holiday calendar fetched from NSE's `holiday-master` and cached in
 `alert_state` (refreshed monthly). Manual `/scan` ignores the gate (always runs).
 
-## The full push schedule (all heartbeat-gated in `email_bot`)
+## The full push schedule (all heartbeat-gated in `bot/app.py`)
 
 The watchlist scan (this doc) is one of several scheduled pushes. All fire from the same IMAP-IDLE
 heartbeat, each gated once per its window via an `alert_state` `__meta__` marker; each degrades
@@ -36,7 +36,7 @@ independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](R
 | Two buckets: **Your Holdings** (owned) vs **Your Tracking List** (watching) — `watchlist.list_type` | `watchlist.py` |
 | Per-symbol detectors (incl. promoter-pledge) | `analysis/alerts.py` |
 | Orchestrator (refresh EOD → announcements + pledge → detect) | `scan.py` |
-| Bot commands + self-healing schedule + push | `scripts/email_bot.py` |
+| Bot commands + self-healing schedule + push | `bot/app.py` (launched by `scripts/email_bot.py`) |
 | Bulk-add the initial list | `scripts/populate_watchlist.py` |
 
 **Holdings vs Tracking.** Every watchlist row carries a `list_type` — **`holding`** (a stock the user
@@ -120,7 +120,7 @@ in one browser session. Shared by the email digest.
 
 The **same sections as the 18:00 digest, with LIVE midday data** — `🔔 Watchlist —
 same-day (HH:MM)`. Fired once per trading day in the **12:30–14:00 IST** window by
-`email_bot.maybe_intraday` (heartbeat-gated; a 2pm cutoff avoids a stale "midday" if the
+`bot.app.maybe_intraday` (heartbeat-gated; a 2pm cutoff avoids a stale "midday" if the
 bot was down), deduped by `scan.already_intraday_today`/`mark_intraday`
 (`_meta("last_intraday_date")`). Built by `scan.run_intraday_scan` →
 `scan.format_intraday_digest`:

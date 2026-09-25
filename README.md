@@ -17,11 +17,25 @@ engines** that surface stocks you didn't name. Bring your own LLM (any provider,
 
 Personal use. Not a hosted product.
 
-## 📖 What you can ask it (email commands)
+## 📖 What you can ask it (terminal or email)
 
-You drive the whole workbench by **emailing a command in the Subject line** from an allowlisted
-address; the bot replies in-thread (many replies are a **numbered list — reply a number to drill
-into that item**). Email **`help`** any time to get this same menu in your inbox.
+Every command below works two ways, with the same flow:
+
+- **From your terminal** with **`eqr`** — no email setup needed. Plain words are fine
+  (`eqr hdfc bank`, `eqr fund: parag parikh flexi cap`); one match goes straight to the report,
+  several give a **numbered list — answer with `eqr pick <n>`**. Reports print to the terminal and
+  are saved (Markdown + HTML + PDF) under `data/outputs/<date>/`; add `--open` to open the HTML.
+- **By email** — put the command in the **Subject line** from an allowlisted address; the always-on
+  bot replies in-thread (**reply a number** to drill into a numbered list).
+
+`eqr help` (or emailing **`help`**) returns this same menu.
+
+```bash
+eqr infosys                  # full deep report
+eqr hdfc                     # several matches → numbered list
+eqr pick 1                   # pick one (also answers a report's "deeper cut" menu)
+eqr screen: value            # any command below, exactly as you'd email it
+```
 
 **📊 Stock deep report** — the core.
 
@@ -233,8 +247,9 @@ source → formula → model).
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on
   live data), the **weekly** screener-movements / sector-rotation / **💨 Tailwind** (Sat), the **monthly**
   **⛏️ Pickaxe** (1st Sat) + **urgent** Tailwind break-ins (pre-market / midday / evening) when a fresh shock lands.
-- **Delivery** — email; **`help`** returns the whole command menu;
-  the bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
+- **Delivery** — the **`eqr` terminal CLI** (saves Markdown + HTML + PDF locally) or **email**; both
+  run the same command handler, so name resolution, numbered menus and follow-ups behave identically.
+  **`help`** returns the whole command menu; the email bot **auto-tidies its own mailbox** (bins processed workbench mail ~30 min after sending — personal
   mail untouched).
 - **LLM** (your configured provider) is used **only** for synthesis / filing-reading / name-resolution — every
   number above is **deterministic**.
@@ -243,7 +258,8 @@ source → formula → model).
 
 Working end-to-end (NSE/BSE/MCX/FBIL → DuckDB → fundamentals/forensics/technicals/
 valuation + signals → LLM report → email bot, always-on). On-demand
-reports + a pre-market (08:30), midday (12:30) and full (18:00) watchlist digest, all over email. Docs:
+reports from the terminal (`eqr`) or email, + a pre-market (08:30), midday (12:30) and full (18:00)
+watchlist digest over email. Docs:
 
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
@@ -260,8 +276,10 @@ src/equity_research/
   scrapers/    source-specific scrapers (NSE, BSE, SEBI, RBI, ...)
   analysis/    fundamental + technical analysis
   reports/     report generation + email delivery
+  bot/         the command handler (app.py) + the local channel (local.py) shared by email and CLI
+  cli.py       the `eqr` terminal command
   common/      config, storage, shared utilities
-scripts/       pipeline entry points
+scripts/       pipeline entry points (email_bot.py launches bot/app.py)
 data/          raw scrapes + processed artifacts (gitignored)
 docs/          planning + reference docs
 tests/         tests
@@ -287,8 +305,9 @@ Configure `.env` (all secrets are read from the environment; `.env` is gitignore
 [`.env.example`](.env.example) for every variable):
 - **LLM** — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
   (or `LLM_BASE_URL` for a custom endpoint). Runs on any provider via [LiteLLM](https://docs.litellm.ai).
-- **Delivery** — one Gmail for both sending and reading requests (SMTP/IMAP app password), plus
-  `EMAIL_ALLOWED_SENDERS` (who may request reports) and `REPORT_TO` (where pushes go).
+- **Email delivery** *(optional — skip it if you only use `eqr` in the terminal)* — one Gmail for
+  both sending and reading requests (SMTP/IMAP app password), plus `EMAIL_ALLOWED_SENDERS` (who may
+  request reports) and `REPORT_TO` (where pushes go).
 - **Schedule, toggles & tuning** — every delivery time, the weekly-push day, per-feature on/off
   switches, the timezone, cache TTLs, timeouts and analytical thresholds are read from `.env` by
   [`src/equity_research/config.py`](src/equity_research/config.py) — **all optional, each defaulting
@@ -301,9 +320,12 @@ Bootstrap the local data store, then run a report or the bot:
 ```bash
 uv run python scripts/populate_watchlist.py               # seed the watchlist
 uv run python scripts/backfill_eod.py                     # ingest market EOD history
-uv run python scripts/research_report.py RELIANCE --deep  # one-off deep report
-uv run python scripts/email_bot.py                        # the always-on bot (or run_email_bot.ps1)
+uv run eqr reliance                                       # a deep report in the terminal
+uv run eqr bot                                            # the always-on email bot (or run_email_bot.ps1)
 ```
+
+DuckDB allows one writing process at a time, so the CLI can briefly find the database busy while
+the email bot is mid-task; it says so and you can retry.
 
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.

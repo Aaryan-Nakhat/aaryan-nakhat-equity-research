@@ -480,9 +480,9 @@ with zero).
   source link**). **⑥ Charts:** `trends.interest_details` (one browser session) → `charts.pickaxe_trend_chart`
   (12-mo Google-Trends interest line per theme) into an **attached PDF**. Rendered as **per-stock blocks**.
   **Cached 24h** (`scan.pickaxe_cache_get/put`; `--latest` forces fresh). **Delivery is async** — the deep build
-  is ~10-15 min, so it runs in a **background thread** (`email_bot._pickaxe_worker`, single-build lock): the
+  is ~10-15 min, so it runs in a **background thread** (`bot.app._pickaxe_worker`, single-build lock): the
   on-demand command acks instantly and delivers the report + PDF when ready; **pushed monthly (first Saturday
-  ≥18:00 IST**, `scan.pickaxe_due` on a year-month marker, `email_bot.maybe_pickaxe`). **Honest:** an idea
+  ≥18:00 IST**, `scan.pickaxe_due` on a year-month marker, `bot.app.maybe_pickaxe`). **Honest:** an idea
   *generator* — Trends is best-effort (no official API; when throttled the read is news/LLM-driven), and the
   revenue-share / projection figures are LLM/grounded estimates with sources to verify (honest blank when not
   found).

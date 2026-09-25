@@ -130,7 +130,7 @@ data already scrapable via `nse_archives`/`nse_api`); ADX.
 `brief`/`deep_brief` assemble all quant signals → `synthesize.synthesize_thesis`
 (**the configured LLM**, service-account auth, streaming, reads
 an optional concall/annual-report PDF) → delivered via:
-- **Email bot** (`scripts/email_bot.py`, always-on Windows scheduled task): you email a name →
+- **Email bot** (`bot/app.py` (launched by `scripts/email_bot.py`), always-on Windows scheduled task): you email a name →
   `resolve` (LLM+Search) → deep report, **inline HTML + styled PDF** (`reports/pdf.py`), replied
   in-thread. Ambiguous names get a numbered "which one?" reply.
 - **CLI** (`research_report.py`) for local runs.
@@ -156,7 +156,7 @@ a **self-healing daily scan** (fires once per trading day at the first heartbeat
 Watchlist populated from `.env` (`WATCHLIST_HOLDINGS` / `WATCHLIST_TRACKING`, via `populate_watchlist.py`).
 
 ### Phase 6 — depth, quant, email channel & report enrichment — ✅ done
-- **Email bot** (`scripts/email_bot.py`: IMAP IDLE inbound + SMTP) — the always-on delivery
+- **Email bot** (`bot/app.py` (launched by `scripts/email_bot.py`): IMAP IDLE inbound + SMTP) — the always-on delivery
   channel; full report in the body + PDF, replied in-thread.
 - **Quant suite** (`analysis/quant.py`): Monte-Carlo DCF (margin of safety, P(undervalued)),
   reverse DCF, scenario DCF, Benford's-law, sector z-scores.
@@ -306,10 +306,10 @@ Pre-listing analysis for live / upcoming public issues, delivered through the em
 **Done (shipped):** FII F&O positioning in the digest header (`participant_oi` →
 `positioning.fii_index_futures`); insider/promoter (SEBI PIT) trades — digest alerts +
 deep-report section (`nse_api.insider_trades`, `insider_trades` table); **midday same-day
-digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email_bot.maybe_intraday`)
+digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `bot.app.maybe_intraday`)
 — live movers + today's filings/insider via NSE's NextApi live quote (`live_quotes_batch`).
 - **Sectoral analysis — `sector: <name>` — ✅ v1 shipped** (`analysis/sector_analysis.py`,
-  `reports/sector_brief.py`, `synthesize.sector_thesis`, `email_bot._send_sector_analysis`): the missing
+  `reports/sector_brief.py`, `synthesize.sector_thesis`, `bot.app._send_sector_analysis`): the missing
   **top-down** lens. Per sectoral index (~20 in a `_CATALOG`) — technicals + RS-vs-Nifty + **valuation vs
   its own ~5-yr history** (all from `index_close`), a smart-money proxy (institutional ownership Δ + MF
   exposure + marquee moves across constituents; FII/DII-by-sector isn't published), sector news, an LLM
@@ -321,13 +321,13 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
     web-search-grounded LLM; **every** name verified against `equity_master` (dropped if not a real NSE
     symbol; name-consistency guard kills hallucinated tickers), labelled 🖐️ curated / 🤖 AI-verify.
   - **Weekly sector-rotation push — ✅ shipped** (`sector_brief.build_sector_rotation`,
-    `email_bot.maybe_sector_rotation`, **Sat ≥18:00 IST**; on-demand `sector: rotation`): all sectors by RS
+    `bot.app.maybe_sector_rotation`, **Sat ≥18:00 IST**; on-demand `sector: rotation`): all sectors by RS
     vs Nifty + valuation-vs-own-history → leaders / laggards / turning-up-from-cheap.
   - **Financial-sector stock ranking — ✅ shipped** (`screener.financial_screen`): banks/NBFCs/insurers
     aren't Piotroski/Altman-scorable, so `within_sector_ranking` routes lender sectors to **ROA + ROE +
     NIM proxy + cheap P/B** (rank-normalised in-set, standalone-or-consolidated). `sector: bank` etc. now
     gets a proper Top (Undervalued where a usable equity element gives P/B).
-- **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `email_bot.maybe_premarket`,
+- **Pre-market GIFT Nifty digest — ✅ shipped** (`reports/premarket.py`, `bot.app.maybe_premarket`,
   08:30–09:00 IST once/trading-day): GIFT Nifty implied Nifty open (vs Nifty-50 prev close) + overnight
   US/Asia (`scrapers/markets_global.py`, Yahoo) + India VIX + FII futures stance + Moneycontrol-RSS
   headlines + an LLM "overnight read" (`synthesize.premarket_brief`). GIFT Nifty is plain-HTTP JSON from
@@ -337,7 +337,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   fire on first wake, self-relabelling to a "gap so far" snapshot past the 09:15 open.)*
 - **💨 Tailwind — global supply-shock → Indian beneficiaries — ✅ shipped** (`analysis/tailwind.py`,
   `scrapers/social.py`, `reports/tailwind_brief.py`, `synthesize.tailwind_analyst`/`tailwind_beneficiaries`,
-  `email_bot.maybe_tailwind` + on-demand **`tailwind`**; pushed weekly Sat ≥18:00 via
+  `bot.app.maybe_tailwind` + on-demand **`tailwind`**; pushed weekly Sat ≥18:00 via
   `scan.tailwind_due`/`mark_tailwind`). The **chokepoint-arbitrage** lens: a **four-tier agent pipeline**
   — ① Scout (Google News RSS + best-effort Reddit over a ~15-material `_CHOKEPOINTS` catalog) → ② Analyst
   (LLM triage → genuine export-ban/quota/tariff/cut disruptions, source-index-gated so every link is real)
@@ -356,8 +356,8 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   *Next:* a paid X API key for reliable Twitter.
 - **⛏️ Pickaxe — surging Indian demand → the indirect beneficiary — ✅ shipped** (`analysis/pickaxe.py`,
   `scrapers/trends.py`, `reports/pickaxe_brief.py`, `synthesize.pickaxe_analyst`/`pickaxe_beneficiaries`,
-  `email_bot._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed monthly (1st Sat ≥18:00) via
-  `scan.pickaxe_due`/`mark_pickaxe`, `email_bot.maybe_pickaxe`). The **demand-side mirror of Tailwind** on
+  `bot.app._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed monthly (1st Sat ≥18:00) via
+  `scan.pickaxe_due`/`mark_pickaxe`, `bot.app.maybe_pickaxe`). The **demand-side mirror of Tailwind** on
   the **gold-rush "sell the pickaxes"** principle: a **four-tier agent pipeline** — ① Scout (Google Trends
   rising "buy" queries by consumer category via `scrapers/trends.py` — the **browser tier** (Camoufox
   loads the real explore page and **intercepts the widgetdata XHRs it fires**, like `nse_api`),
@@ -372,7 +372,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   revenue-share now→next-FY + growth **with source links**) → ⑥ **Charts** (`trends.interest_details` →
   `charts.pickaxe_trend_chart`, a 12-mo Google-Trends line per theme in an **attached PDF**). Rendered as
   **per-stock blocks**, not a table. **Delivery is async** — the deep build is ~10-15 min so it runs in a
-  **background thread** (`email_bot._pickaxe_worker`, single-build lock): on-demand `pickaxe` acks instantly
+  **background thread** (`bot.app._pickaxe_worker`, single-build lock): on-demand `pickaxe` acks instantly
   and delivers when ready; the weekly push runs off-heartbeat. The Mapper is required to **always return
   beneficiaries** (a real demand theme always has them; empty themes are never surfaced). Autonomous (you
   never name a theme); each theme **source-cited**; reply a number → deep report; **24h cache** + `--latest`.
@@ -400,9 +400,9 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
   "no coverage". Cached ~30d in `alert_state`; **opt-in** `EMPLOYER_REVIEWS_ENABLED`. Verified live
   (a peer-beating large-cap → 🟢🟢A/🟢B; a below-peer turnaround → 🔴E/🔴E). *Next:* Glassdoor secondary cross-check; a
   bot-stopped `backfill_employer_sentiment.py` to warm the whole watchlist.
-- **`help` command — ✅ shipped** (`email_bot._send_help`/`_HELP_SECTIONS`): email `help` → the full
+- **`help` command — ✅ shipped** (`bot.app._send_help`/`_HELP_SECTIONS`): email `help` → the full
   command menu, section by section as tables (Subject → what you get) + the auto-pushes + tips.
-- **Mailbox housekeeping — ✅ shipped** (`mail_cleanup.py`, `email_bot.maybe_mail_housekeeping`): the
+- **Mailbox housekeeping — ✅ shipped** (`mail_cleanup.py`, `bot.app.maybe_mail_housekeeping`): the
   server account auto-bins processed **workbench** mail (Inbox `SEEN FROM <client>` + Sent via the
   `X-EquityBot` header) >30 min old, scoped to client correspondence so personal mail is untouched;
   heartbeat-run (≤15 min), Gmail Trash. Client `.invest` cleanup intentionally not done.
@@ -425,7 +425,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `email
     **`screen: investors`** / **`investor: <name>`**): a curated 25-name roster with hand-verified
     alias token-sets (subset match, no loose LIKE) → each investor's disclosed book + QoQ moves
     (entered/added/trimmed/exited, ≥0.5 floor). *Next:* widen SHP coverage so more names light up.
-  - *Proactive weekly digest — ✅ shipped* (`screen_digest.py`, `email_bot.maybe_screen_digest`):
+  - *Proactive weekly digest — ✅ shipped* (`screen_digest.py`, `bot.app.maybe_screen_digest`):
     one Saturday-evening "Screener movements" email with **trigger-based deltas only** across all three
     screens (fingerprints in `alert_state`, advance only after send; no email if nothing moved).
     Order-book>sales screen was **dropped** (order book isn't a structured field — LLM-extraction only).

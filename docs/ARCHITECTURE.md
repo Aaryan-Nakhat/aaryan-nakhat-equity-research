@@ -54,18 +54,34 @@ in [`SCRAPING.md`](SCRAPING.md),
                    └───────────────────────────────┬─────────────────────────────┘
                                                    ▼
                           ┌──────────────────────────────────────────┐
-                          │  DELIVERY  (email bot)                     │
-                          │  email_bot.py  (IMAP IDLE + SMTP)          │
-                          │  always-on: run_*.ps1 + Task Scheduler     │
-                          └───────────────┬───────────────┬──────────┘
-                                          │               │
-                              PULL (you ask)        PUSH (scheduled)
+                          │  COMMANDS   bot/app.py  handle_request()   │
+                          │  one router for every command; replies via │
+                          │  email.send_report(to=requester)           │
+                          └──────┬───────────────────────────┬────────┘
+                    email sender │                           │ local sender (you@eqr.local)
+                                 ▼                           ▼
+              ┌───────────────────────────────┐  ┌──────────────────────────────┐
+              │ EMAIL BOT (IMAP IDLE + SMTP)   │  │ LOCAL CHANNEL  bot/local.py   │
+              │ scripts/email_bot.py launcher  │  │ sink instead of SMTP →        │
+              │ always-on: run_*.ps1 + Task Sch│  │ `eqr` CLI (cli.py) · web UI   │
+              └───────┬───────────────┬───────┘  └──────────────────────────────┘
+                      │               │
+          PULL (you ask)        PUSH (scheduled)
 ```
+
+**One command handler, several channels.** `bot/app.py::handle_request` routes every command and
+replies through `reports/email.py::send_report(..., to=req.sender)`. The `eqr` CLI (and the web UI)
+build the same request the inbox would, from a local sender address, and register a **local sink**
+for that address — so replies are handed back in-process instead of going over SMTP. Routing by
+recipient keeps it correct across threads (Pickaxe delivers from a background thread) and leaves
+scheduled pushes to the real inbox untouched. A numbered pick is an in-thread reply, so the
+thread-scoped menus work identically; local channels only reword email phrasing for display
+(`bot.local.localize`).
 
 ## Flow A — Pull: you ask for a stock
 
 ```
-You ▶ email: "Infosys"  (or "Reliance consolidated")
+You ▶ email: "Infosys"  (or "Reliance consolidated")    ·   or   ▶ `eqr infosys` in a terminal
         │
         ▼  resolve.py  → LLM+Search → NSE symbol(s)
    one match? ──run──┐        several? ──▶ buttons ──▶ you tap one ──┐
@@ -75,6 +91,8 @@ You ▶ email: "Infosys"  (or "Reliance consolidated")
               → synthesize.py  → LLM forensic write-up
         │
         ▼  bot replies in-thread:  analysis inline (HTML)  +  full report as PDF
+           (CLI: printed + saved as .md / .html / .pdf under data/outputs/<date>/;
+            several matches → numbered list → `eqr pick <n>`)
 ```
 
 ## Flow B — Push: watchlist alerts (daily 18:00 IST)
@@ -189,7 +207,7 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
 
 URGENT  gate: trading day Mon–Fri, at 3 IST slots — pre-market 08:30 / midday 12:30 / evening 18:00,
         once per slot (scan.tailwind_urgent_slot_done); Saturday skipped (weekly covers it).
-        email_bot.maybe_tailwind_urgent (_current_urgent_slot picks the due slot; catch-up-friendly)
+        bot.app.maybe_tailwind_urgent (_current_urgent_slot picks the due slot; catch-up-friendly)
         │
         ▼  tailwind.run_tailwind_urgent() — the LIGHTER pass: Scout + Analyst only (cheap), keep FRESH,
               in-effect/proposed disruptions NOT in scan.tailwind_seen_keys, map+audit a bounded set
@@ -208,7 +226,7 @@ URGENT  gate: trading day Mon–Fri, at 3 IST slots — pre-market 08:30 / midda
 ## Flow H — Push: ⛏️ Pickaxe surging-demand radar (monthly, 1st Sat) + on-demand `pickaxe`
 
 ```
-MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due) — email_bot.maybe_pickaxe
+MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due) — bot.app.maybe_pickaxe
         │
         ▼  pickaxe.run_pickaxe() — the DEMAND-SIDE mirror of Tailwind, a FOUR-TIER agent pipeline:
               ① SCOUT   pickaxe._scout_signals — Google Trends rising "buy" queries by consumer
@@ -237,7 +255,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
               growth · sources · why; ⛏️ pickaxe / 🎯 direct badges) + Trends charts. Cached 24h (no PNGs).
         ▼
    ⛏️ ONE "Pickaxe" email + charted PDF. The full build is ~10-15 min, so it runs in a BACKGROUND thread
-        (email_bot._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
+        (bot.app._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
         ready; the monthly push runs off-heartbeat. `--latest` forces fresh; reply a number → deep report.
 
    (An idea generator — every theme is source-cited; a genuine demand theme ALWAYS has beneficiaries.
@@ -247,7 +265,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
 ## Flow I — 🎙️ Concalls: market-wide earnings-call scan (background ingest + weekly Sat push + on-demand `concalls`)
 
 ```
-INGEST  gate: ~hourly, background (scan.concall_ingest_due) — email_bot.maybe_concall_ingest (off-heartbeat
+INGEST  gate: ~hourly, background (scan.concall_ingest_due) — bot.app.maybe_concall_ingest (off-heartbeat
         thread, _concall_lock). Cost-bounded: persist once, read cheap.
         ▼  call_radar.pending_transcripts — ONE market-wide date-ranged sweep
               (nse_api.corporate_announcements(from_date,to_date)) → new TRANSCRIPT filings
@@ -259,8 +277,8 @@ INGEST  gate: ~hourly, background (scan.concall_ingest_due) — email_bot.maybe_
               • Say-Do Gap + Signal(0-100) call_radar._gap / _signal_score — divergence weighted most
         →  upsert into concall_signals (tone, execution, gap, signal_score, takeaways, guidance, url)
 
-SERVE   on-demand `concalls` (email_bot._send_call_radar) and the WEEKLY Sat ≥18:00 push
-        (scan.call_radar_due / email_bot.maybe_call_radar) both just READ + RANK the table
+SERVE   on-demand `concalls` (bot.app._send_call_radar) and the WEEKLY Sat ≥18:00 push
+        (scan.call_radar_due / bot.app.maybe_call_radar) both just READ + RANK the table
         (call_radar.radar → call_radar_brief.build_call_radar) — NO LLM at request time.
         ▼
    🎙️ ranked list of the most notable calls (biggest tone-vs-execution gaps first); reply a number → deep report.
@@ -270,7 +288,7 @@ SERVE   on-demand `concalls` (email_bot._send_call_radar) and the WEEKLY Sat ≥
 ## Flow J — 📈 Results Radar just-reported strength (background refresh + weekly Sat push + on-demand `results`)
 
 ```
-REFRESH gate: ~hourly, background (scan.results_ingest_due) — email_bot.maybe_results_ingest (off-heartbeat,
+REFRESH gate: ~hourly, background (scan.results_ingest_due) — bot.app.maybe_results_ingest (off-heartbeat,
         _results_lock). No LLM, no new table — financials.filing_date IS the "just reported" marker.
         ▼  results_radar.recent_filers — the SAME market-wide date-ranged sweep Concalls uses
               (nse_api.corporate_announcements(from_date,to_date)), filtered to "Results filed"
@@ -278,8 +296,8 @@ REFRESH gate: ~hourly, background (scan.results_ingest_due) — email_bot.maybe_
         ▼  results_radar.refresh_new — for a BOUNDED batch (~6) whose stored latest quarter is STALE:
               ingest.ingest_financials(symbol, max_filings=2) → lands the fresh quarter
 
-SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:00 push
-        (scan.results_radar_due / email_bot.maybe_results) both COMPUTE + RANK on-the-fly:
+SERVE   on-demand `results` (bot.app._send_results) and the WEEKLY Sat ≥18:00 push
+        (scan.results_radar_due / bot.app.maybe_results) both COMPUTE + RANK on-the-fly:
         ▼  results_radar.radar — names whose latest quarter filed within ~35d, scored by
               magnitude (YoY growth) + acceleration (vs prior ~3 quarters) + margin inflection,
               with the shared fundamentals.execution_band (Firing..Struggling) — ranked best-first
@@ -300,7 +318,7 @@ SERVE   on-demand `results` (email_bot._send_results) and the WEEKLY Sat ≥18:0
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **Config** | single source of truth for every tunable knob — timezone, schedule, feature toggles, cache TTLs, timeouts, market-cap bands, analytical thresholds; read from env with defaults = original behaviour | `config.py`, `.env.example` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, urgent Tailwind break-ins (pre-market/midday/evening on trading days), ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu | `scripts/email_bot.py`, `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, urgent Tailwind break-ins (pre-market/midday/evening on trading days), ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu. The same commands run from the terminal via the `eqr` CLI (local channel, no SMTP) | `bot/app.py` (command router + email bot; launched by `bot/app.py` (launched by `scripts/email_bot.py`)), `bot/local.py` (local channel), `cli.py` (`eqr`), `common/env.py` (`.env` loader), `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
 
 ## Configuration (`config.py`)
 

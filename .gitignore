@@ -32,6 +32,7 @@ gcp-service-account.json
 # Data — raw scrapes and processed artifacts are not committed
 data/raw/*
 data/processed/*
+data/outputs/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 *.duckdb
