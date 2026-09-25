@@ -348,9 +348,16 @@ The always-on delivery channel: you email a company name (or a command) from an 
 and get a deep report back in-thread. One Gmail account both **reads requests** (IMAP IDLE) and
 **sends reports** (SMTP).
 
-- **Resolver** (`reports/resolve.py`): LLM + web-search grounding maps free text → exact NSE
-  symbol(s). Returns **one** when certain, **up to 5 ranked** otherwise (handles small-cap /
-  newly-listed names, not just a fixed universe).
+- **Resolver** (`reports/resolve.py`): free text → exact NSE symbol(s), in two layers.
+  1. **Deterministic, from `equity_master` (no LLM):** an exact symbol (`INFY`, `hdfc amc` →
+     `HDFCAMC`) or an **old** one via NSE's official symbol-change list (`zomato` → `ETERNAL`) →
+     that company; words that start **one** listed name (`state bank`, `hdfc bank`) → that company;
+     words that start **several** names — a group/brand like `hdfc`, `tata`, `adani` → **always a
+     numbered list** (the LLM's pick first, the rest by trading value, ≤8), never a silent guess.
+  2. **LLM + web search** for everything else (typos, short forms, brand names that aren't the legal
+     name). Every LLM symbol is **validated against the live master**: renamed tickers are followed
+     to their current symbol (`TATAMOTORS` → `TMPV`, `L&TFH` → `LTF`) and delisted ones dropped, so a
+     stale ticker can't produce an empty report.
 - **Pipeline** (`reports/pipeline.py`): `generate_report(symbol, deep=…)` — ingests financials on
   demand for any NSE symbol, builds the brief, runs the LLM.
 - **Reply formatting**: the analysis is sent inline as **HTML** (bold, bullets, tables) and the full

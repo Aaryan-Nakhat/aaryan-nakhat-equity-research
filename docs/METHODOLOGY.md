@@ -521,7 +521,7 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 | Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ web search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
 | Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ web search) | revenue-share now→next-FY + growth, with sources (JSON) |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
-| Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (LLM + search) |
+| Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (exact/renamed symbol or name match in `equity_master`; group names → list; else LLM + search, validated against the master via NSE's symbol-change list) |
 
 **Simulation:** Monte-Carlo DCF (§B.11). **Solvers:** reverse-DCF & XIRR (bisection).
 

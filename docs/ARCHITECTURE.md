@@ -48,7 +48,7 @@ in [`SCRAPING.md`](SCRAPING.md),
                    ┌─────────────────────────────────────────────────────────────┐
                    │  reports/                                                   │
                    │  brief.py / deep_brief.py  → one markdown brief (all signals)│
-                   │  resolve.py  "name" → NSE symbol (LLM + web search)   │
+                   │  resolve.py  "name" → NSE symbol (master match → LLM) │
                    │  synthesize.py → the configured LLM (see .env)    │
                    │  pdf.py (HTML→Chromium PDF) · email.py (SMTP)                │
                    └───────────────────────────────┬─────────────────────────────┘
@@ -83,8 +83,9 @@ thread-scoped menus work identically; local channels only reword email phrasing 
 ```
 You ▶ email: "Infosys"  (or "Reliance consolidated")    ·   or   ▶ `eqr infosys` in a terminal
         │
-        ▼  resolve.py  → LLM+Search → NSE symbol(s)
-   one match? ──run──┐        several? ──▶ buttons ──▶ you tap one ──┐
+        ▼  resolve.py  → exact/old symbol or name match in equity_master (no LLM)
+        │               → else LLM+Search, every pick validated/renamed against the live master
+   one match? ──run──┐        several (e.g. a group: hdfc, tata)? ──▶ numbered list ──▶ you pick ──┐
                      ▼                                               ▼
         pipeline.generate_report():  ensure financials ingested (on-demand)
               → deep_brief (full IS/BS/CF + ratios + forensic + valuation)

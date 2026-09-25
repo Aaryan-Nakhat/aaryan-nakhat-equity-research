@@ -54,6 +54,30 @@ def fetch_bhavcopy(d: date) -> pd.DataFrame:
     return df
 
 
+_SYMBOL_CHANGES = "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
+
+
+def fetch_symbol_changes() -> dict[str, str]:
+    """NSE's official symbol-change list as ``{old_symbol: new_symbol}`` (e.g. ZOMATO → ETERNAL,
+    L&TFH → LTF). Headerless ``name, old, new, DD-MON-YYYY`` rows; names can contain commas, so each
+    line is split from the right. Chains (TELCO → TATAMOTORS → TMPV) are left for the caller to
+    follow; if a symbol changed twice, the later change wins."""
+    text = fetch_bytes(_SYMBOL_CHANGES).decode("utf-8", "replace")
+    dated: dict[str, tuple[date, str]] = {}
+    for line in text.splitlines():
+        parts = [p.strip() for p in line.rsplit(",", 3)]
+        if len(parts) != 4 or not parts[1] or not parts[2]:
+            continue
+        try:
+            when = pd.to_datetime(parts[3], format="%d-%b-%Y").date()
+        except (ValueError, TypeError):
+            continue
+        old, new = parts[1].upper(), parts[2].upper()
+        if old != new and (old not in dated or when >= dated[old][0]):
+            dated[old] = (when, new)
+    return {old: new for old, (_, new) in dated.items()}
+
+
 def fetch_index_closes(d: date) -> pd.DataFrame:
     """Daily close values for all NSE indices on trade date ``d``."""
     raw = fetch_bytes(_INDEX_CLOSE.format(d=_ddmmyyyy(d)))

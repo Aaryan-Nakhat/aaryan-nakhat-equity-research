@@ -68,8 +68,9 @@ Left `false`, `ambitionbox.fetch_company` returns `disabled` and the deep report
 
 With it left `false`, NSE `/api` calls raise `NseScrapingDisabled` and the
 affected features degrade gracefully (empty result) rather than scraping. The
-plain-HTTP NSE **archive files** (bhavcopy, index closes, participant OI) are the
-preferred, lighter path and are used wherever a file equivalent exists.
+plain-HTTP NSE **archive files** (bhavcopy, index closes, participant OI, the
+symbol-change list used to map renamed tickers) are the preferred, lighter path and
+are used wherever a file equivalent exists.
 
 ## Disclaimer
 
