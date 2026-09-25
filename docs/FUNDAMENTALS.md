@@ -131,6 +131,45 @@ Net effect on RELIANCE: **6 years of P&L** (FY2019–24) for trend/growth, but
 balance-sheet metrics + the forensic scores remain **FY2023+** (where the balance
 sheet is present).
 
+## 🏦 Banks — a different XBRL taxonomy (`analysis/lenders.py`)
+
+Banks file results under the **RBI banking taxonomy**, not Ind-AS corporate: `InterestEarned` /
+`InterestExpended` / `OperatingProfitBeforeProvisionAndContingencies` /
+`ProvisionsOtherThanTaxAndContingencies` / `ProfitLossForThePeriod`, a balance sheet of `Advances`
+/ `Deposits` / `Investments` / `Capital` + `ReservesAndSurplus`, and regulatory ratios
+(`PercentageOfGrossNpa`, `PercentageOfNpa`, `CET1Ratio`, `AdditionalTier1Ratio`). Before this
+existed every one of the ~34 listed banks read as empty (no `RevenueFromOperations`).
+
+- **Normalisation at load** (`fundamentals._normalise`, applied by `load_quarters` / `load_annual`):
+  same-meaning tags are copied onto their corporate names so every consumer works — revenue ←
+  interest earned (the usual Indian-screener convention; fees stay in `OtherIncome`), profit, PBT,
+  employee cost, equity share capital (`PaidUpValueOfEquityShareCapital` first — a bank's
+  `Capital` can include more than equity: ICICI's is ₹4,114 cr vs ₹1,432 cr of equity), and total
+  equity = capital + reserves. **Deliberately not mapped:** interest expended → `FinanceCosts` (it
+  would give every bank a ~1.3× "interest cover"), deposits → debt.
+- **Ratio repair:** some banks file certain periods' ratios 100× too small (CET1 `0.0012` for 12%,
+  GNPA `0.0002` for 2% — YESBANK, EQUITASBNK, JSFB, UJJIVANSFB); consolidated filings put 0 for NPA
+  and CET1 ("not reported"). Zeros → missing; CET1 < 3% and GNPA < 0.1% → ×100 (net NPA only in the
+  same row); CET1 > 60% after repair → missing.
+- **Bank metrics** (`lenders.annual_metrics` / `quarterly_metrics`): NII, PPOP, NIM (NII ÷ average
+  total assets — a proxy that reads slightly below the bank's own NIM on interest-earning assets),
+  cost-to-income, credit cost (provisions ÷ average advances), ROA / ROE on average balances
+  (computed — the filed quarterly ROA is annualised by some banks and not others), CD ratio, loan &
+  deposit growth, GNPA / NNPA (₹ and %), provision coverage (1 − NNPA ÷ GNPA), CET1 / Tier-1, book
+  value per share. Validated against HDFC Bank's published FY25 figures (NII ₹1,22,670 cr, PAT
+  ₹67,347 cr, GNPA 1.33%, NNPA 0.43%).
+- **Health checks** (`lenders.health_checks`, thresholds `BANK_*` in `config.py`): GNPA rising 3
+  quarters running, net NPA level, thin provision coverage, credit-cost spike vs its own history, thin
+  CET1, CD ratio > 90%, NII growth lagging loan growth (margin squeeze), ROA — ✅ / ⚠️ / 🔴.
+- **Altman / Piotroski / Beneish / Sloan** return `forensic.NOT_FOR_BANKS` for a bank instead of a
+  number; the health checks replace them. CFO/PAT and accruals are blanked (a bank's cash flow is
+  deposit and loan movement). Peer tables compare banks on ROA and GNPA % instead of ROCE and D/E.
+- **Basis:** banks default to **standalone** — NIM, cost-to-income, NPAs and capital are bank-level
+  concepts, and consolidation folds in insurance / AMC subsidiaries (HDFC Bank's consolidated
+  cost-to-income reads ~60% vs the bank's ~40%). With "consolidated" requested, regulatory ratios are
+  taken from the standalone filing and labelled as such.
+- **Not yet covered:** insurers file yet another taxonomy (premiums, claims) and still read thinly.
+
 ## Forensic / quality scores (`analysis/forensic.py`)
 
 All three built and validated on RELIANCE. Each returns the score, its

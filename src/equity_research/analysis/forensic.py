@@ -15,7 +15,13 @@ from dataclasses import dataclass, field
 
 import duckdb
 
-from equity_research.analysis.fundamentals import load_annual
+from equity_research.analysis.fundamentals import is_bank_frame, load_annual
+
+# These scores are built for industrial balance sheets (current assets, inventories, receivables,
+# COGS, PP&E). A bank has none of those — deposits are its raw material — so for a bank each score
+# returns this explanation instead of a number; the bank health checks (analysis/lenders.py) apply.
+NOT_FOR_BANKS = ("not applicable to banks — built for industrial balance sheets; see the bank "
+                 "asset-quality & capital checks instead")
 
 
 @dataclass
@@ -77,6 +83,8 @@ def altman_z(con: duckdb.DuckDBPyConnection, symbol: str, *,
     a = load_annual(con, symbol, consolidated)
     if a.empty:
         return Score("Altman Z", None, missing=["<no annual data>"])
+    if is_bank_frame(a):
+        return Score("Altman Z", None, note=NOT_FOR_BANKS)
     get = _row_getter(a, a.index[-1])
     missing: list[str] = []
     f = _need(get, ["CurrentAssets", "CurrentLiabilities", "OtherEquity",
@@ -114,6 +122,8 @@ def altman_z(con: duckdb.DuckDBPyConnection, symbol: str, *,
 def piotroski_f(con: duckdb.DuckDBPyConnection, symbol: str, *,
                 consolidated: bool = False) -> Score:
     a = load_annual(con, symbol, consolidated)
+    if is_bank_frame(a):
+        return Score("Piotroski F", None, note=NOT_FOR_BANKS)
     if len(a) < 2:
         return Score("Piotroski F", None, missing=["<need 2 years>"])
     cur, pri = _row_getter(a, a.index[-1]), _row_getter(a, a.index[-2])
@@ -166,6 +176,8 @@ def piotroski_f(con: duckdb.DuckDBPyConnection, symbol: str, *,
 def beneish_m(con: duckdb.DuckDBPyConnection, symbol: str, *,
               consolidated: bool = False) -> Score:
     a = load_annual(con, symbol, consolidated)
+    if is_bank_frame(a):
+        return Score("Beneish M", None, note=NOT_FOR_BANKS)
     if len(a) < 2:
         return Score("Beneish M", None, missing=["<need 2 years>"])
     cur, pri = _row_getter(a, a.index[-1]), _row_getter(a, a.index[-2])
@@ -232,6 +244,8 @@ def accruals(con: duckdb.DuckDBPyConnection, symbol: str, *,
     a classic earnings-quality red flag (low-accrual firms historically outperform).
     """
     a = load_annual(con, symbol, consolidated)
+    if is_bank_frame(a):
+        return Score("Sloan accruals %", None, note=NOT_FOR_BANKS)
     if len(a) < 2:
         return Score("Sloan accruals %", None, missing=["<need 2 years>"])
     cur, pri = _row_getter(a, a.index[-1]), _row_getter(a, a.index[-2])

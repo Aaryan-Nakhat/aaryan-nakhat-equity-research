@@ -240,8 +240,11 @@ source → formula → model).
   revenue-mix %, market cap / TAM / penetration, order book for order-driven names), carries a
   **holder-level shareholding** section + a **quarter-over-quarter ownership diff** (who entered / added /
   trimmed / exited) and the **💰 smart-money cost & profit-booking-risk** block, and gives every
-  valuation / forensic / technical section a plain-English **"how to read this."** Opt-in
-  **Upside Drivers 1-pager** (reply `1`) — forward catalysts, each with an estimated **₹cr / % impact**.
+  valuation / forensic / technical section a plain-English **"how to read this."** **Banks get a
+  bank-shaped report** — NII, NIM, cost-to-income, credit cost, gross/net NPAs & provision coverage,
+  CET1, CD ratio and ✅/⚠️ bank health checks in place of the industrial statements and Altman /
+  Piotroski / Beneish (which don't apply to lenders). Opt-in **Upside Drivers 1-pager** (reply `1`) —
+  forward catalysts, each with an estimated **₹cr / % impact**.
 - **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
   FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·
   movers · events with **inline filing analysis** · insider trades), **midday** (12:30, same sections on

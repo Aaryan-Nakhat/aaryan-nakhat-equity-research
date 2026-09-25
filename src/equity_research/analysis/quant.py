@@ -25,7 +25,7 @@ import pandas as pd
 
 from equity_research import config
 from equity_research.analysis import sector, valuation
-from equity_research.analysis.fundamentals import load_annual, load_quarters, ttm
+from equity_research.analysis.fundamentals import is_bank_frame, load_annual, load_quarters, ttm
 
 CR = 1e7
 _MARKET_INDEX = config.MARKET_INDEX
@@ -379,6 +379,7 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
             return float(v) if v is not None and v == v else None
         pat, eq, rev = g("ProfitLossForPeriod"), g("Equity"), g("RevenueFromOperations")
         pbt, fin = g("ProfitBeforeTax"), g("FinanceCosts")
+        # debt-free companies often omit the borrowings lines rather than file zero, so absent = 0
         debt = (g("BorrowingsCurrent") or 0) + (g("BorrowingsNoncurrent") or 0)
         if pat and eq:
             out["ROE%"] = 100 * pat / eq
@@ -386,8 +387,15 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
             out["ROCE%"] = 100 * (pbt + fin) / (eq + debt) if (eq + debt) else None
         if pat and rev:
             out["NetMargin%"] = 100 * pat / rev
-        if eq:
+        # never for a bank: its deposits aren't leverage debt, and "D/E 0.0" would read debt-free
+        if eq and not is_bank_frame(af):
             out["D/E"] = debt / eq
+        if is_bank_frame(af):                    # the columns bank investors actually compare
+            assets, gn = g("Assets"), g("PercentageOfGrossNpa")
+            if pat and assets:
+                out["ROA%"] = 100 * pat / assets
+            if gn is not None:
+                out["GNPA%"] = 100 * gn
         # peer fallback: when a TTM P/E isn't available (peers are ingested annual-only),
         # use a trailing-annual P/E (market cap / last-FY PAT) so the column isn't all n/a.
         if "P/E" not in out and pat and pat > 0 and snap.get("market_cap_cr"):
@@ -396,7 +404,8 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
     # margin >100% when 'revenue from operations' excludes investment income, or a
     # negative/blown-up P/E) so peer tables and z-scores aren't distorted.
     bounds = {"P/E": (0, 500), "P/B": (0, 100), "ROE%": (-200, 300),
-              "ROCE%": (-200, 300), "NetMargin%": (-100, 100), "D/E": (0, 50)}
+              "ROCE%": (-200, 300), "NetMargin%": (-100, 100), "D/E": (0, 50),
+              "ROA%": (-10, 10), "GNPA%": (0, 60)}
     return {k: v for k, v in out.items()
             if v is not None and v == v and bounds[k][0] <= v <= bounds[k][1]}
 
@@ -404,7 +413,8 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
 # Plausible per-ratio bounds — drop pathological peers (e.g. holding cos with
 # PAT > revenue, or near-zero-equity outliers) so they don't distort mean/std.
 _SANE = {"P/E": (0, 150), "P/B": (0, 50), "ROE%": (-100, 100),
-         "ROCE%": (-100, 100), "NetMargin%": (-100, 100), "D/E": (0, 20)}
+         "ROCE%": (-100, 100), "NetMargin%": (-100, 100), "D/E": (0, 20),
+         "ROA%": (-5, 5), "GNPA%": (0, 30)}
 
 
 def sector_zscores(con: duckdb.DuckDBPyConnection, symbol: str,

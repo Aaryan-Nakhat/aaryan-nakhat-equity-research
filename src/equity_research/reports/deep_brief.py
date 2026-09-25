@@ -20,7 +20,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from equity_research.analysis import (forensic, fundamentals, ownership, quant, sector,
+from equity_research.analysis import (forensic, fundamentals, lenders, ownership, quant, sector,
                                       technical, valuation)
 from equity_research.analysis.fundamentals import load_annual
 from equity_research.reports import glossary
@@ -310,7 +310,8 @@ def _peer_comparison(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: 
     """Peer table grouped into large / mid / small cap (≤5 per tier), companies shown by
     **name** not symbol, the target marked ◄. Peers share the NSE industry. [] if too thin."""
     names = _names(con)
-    pcols = ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"]
+    pcols = (["P/E", "P/B", "ROE%", "ROA%", "NetMargin%", "GNPA%"] if fundamentals.is_bank(con, symbol)
+             else ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"])
     recs = []
     for ps in [symbol, *sector.peers(con, symbol)]:
         r = quant._ratios(con, ps, consolidated)
@@ -532,35 +533,191 @@ def render_levels(con: duckdb.DuckDBPyConnection, symbol: str, lv: dict | None) 
     return L
 
 
-def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
-                     consolidated: bool = False, target_shares: float | None = None,
-                     guidance: dict | None = None, overview: str | None = None,
-                     share_action: dict | None = None) -> str:
-    af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
-    label = "consolidated" if consolidated else "standalone"
-    L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
-         f"_Report generated {date.today():%d-%b-%Y}. All figures ₹ crore unless "
-         "noted. History depth is data-bound: P&L is multi-year; balance sheet & "
-         "cash flow are present only for years where the result XBRL carried them "
-         "(typically FY2023+)._\n"]
-    if overview:                                        # business overview leads the report
-        L += [overview, ""]
-    if af.empty:
-        # No structured statements (e.g. a REIT/InvIT, or a newly listed/renamed entity).
-        # Still deliver the business overview above + whatever price/technical context exists.
-        L += ["_No structured annual financials are published for this symbol on NSE's result "
-              "XBRL feed (typical for REITs / InvITs, or a newly listed / recently renamed "
-              "entity), so the statement tables are omitted. The business overview above and "
-              "the price/technical snapshot below still apply._", ""]
-        ts = technical.snapshot(con, symbol)
-        if ts:
-            L += ["## Technical snapshot",
-                  f"- Close ₹{_f(ts['close'],2)} · SMA20/50/200 {_f(ts['sma20'],0)}/{_f(ts['sma50'],0)}/"
-                  f"{_f(ts['sma200'],0)} · RSI {_f(ts['rsi14'],0)} · "
-                  f"{_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
-                  f"- Signals: {', '.join(ts['signals'])}"]
-        return "\n".join(L)
+def _bank_frames(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                 consolidated: bool) -> tuple[pd.DataFrame, pd.DataFrame, bool]:
+    """(annual metrics, quarterly metrics, borrowed) for a bank. On a consolidated report the
+    regulatory ratios (NPA %, CET1) come from the standalone filing — ``borrowed`` says so."""
+    am = lenders.annual_metrics(af)
+    qm = lenders.quarterly_metrics(fundamentals.load_quarters(con, symbol, consolidated))
+    borrowed = False
+    if consolidated:
+        am, b1 = lenders.with_regulatory_fallback(
+            am, lenders.annual_metrics(load_annual(con, symbol, False)))
+        qm, b2 = lenders.with_regulatory_fallback(
+            qm, lenders.quarterly_metrics(fundamentals.load_quarters(con, symbol, False)))
+        borrowed = b1 or b2
+    return am, qm, borrowed
 
+
+def _bank_sections(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                   consolidated: bool) -> list[str]:
+    """§1–§8 for a bank — its earnings engine, returns, balance sheet, asset quality, capital and
+    quarterly trend — instead of the industrial statements (EBITDA, working capital, FCF)."""
+    am, qm, borrowed = _bank_frames(con, symbol, af, consolidated)
+    L = ["> 🏦 **This is a bank**, so it's read on a bank's numbers — its earnings engine (net "
+         "interest income), asset quality (bad loans), capital and funding — rather than the "
+         "industrial yardsticks (EBITDA, working-capital days, free cash flow) that don't fit a "
+         "lender, whose raw material is deposits and whose product is loans.", ""]
+    if am.empty:
+        return L + ["_No annual bank statements on file._", ""]
+
+    def row(label: str, col: str, years: list, nd: int = 0, pct: bool = False,
+            lo: float | None = None, hi: float | None = None) -> list[str]:
+        vals = am[col] if col in am else pd.Series(np.nan, index=am.index)
+        return [label] + [_f(vals.get(y), nd, pct=pct, lo=lo, hi=hi) for y in years]
+
+    def fy(years: list) -> list[str]:
+        return [f"FY{y.year}" for y in years]
+
+    years = [y for y in am.index if not pd.isna(am.at[y, "interest_earned_cr"])]
+    if years:
+        L += ["## 1. Income statement (bank)", _table(["₹ crore"] + fy(years), [
+            row("Interest earned", "interest_earned_cr", years),
+            row("Interest expended", "interest_expended_cr", years),
+            row("**Net interest income (NII)**", "nii_cr", years),
+            row("Other income (fees, treasury, recoveries)", "other_income_cr", years),
+            row("Operating expenses", "opex_cr", years),
+            row("  of which employee cost", "employee_cr", years),
+            row("**Operating profit before provisions (PPOP)**", "ppop_cr", years),
+            row("Provisions & contingencies", "provisions_cr", years),
+            row("Profit before tax", "pbt_cr", years),
+            row("Tax", "tax_cr", years),
+            row("**Net profit (PAT)**", "pat_cr", years),
+        ]), ""]
+        L += ["## 2. Margins, returns & growth", _table(["Metric"] + fy(years), [
+            row("NIM (NII ÷ avg total assets)", "nim_%", years, 2, True, -5, 20),
+            row("Cost-to-income", "cost_to_income_%", years, 1, True, 0, 150),
+            row("Credit cost (provisions ÷ avg loans)", "credit_cost_%", years, 2, True, -10, 20),
+            row("ROA", "roa_%", years, 2, True, -10, 10),
+            row("ROE", "roe_%", years, 1, True, -100, 100),
+            row("Other income ÷ (NII + other income)", "fee_share_%", years, 1, True, -50, 100),
+            row("NII YoY", "nii_yoy_%", years, 1, True, -100, 500),
+            row("PPOP YoY", "ppop_yoy_%", years, 1, True, -100, 500),
+            row("PAT YoY", "pat_yoy_%", years, 1, True, -100, 1000),
+        ]), "",
+            "**How to read this.** **NII** is the bank's gross margin in rupees — what it earns on "
+            "loans and investments minus what it pays depositors. **NIM** is that as a % of assets "
+            "(here on total assets; the bank's own figure, on interest-earning assets, runs a little "
+            "higher). **Cost-to-income** is how much of each rupee of income goes on running the "
+            "bank — under ~45% is efficient. **Credit cost** is the year's provisions for bad loans "
+            "as a % of loans — the single biggest swing factor in bank profits. **ROA** above ~1.5% "
+            "is top-tier for an Indian bank; **ROE** is what shareholders earn on their capital and "
+            "is what the P/B in §10 has to be justified by.", ""]
+
+    by = [y for y in am.index if not pd.isna(am.at[y, "assets_cr"])]
+    if by:
+        L += ["## 3. Balance sheet (bank)", _table(["₹ crore"] + fy(by), [
+            row("Advances (loans)", "advances_cr", by),
+            row("Investments", "investments_cr", by),
+            row("**Total assets**", "assets_cr", by),
+            row("Deposits", "deposits_cr", by),
+            row("Borrowings", "borrowings_cr", by),
+            row("**Net worth (capital + reserves)**", "networth_cr", by),
+            row("Book value per share (₹)", "bvps", by, 1, lo=0, hi=100_000),
+        ]), ""]
+        shares = (af["EquityShareCapital"] / af["FaceValueOfEquityShareCapital"]
+                  if {"EquityShareCapital", "FaceValueOfEquityShareCapital"} <= set(af.columns)
+                  else pd.Series(dtype=float)).dropna()
+        jumps = [(y, r) for y, r in (shares / shares.shift(1)).dropna().items() if r >= 1.8]
+        for y, r in jumps:
+            L += [f"_Share count rose ~{r:.0f}× in FY{y.year} (a bonus issue or split), so book value "
+                  "per share isn't comparable across that year — net worth itself kept growing._", ""]
+
+    qy = [y for y in am.index if not all(pd.isna(am.at[y, c]) for c in
+                                         ("gnpa_%", "nnpa_%", "gnpa_cr", "cet1_%"))]
+    if qy:
+        L += ["## 4. Asset quality — bad loans", _table(["Metric"] + fy(qy), [
+            row("Gross NPA (₹ cr)", "gnpa_cr", qy),
+            row("Gross NPA %", "gnpa_%", qy, 2, True, 0, 60),
+            row("Net NPA (₹ cr)", "nnpa_cr", qy),
+            row("Net NPA %", "nnpa_%", qy, 2, True, 0, 40),
+            row("Provision coverage (PCR)", "pcr_%", qy, 1, True, 0, 100),
+        ]), "",
+            "**How to read this.** A **non-performing asset (NPA)** is a loan that has stopped paying "
+            "(90+ days overdue). **Gross NPA %** is the share of all loans gone bad; **net NPA %** is "
+            "what's left after the bank has already set money aside (provisions) against them — the "
+            "part that could still hurt profit. **Provision coverage** is how much of the bad loans is "
+            "already provided for: above ~70% is a thick cushion. The direction matters more than "
+            "the level — rising NPAs lead rising credit costs by a few quarters.", ""]
+    fy_cap = [y for y in am.index if not all(pd.isna(am.at[y, c]) for c in
+                                            ("cet1_%", "cd_ratio_%", "adv_yoy_%", "dep_yoy_%"))]
+    if fy_cap:
+        L += ["## 5. Capital & funding", _table(["Metric"] + fy(fy_cap), [
+            row("CET1 ratio", "cet1_%", fy_cap, 1, True, 0, 60),
+            row("Tier-1 ratio", "tier1_%", fy_cap, 1, True, 0, 60),
+            row("Credit-deposit (CD) ratio", "cd_ratio_%", fy_cap, 1, True, 0, 300),
+            row("Advances (loan) growth YoY", "adv_yoy_%", fy_cap, 1, True, -100, 500),
+            row("Deposit growth YoY", "dep_yoy_%", fy_cap, 1, True, -100, 500),
+        ]), "",
+            "**How to read this.** **CET1** is the bank's core equity as a % of its risk-weighted "
+            "loans — its loss-absorbing cushion. RBI's floor, including the conservation buffer, is "
+            "8%; well above that means room to grow without raising fresh equity. The **CD ratio** is "
+            "loans ÷ deposits: above ~90% the bank is lending faster than it gathers deposits and has "
+            "to lean on costlier borrowings, which squeezes margins. Loan growth running far ahead "
+            "of deposit growth is the same warning in motion.", ""]
+    if borrowed:
+        L += ["_NPA and capital ratios are regulatory figures reported for the **bank** itself; "
+              "consolidated filings leave them blank, so they are taken from the standalone results._",
+              ""]
+    L += ["## 6. Cash flow — context only for a bank",
+          "A bank's operating cash flow mostly records deposits coming in and loans going out, so it "
+          "swings with balance-sheet growth rather than with how well profit turns into cash. "
+          "CFO ÷ PAT, free cash flow and accruals therefore aren't earnings-quality signals for a "
+          "bank and are left out.", "",
+          "## 7. Why the industrial ratios are left out",
+          "EBITDA, interest cover, debt ÷ equity, working-capital days and the Altman / Piotroski / "
+          "Beneish scores all assume an industrial balance sheet — inventories, receivables, "
+          "borrowings used to fund a plant. For a bank, interest paid is its cost of raw material and "
+          "deposits are not 'debt' in that sense, so those numbers would mislead (every bank would "
+          "look dangerously over-borrowed). The bank measures above, and the health checks in §9, "
+          "replace them.", ""]
+
+    if not qm.empty:
+        q = qm.tail(8)
+
+        def qrow(label: str, col: str, nd: int = 0, pct: bool = False,
+                 lo: float | None = None, hi: float | None = None) -> list[str]:
+            vals = q[col] if col in q else pd.Series(np.nan, index=q.index)
+            return [label] + [_f(v, nd, pct=pct, lo=lo, hi=hi) for v in vals]
+        L += [f"## 8. Quarterly trend (last {len(q)}q)", _table(
+            ["Quarter"] + [str(i.date()) for i in q.index], [
+                qrow("Interest earned (₹cr)", "interest_earned_cr"),
+                qrow("NII (₹cr)", "nii_cr"),
+                qrow("NII YoY", "nii_yoy_%", 1, True, -100, 500),
+                qrow("Other income (₹cr)", "other_income_cr"),
+                qrow("PPOP (₹cr)", "ppop_cr"),
+                qrow("Provisions (₹cr)", "provisions_cr"),
+                qrow("Net profit (₹cr)", "pat_cr"),
+                qrow("PAT YoY", "pat_yoy_%", 1, True, -100, 1000),
+                qrow("Gross NPA %", "gnpa_%", 2, True, 0, 60),
+                qrow("Net NPA %", "nnpa_%", 2, True, 0, 40),
+                qrow("Provision coverage", "pcr_%", 1, True, 0, 100),
+                qrow("CET1", "cet1_%", 1, True, 0, 60),
+            ]), ""]
+    return L
+
+
+def _bank_forensics(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                    consolidated: bool) -> list[str]:
+    """§9 for a bank: why the industrial scores don't apply, then the bank health checks."""
+    am, qm, _ = _bank_frames(con, symbol, af, consolidated)
+    icon = {"ok": "✅", "warn": "⚠️", "alarm": "🔴"}
+    L = ["- **Altman Z · Piotroski F · Beneish M · Sloan accruals — not applicable to banks.** "
+         "They are built from industrial balance-sheet items (inventories, receivables, current "
+         "assets, PP&E) that a bank doesn't have, so they are replaced by the checks below.",
+         "", "**🏦 Bank health checks** (from the figures in §1–§8):"]
+    checks = lenders.health_checks(am, qm)
+    L += [f"- {icon[s]} {t}" for s, t in checks] or ["- _Not enough bank data on file to run the checks._"]
+    L.append("")
+    return L
+
+
+def _statement_sections(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                        consolidated: bool) -> tuple[list[str], pd.Series, pd.Series]:
+    """§1–§8 for an industrial / services company: income statement, margins, balance sheet,
+    returns & leverage, working capital, cash flow, FCF & earnings quality, quarterly trend.
+    Returns ``(lines, cfo, pat)`` — the forensic section cross-checks Beneish against CFO/PAT."""
+    L: list[str] = []
     def s(el: str) -> pd.Series:
         return af[el] if el in af.columns else pd.Series(np.nan, index=af.index)
 
@@ -753,49 +910,91 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
             ["PAT YoY"] + [_f(x, 1, pct=True, lo=-100, hi=500) for x in q["net_yoy_%"]],
             ["Interest cover"] + [_f(x, 1, x=True, lo=-50, hi=500) for x in q["interest_cover_x"]],
         ]), ""]
+    return L, cfo, pat
+
+
+def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
+                     consolidated: bool = False, target_shares: float | None = None,
+                     guidance: dict | None = None, overview: str | None = None,
+                     share_action: dict | None = None) -> str:
+    af = load_annual(con, symbol, consolidated)        # index=year-end, cols=elements (₹)
+    label = "consolidated" if consolidated else "standalone"
+    L = [f"# {symbol} — deep fundamental & forensic brief ({label})\n",
+         f"_Report generated {date.today():%d-%b-%Y}. All figures ₹ crore unless "
+         "noted. History depth is data-bound: P&L is multi-year; balance sheet & "
+         "cash flow are present only for years where the result XBRL carried them "
+         "(typically FY2023+)._\n"]
+    if overview:                                        # business overview leads the report
+        L += [overview, ""]
+    if af.empty:
+        # No structured statements (e.g. a REIT/InvIT, or a newly listed/renamed entity).
+        # Still deliver the business overview above + whatever price/technical context exists.
+        L += ["_No structured annual financials are published for this symbol on NSE's result "
+              "XBRL feed (typical for REITs / InvITs, or a newly listed / recently renamed "
+              "entity), so the statement tables are omitted. The business overview above and "
+              "the price/technical snapshot below still apply._", ""]
+        ts = technical.snapshot(con, symbol)
+        if ts:
+            L += ["## Technical snapshot",
+                  f"- Close ₹{_f(ts['close'],2)} · SMA20/50/200 {_f(ts['sma20'],0)}/{_f(ts['sma50'],0)}/"
+                  f"{_f(ts['sma200'],0)} · RSI {_f(ts['rsi14'],0)} · "
+                  f"{_f(ts['pct_from_52w_high'],1,pct=True)} from 52w high",
+                  f"- Signals: {', '.join(ts['signals'])}"]
+        return "\n".join(L)
+
+    bank = fundamentals.is_bank_frame(af)
+    if bank:                                            # 🏦 a bank's own statements & ratios
+        L += _bank_sections(con, symbol, af, consolidated)
+        cfo = pat = None
+    else:                                               # industrial / services statements
+        body, cfo, pat = _statement_sections(con, symbol, af, consolidated)
+        L += body
 
     # ===================== FORENSIC DEEP DIVE =====================
-    mcap = valuation.market_cap(con, symbol, consolidated, shares_override=target_shares)
-    z = forensic.altman_z(con, symbol, consolidated=consolidated, market_cap=mcap)
-    fsc = forensic.piotroski_f(con, symbol, consolidated=consolidated)
-    m = forensic.beneish_m(con, symbol, consolidated=consolidated)
-    acc = forensic.accruals(con, symbol, consolidated=consolidated)
+    L += ["## 9. Forensic deep-dive", ""]
     p = con.execute(
         "SELECT period_end, promoter_holding_pct, pledged_pct_of_promoter, pledged_pct_of_total "
         "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
-    zband = ("n/a" if z.value is None else "safe" if z.value > 2.99
-             else "distress" if z.value < 1.81 else "grey zone")
-    fband = ("n/a" if fsc.value is None else "strong" if fsc.value >= 8
-             else "weak" if fsc.value <= 2 else "middling")
-    mflag = ("n/a" if m.value is None else
-             "⚠ above −1.78 (possible manipulation)" if m.value > -1.78 else "clean (≤ −1.78)")
-    # corroborate a Beneish flag against the harder cash/accrual evidence — a sharp
-    # margin recovery can trip the statistical screen without any real manipulation.
-    cp = (cfo / pat).replace([np.inf, -np.inf], np.nan).dropna()
-    cfo_pat_latest = float(cp.iloc[-1]) if len(cp) else None
-    beneish_fp = (m.value is not None and m.value > -1.78
-                  and acc.value is not None and acc.value <= 10
-                  and cfo_pat_latest is not None and cfo_pat_latest >= 1.0)
-    mcaveat = (" — but Sloan accruals and cash conversion look clean, so likely a statistical "
-               "false positive from a sharp margin recovery" if beneish_fp else "")
-    L += ["## 9. Forensic deep-dive", ""]
-    L.append(f"- **Altman Z = {_f(z.value, 2)} — {zband}.** Bankruptcy-distance score "
-             "(>2.99 safe · 1.81–2.99 grey · <1.81 distress); calibrated for manufacturers, so "
-             "asset-heavy giants can read low." + (f" _{z.note}_" if z.note else ""))
-    if fsc.value is not None and fsc.components:
-        passed = [k for k, v in fsc.components.items() if v]
-        failed = [k for k, v in fsc.components.items() if not v]
-        L.append(f"- **Piotroski F = {_f(fsc.value, 0)}/9 — {fband}.** 9-point fundamental-strength "
-                 f"checklist. Passed: {', '.join(passed) or 'none'}. Failed: {', '.join(failed) or 'none'}.")
+    if bank:
+        L += _bank_forensics(con, symbol, af, consolidated)
     else:
-        L.append(f"- **Piotroski F:** n/a (missing {fsc.missing}).")
-    L.append(f"- **Beneish M = {_f(m.value, 2)} — {mflag}{mcaveat}.** Statistical earnings-manipulation "
-             "screen (a flag to dig, not proof — corroborate with accruals/receivables/cash).")
-    if acc.value is not None:
-        L.append(f"- **Sloan accruals = {_f(acc.value, 1, pct=True)} of avg assets — "
-                 f"{glossary.label('Sloan accruals%', acc.value) or 'n/a'}.** Non-cash part of "
-                 f"earnings (cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}); "
-                 "near-zero/negative = earnings cash-backed, high positive = aggressive.")
+        mcap = valuation.market_cap(con, symbol, consolidated, shares_override=target_shares)
+        z = forensic.altman_z(con, symbol, consolidated=consolidated, market_cap=mcap)
+        fsc = forensic.piotroski_f(con, symbol, consolidated=consolidated)
+        m = forensic.beneish_m(con, symbol, consolidated=consolidated)
+        acc = forensic.accruals(con, symbol, consolidated=consolidated)
+        zband = ("n/a" if z.value is None else "safe" if z.value > 2.99
+                 else "distress" if z.value < 1.81 else "grey zone")
+        fband = ("n/a" if fsc.value is None else "strong" if fsc.value >= 8
+                 else "weak" if fsc.value <= 2 else "middling")
+        mflag = ("n/a" if m.value is None else
+                 "⚠ above −1.78 (possible manipulation)" if m.value > -1.78 else "clean (≤ −1.78)")
+        # corroborate a Beneish flag against the harder cash/accrual evidence — a sharp
+        # margin recovery can trip the statistical screen without any real manipulation.
+        cp = (cfo / pat).replace([np.inf, -np.inf], np.nan).dropna()
+        cfo_pat_latest = float(cp.iloc[-1]) if len(cp) else None
+        beneish_fp = (m.value is not None and m.value > -1.78
+                      and acc.value is not None and acc.value <= 10
+                      and cfo_pat_latest is not None and cfo_pat_latest >= 1.0)
+        mcaveat = (" — but Sloan accruals and cash conversion look clean, so likely a statistical "
+                   "false positive from a sharp margin recovery" if beneish_fp else "")
+        L.append(f"- **Altman Z = {_f(z.value, 2)} — {zband}.** Bankruptcy-distance score "
+                 "(>2.99 safe · 1.81–2.99 grey · <1.81 distress); calibrated for manufacturers, so "
+                 "asset-heavy giants can read low." + (f" _{z.note}_" if z.note else ""))
+        if fsc.value is not None and fsc.components:
+            passed = [k for k, v in fsc.components.items() if v]
+            failed = [k for k, v in fsc.components.items() if not v]
+            L.append(f"- **Piotroski F = {_f(fsc.value, 0)}/9 — {fband}.** 9-point fundamental-strength "
+                     f"checklist. Passed: {', '.join(passed) or 'none'}. Failed: {', '.join(failed) or 'none'}.")
+        else:
+            L.append(f"- **Piotroski F:** n/a (missing {fsc.missing}).")
+        L.append(f"- **Beneish M = {_f(m.value, 2)} — {mflag}{mcaveat}.** Statistical earnings-manipulation "
+                 "screen (a flag to dig, not proof — corroborate with accruals/receivables/cash).")
+        if acc.value is not None:
+            L.append(f"- **Sloan accruals = {_f(acc.value, 1, pct=True)} of avg assets — "
+                     f"{glossary.label('Sloan accruals%', acc.value) or 'n/a'}.** Non-cash part of "
+                     f"earnings (cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}); "
+                     "near-zero/negative = earnings cash-backed, high positive = aggressive.")
     if p and p[2] is not None:
         L.append(f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
                  f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of that is pledged** "
@@ -1062,8 +1261,16 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         L.append("- **Order book / backlog** is read from the filings and, when disclosed, appears "
                  "in the **Business overview** at the top — it is not part of the structured XBRL "
                  "statements.")
-    L += [f"- Statements are {label}; pass the consolidated flag for group-level figures.",
-          "- COGS, EBITDA and FCFF/FCFE use documented approximations "
-          "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "
-          "FCFF adds back after-tax interest; FCFE adds net borrowing)."]
+    L.append(f"- Statements are {label}; pass the consolidated flag for group-level figures.")
+    if bank:
+        L.append("- Bank ratios are computed from the results filing: NIM = NII ÷ average total "
+                 "assets (a proxy — banks' own NIM divides by interest-earning assets only, so it "
+                 "reads a little higher); ROA / ROE on average balances; credit cost = provisions ÷ "
+                 "average advances; provision coverage = 1 − net NPA ÷ gross NPA. NPA % and CET1 are "
+                 "as reported by the bank (a few filings state them 100× too small; those are "
+                 "rescaled).")
+    else:
+        L.append("- COGS, EBITDA and FCFF/FCFE use documented approximations "
+                 "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "
+                 "FCFF adds back after-tax interest; FCFE adds net borrowing).")
     return "\n".join(L)

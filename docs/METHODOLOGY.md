@@ -151,6 +151,21 @@ transformed by `analysis/fundamentals.py`, `forensic.py`, `valuation.py`, `quant
 
 ### §8 Quarterly P&L trend — last 6 quarters of §2 metrics. **Model:** none.
 
+### 🏦 §1–§9 for a bank (`analysis/lenders.py`, `deep_brief._bank_sections`) — deterministic
+Banks file the RBI banking XBRL taxonomy, so a bank's report swaps the industrial statements for
+bank ones: **§1** interest earned / expended → **NII** → other income → opex → **PPOP** → provisions →
+PAT · **§2** NIM (NII ÷ avg total assets), cost-to-income (opex ÷ (NII + other income)), credit cost
+(provisions ÷ avg advances), ROA / ROE (avg balances), NII / PPOP / PAT growth · **§3** advances,
+investments, deposits, borrowings, net worth, book value/share · **§4** gross / net NPA (₹, %),
+provision coverage (1 − NNPA ÷ GNPA) · **§5** CET1, Tier-1, CD ratio (advances ÷ deposits), loan &
+deposit growth · **§6–§7** why cash-flow quality and industrial ratios don't apply · **§8** quarterly
+NII / PPOP / provisions / PAT / NPA / CET1 · **§9** Altman / Piotroski / Beneish marked *not applicable*
+and replaced by **bank health checks** (NPA trend, net NPA level, PCR, credit-cost spike, CET1, CD
+ratio, NII-vs-loan growth, ROA; thresholds `config.BANK_*`). Banks default to the **standalone**
+basis; a consolidated report borrows the regulatory ratios from the standalone filing. Filer
+errors (ratios 100× too small, consolidated zeros) are repaired at load — see
+[`FUNDAMENTALS.md`](FUNDAMENTALS.md). **Model:** none.
+
 ### §9 Forensic deep-dive (`analysis/forensic.py`) — deterministic scores
 A score is emitted **only when every input is present** (missing inputs are listed; never proxied
 with zero).

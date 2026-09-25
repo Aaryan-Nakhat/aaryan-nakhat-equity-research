@@ -17,10 +17,99 @@ import pandas as pd
 
 CR = 1e7  # 1 crore = 10^7 rupees
 
+# Banks file results under the RBI banking XBRL taxonomy, not the Ind-AS corporate one, so a bank's
+# frame has no 'RevenueFromOperations' / 'ProfitLossForPeriod' and every corporate consumer read it
+# as empty. Where a bank tag MEANS THE SAME as a corporate tag it is copied onto it at load time, so
+# revenue, profit, equity and share count flow through every report, screen and radar. Only
+# identical meanings are mapped: interest *expended* is deliberately NOT 'FinanceCosts' (it would
+# turn every bank into a 1.3x-interest-cover "danger"), and deposits are not debt — bank-specific
+# analysis lives in ``analysis/lenders.py``. Convention (as on most Indian screeners): a bank's top
+# line is interest earned; fee/treasury income stays in 'OtherIncome'.
+_BANK_ALIASES: dict[str, tuple[str, ...]] = {
+    "ProfitLossForPeriod": ("ProfitLossForThePeriod",),
+    "ProfitBeforeTax": ("ProfitLossFromOrdinaryActivitiesBeforeTax",),
+    "RevenueFromOperations": ("InterestEarned",),
+    "EmployeeBenefitExpense": ("EmployeesCost",),
+    # the explicit equity paid-up figure first — a bank's balance-sheet 'Capital' can carry more than
+    # equity shares (ICICI's is ₹4,114 cr vs ₹1,432 cr of equity), which would triple its share count
+    "EquityShareCapital": ("PaidUpValueOfEquityShareCapital", "Capital"),
+}
+
+
+def is_bank_frame(df: pd.DataFrame) -> bool:
+    """True for a frame filed under the banking taxonomy. Corporates report 'FinanceCosts', never
+    'InterestExpended', so both RBI interest tags together identify a bank — before or after
+    normalisation (which keeps them)."""
+    if df is None or df.empty:
+        return False
+    return df.attrs.get("taxonomy") == "bank" or (
+        "InterestEarned" in df.columns and "InterestExpended" in df.columns)
+
+
+def _fix_bank_ratio_scale(df: pd.DataFrame) -> None:
+    """Some banks file certain periods' ratio fields 100x too small (CET1 0.0012 for 12%, GNPA
+    0.0002 for 2% — seen for YESBANK, EQUITASBNK, JSFB, UJJIVANSFB). Rescale, in place, per field:
+    CET1 < 3% is impossible for an operating bank (RBI's floor is 5.5%); gross NPA < 0.1% isn't
+    seen in Indian banking; net NPA only in the same row as a mis-scaled gross NPA (a genuinely
+    tiny net NPA is real)."""
+    def bump(col: str, mask: pd.Series) -> None:
+        if col in df.columns:
+            df.loc[mask & df[col].notna(), col] = df.loc[mask & df[col].notna(), col] * 100
+
+    # Consolidated results file these regulatory ratios as 0.0 ("not reported" — they're a
+    # bank-level concept); an impossible value is missing, not zero.
+    if "CET1Ratio" in df.columns:
+        df.loc[df["CET1Ratio"] <= 0, "CET1Ratio"] = np.nan
+    if "PercentageOfGrossNpa" in df.columns:
+        unreported = df["PercentageOfGrossNpa"] <= 0
+        if "PercentageOfNpa" in df.columns:
+            df.loc[unreported, "PercentageOfNpa"] = np.nan
+        df.loc[unreported, "PercentageOfGrossNpa"] = np.nan
+    if "GrossNonPerformingAssets" in df.columns:          # ₹ amounts: consolidated files 0 too
+        unreported = df["GrossNonPerformingAssets"] <= 0
+        if "NonPerformingAssets" in df.columns:
+            df.loc[unreported, "NonPerformingAssets"] = np.nan
+        df.loc[unreported, "GrossNonPerformingAssets"] = np.nan
+    if "CET1Ratio" in df.columns:
+        bump("CET1Ratio", (df["CET1Ratio"] > 0) & (df["CET1Ratio"] < 0.03))
+        df.loc[df["CET1Ratio"] > 0.6, "CET1Ratio"] = np.nan      # still implausible after repair
+    if "PercentageOfGrossNpa" in df.columns:
+        bad = (df["PercentageOfGrossNpa"] > 0) & (df["PercentageOfGrossNpa"] < 0.001)
+        bump("PercentageOfNpa", bad & (df.get("PercentageOfNpa", 0) < 0.001))
+        bump("PercentageOfGrossNpa", bad)
+
+
+def _normalise(df: pd.DataFrame) -> pd.DataFrame:
+    """Copy same-meaning bank tags onto their corporate names (never overwriting a real value),
+    derive total equity = capital + reserves, and repair mis-scaled ratio filings. Non-bank frames
+    are returned untouched."""
+    if not is_bank_frame(df):
+        return df
+    df = df.copy()
+    _fix_bank_ratio_scale(df)
+    for canon, alts in _BANK_ALIASES.items():
+        for alt in alts:
+            if alt in df.columns:
+                df[canon] = df[canon].fillna(df[alt]) if canon in df.columns else df[alt]
+    if "Capital" in df.columns and "ReservesAndSurplus" in df.columns:
+        eq = df["Capital"] + df["ReservesAndSurplus"]
+        df["Equity"] = df["Equity"].fillna(eq) if "Equity" in df.columns else eq
+    df.attrs["taxonomy"] = "bank"
+    return df
+
+
+def is_bank(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
+    """Does ``symbol`` file bank-taxonomy results (either basis)?"""
+    row = con.execute(
+        """SELECT max(CASE WHEN element = 'InterestEarned' THEN 1 ELSE 0 END),
+                  max(CASE WHEN element = 'RevenueFromOperations' THEN 1 ELSE 0 END)
+           FROM financials WHERE symbol = ?""", [symbol]).fetchone()
+    return bool(row and row[0] == 1 and row[1] == 0)
+
 
 def load_quarters(con: duckdb.DuckDBPyConnection, symbol: str,
                   consolidated: bool = False) -> pd.DataFrame:
-    """Wide quarterly frame: index = period_end, columns = XBRL elements."""
+    """Wide quarterly frame: index = period_end, columns = XBRL elements (bank tags normalised)."""
     df = con.execute(
         """SELECT period_end, element, value FROM financials
            WHERE symbol = ? AND consolidated = ? AND period_type = 'Q'""",
@@ -28,9 +117,9 @@ def load_quarters(con: duckdb.DuckDBPyConnection, symbol: str,
     ).df()
     if df.empty:
         return pd.DataFrame()
-    return (df.pivot_table(index="period_end", columns="element", values="value",
-                           aggfunc="first")
-              .sort_index())
+    return _normalise(df.pivot_table(index="period_end", columns="element", values="value",
+                                     aggfunc="first")
+                        .sort_index())
 
 
 def _col(q: pd.DataFrame, name: str) -> pd.Series:
@@ -160,7 +249,7 @@ def ttm_pl(con: duckdb.DuckDBPyConnection, symbol: str,
 
 def load_annual(con: duckdb.DuckDBPyConnection, symbol: str,
                 consolidated: bool = False) -> pd.DataFrame:
-    """Wide annual frame: index = fiscal year-end, columns = XBRL elements."""
+    """Wide annual frame: index = fiscal year-end, columns = XBRL elements (bank tags normalised)."""
     df = con.execute(
         """SELECT period_end, element, value FROM financials
            WHERE symbol = ? AND consolidated = ? AND period_type = 'Y'""",
@@ -168,9 +257,9 @@ def load_annual(con: duckdb.DuckDBPyConnection, symbol: str,
     ).df()
     if df.empty:
         return pd.DataFrame()
-    return (df.pivot_table(index="period_end", columns="element", values="value",
-                           aggfunc="first")
-              .sort_index())
+    return _normalise(df.pivot_table(index="period_end", columns="element", values="value",
+                                     aggfunc="first")
+                        .sort_index())
 
 
 def annual_overview(con: duckdb.DuckDBPyConnection, symbol: str,
@@ -194,4 +283,9 @@ def annual_overview(con: duckdb.DuckDBPyConnection, symbol: str,
     o["cfo_to_pat_x"] = cfo / net
     o["accruals_%_assets"] = 100 * (net - cfo) / assets   # high positive = aggressive
     o["roa_%"] = 100 * net / assets
+    if is_bank_frame(a):
+        # A bank's operating cash flow is mostly deposit & loan movements, not earnings being
+        # collected — CFO/PAT and accruals say nothing about its earnings quality.
+        o["cfo_to_pat_x"] = np.nan
+        o["accruals_%_assets"] = np.nan
     return o.replace([np.inf, -np.inf], np.nan)

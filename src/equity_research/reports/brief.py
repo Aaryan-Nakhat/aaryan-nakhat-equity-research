@@ -12,7 +12,7 @@ from datetime import date
 import duckdb
 import numpy as np
 
-from equity_research.analysis import forensic, fundamentals, sector, technical, valuation
+from equity_research.analysis import forensic, fundamentals, lenders, sector, technical, valuation
 
 
 def _fmt(v, nd=2, pct=False, suffix=""):
@@ -26,6 +26,9 @@ def build_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     """Markdown brief of every quant signal we have for ``symbol``."""
     L: list[str] = [f"# {symbol} — analytical brief ({'consolidated' if consolidated else 'standalone'})",
                     f"_Report generated {date.today():%d-%b-%Y}._\n"]
+    if fundamentals.is_bank(con, symbol):
+        L += _bank_lines(con, symbol, consolidated)
+        return "\n".join(L + _market_lines(con, symbol, consolidated, target_shares))
 
     # --- Fundamentals: TTM + annual trend ---
     t = fundamentals.ttm(con, symbol, consolidated)
@@ -68,6 +71,47 @@ def build_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
              + (f" — missing {f.missing}" if f.missing else ""))
     L.append(f"- Beneish M: {_fmt(m.value,2)} (> -1.78 ⇒ possible earnings manipulation)"
              + (f" — missing {m.missing}" if m.missing else ""))
+    return "\n".join(L + _market_lines(con, symbol, consolidated, target_shares))
+
+
+def _bank_lines(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool) -> list[str]:
+    """A bank's fundamentals + health checks (industrial scores don't apply — see analysis/lenders)."""
+    af = fundamentals.load_annual(con, symbol, consolidated)
+    am = lenders.annual_metrics(af)
+    qm = lenders.quarterly_metrics(fundamentals.load_quarters(con, symbol, consolidated))
+    if consolidated:                      # regulatory ratios are bank-level (standalone) figures
+        am, _ = lenders.with_regulatory_fallback(
+            am, lenders.annual_metrics(fundamentals.load_annual(con, symbol, False)))
+        qm, _ = lenders.with_regulatory_fallback(
+            qm, lenders.quarterly_metrics(fundamentals.load_quarters(con, symbol, False)))
+    L = ["## Fundamentals (bank)"]
+    if not am.empty:
+        a = am.iloc[-1]
+        L.append(f"- FY{am.index[-1].year}: NII ₹{_fmt(a.get('nii_cr'),0)} cr · PPOP "
+                 f"₹{_fmt(a.get('ppop_cr'),0)} cr · net profit ₹{_fmt(a.get('pat_cr'),0)} cr")
+        L.append(f"- NIM (on avg assets) {_fmt(a.get('nim_%'),2,pct=True)} · cost-to-income "
+                 f"{_fmt(a.get('cost_to_income_%'),1,pct=True)} · credit cost "
+                 f"{_fmt(a.get('credit_cost_%'),2,pct=True)} · ROA {_fmt(a.get('roa_%'),2,pct=True)} "
+                 f"· ROE {_fmt(a.get('roe_%'),1,pct=True)}")
+        L.append(f"- CD ratio {_fmt(a.get('cd_ratio_%'),0,pct=True)} · loans YoY "
+                 f"{_fmt(a.get('adv_yoy_%'),1,pct=True)} · deposits YoY {_fmt(a.get('dep_yoy_%'),1,pct=True)}")
+    if not qm.empty:
+        q = qm.iloc[-1]
+        L.append(f"- Latest quarter ({qm.index[-1]:%d-%b-%Y}): NII YoY {_fmt(q.get('nii_yoy_%'),1,pct=True)}, "
+                 f"PAT YoY {_fmt(q.get('pat_yoy_%'),1,pct=True)} · gross NPA {_fmt(q.get('gnpa_%'),2,pct=True)} "
+                 f"· net NPA {_fmt(q.get('nnpa_%'),2,pct=True)} · CET1 {_fmt(q.get('cet1_%'),1,pct=True)}")
+    L.append("\n## Bank health checks")
+    L.append("- _Altman Z / Piotroski F / Beneish M don't apply to banks (built for industrial "
+             "balance sheets); these checks replace them._")
+    icon = {"ok": "✅", "warn": "⚠️", "alarm": "🔴"}
+    L += [f"- {icon[s]} {t}" for s, t in lenders.health_checks(am, qm)] or ["- n/a (insufficient data)"]
+    return L
+
+
+def _market_lines(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool,
+                  target_shares: float | None) -> list[str]:
+    """Technicals + valuation — shared by every company type."""
+    L: list[str] = []
 
     # --- Technicals ---
     L.append("\n## Technicals")
@@ -107,5 +151,4 @@ def build_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  f"{_fmt(sec.get('sector_median_pe'),1)} — cheaper than "
                  f"{_fmt(sec.get('pe_cheaper_than_%_of_peers'),0)}% of "
                  f"{sec['peers_with_data']} peers")
-
-    return "\n".join(L)
+    return L

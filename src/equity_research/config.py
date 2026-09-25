@@ -231,6 +231,17 @@ RESULTS_FRESH_DAYS = env_int("RESULTS_FRESH_DAYS", 35)
 RESULTS_STALE_DAYS = env_int("RESULTS_STALE_DAYS", 100)
 KEYWORD_SWEEP_DAYS = env_int("KEYWORD_SWEEP_DAYS", 3)
 
+# ── Bank health checks (deep report §9 for banks; all in %) ──
+BANK_NNPA_WARN = env_float("BANK_NNPA_WARN", 2.0)          # net NPA above this = elevated bad loans
+BANK_NNPA_ALARM = env_float("BANK_NNPA_ALARM", 4.0)
+BANK_PCR_WARN = env_float("BANK_PCR_WARN", 60.0)           # provision coverage below this = thin cushion
+BANK_CET1_WARN = env_float("BANK_CET1_WARN", 10.0)         # RBI floor incl. conservation buffer is 8%
+BANK_CD_RATIO_WARN = env_float("BANK_CD_RATIO_WARN", 90.0) # loans outrunning deposits = funding strain
+BANK_ROA_WEAK = env_float("BANK_ROA_WEAK", 0.5)
+BANK_ROA_STRONG = env_float("BANK_ROA_STRONG", 1.5)
+BANK_CREDIT_COST_SPIKE_X = env_float("BANK_CREDIT_COST_SPIKE_X", 1.5)  # vs its own prior-years average
+BANK_NII_LAG_PP = env_float("BANK_NII_LAG_PP", 5.0)        # NII growth this far below loan growth = NIM squeeze
+
 # ── Projection / fund knobs ──
 PROJ_YEARS = env_int("PROJ_YEARS", 10)                    # DCF projection horizon
 FUNDS_TRADING_DAYS = env_int("FUNDS_TRADING_DAYS", 252)

@@ -292,6 +292,12 @@ def _prefer_consolidated(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
     std = fundamentals.load_annual(con, symbol, consolidated=False)
     if std.empty:
         return True
+    if fundamentals.is_bank_frame(std):
+        # A bank is read on its standalone (bank-level) figures — NIM, cost-to-income, NPAs and
+        # capital are bank concepts, and a consolidated view folds in insurance / AMC / broking
+        # subsidiaries (HDFC Bank's HDFC Life premiums & claims double its cost-to-income). Ask
+        # for "consolidated" explicitly to get the group view.
+        return False
 
     def usable_years(df) -> int:                        # years with a real revenue figure
         if "RevenueFromOperations" not in df.columns:
