@@ -10,7 +10,11 @@ discovery engines, delivered over email:
   PUSH  once per trading day at/after 18:00 IST it runs the watchlist scan and
         emails a digest (with deep-report PDFs for any 'results filed' event).
 
-Run via run_email_bot.ps1.
+``handle_request`` is channel-agnostic: every reply goes through ``emailer.send_report`` to
+``req.sender``, so the CLI / web UI drive the same commands by registering a local delivery
+sink for their own sender address (see ``reports.email.register_local_sink``).
+
+Run the bot via run_email_bot.ps1 (or ``eqr bot``).
 """
 
 from __future__ import annotations
@@ -25,40 +29,38 @@ import re
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
-# make src/ importable when run as a plain script
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+import duckdb
 
-from equity_research import scan  # noqa: E402
-from equity_research import screen_digest  # noqa: E402
-from equity_research.analysis import (accumulation, booking_risk, call_radar,  # noqa: E402
+from equity_research import scan
+from equity_research import screen_digest
+from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
                                       sector_analysis, sell_advisor, smallcap, supply_chain,
                                       technical, technical_screen)
-from equity_research import mail_cleanup  # noqa: E402
-from equity_research.common.db import connect  # noqa: E402
-from equity_research.reports import call_radar_brief  # noqa: E402
-from equity_research.reports import results_brief  # noqa: E402
-from equity_research.reports import charts  # noqa: E402
-from equity_research.reports import deep_brief  # noqa: E402
-from equity_research.reports import glossary  # noqa: E402
-from equity_research.reports import md  # noqa: E402
-from equity_research.reports import pickaxe_brief  # noqa: E402
-from equity_research.reports import premarket  # noqa: E402
-from equity_research.reports import sector_brief  # noqa: E402
-from equity_research.reports import tailwind_brief  # noqa: E402
-from equity_research.reports import email as emailer  # noqa: E402
-from equity_research.reports.inbox import EmailRequest, Inbox  # noqa: E402
-from equity_research.reports.pdf import report_to_pdf  # noqa: E402
-from equity_research.reports.pipeline import (generate_report, generate_upside_drivers,  # noqa: E402
+from equity_research import mail_cleanup
+from equity_research.common.db import DEFAULT_DB_PATH, connect
+from equity_research.reports import call_radar_brief
+from equity_research.reports import results_brief
+from equity_research.reports import charts
+from equity_research.reports import deep_brief
+from equity_research.reports import glossary
+from equity_research.reports import md
+from equity_research.reports import pickaxe_brief
+from equity_research.reports import premarket
+from equity_research.reports import sector_brief
+from equity_research.reports import tailwind_brief
+from equity_research.reports import email as emailer
+from equity_research.reports.inbox import EmailRequest, Inbox
+from equity_research.reports.pdf import report_to_pdf
+from equity_research.reports.pipeline import (generate_report, generate_upside_drivers,
                                               generate_ipo_report)
-from equity_research.reports.synthesize import fund_thesis  # noqa: E402
-from equity_research.scrapers import ipo  # noqa: E402
-from equity_research.reports.resolve import resolve  # noqa: E402
-from equity_research.reports import fund_brief  # noqa: E402
-from equity_research import config  # noqa: E402
+from equity_research.reports.synthesize import fund_thesis
+from equity_research.scrapers import ipo
+from equity_research.reports.resolve import resolve
+from equity_research.reports import fund_brief
+from equity_research import config
 
 # Delivery schedule, toggles and cadence all come from equity_research.config (env-driven, defaults =
 # original behaviour). These module-level aliases keep the rest of the file terse. See config.py.
@@ -79,15 +81,20 @@ MAIL_SWEEP_EVERY_MIN = config.MAIL_SWEEP_EVERY_MIN # how often the housekeeping 
 
 ALLOWED = {a.strip().lower() for a in os.environ.get("EMAIL_ALLOWED_SENDERS", "").split(",") if a.strip()}
 
-_LOGDIR = Path(__file__).resolve().parent.parent / "data" / "processed"
-_LOGDIR.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s equity-email | %(message)s",
-    handlers=[logging.FileHandler(_LOGDIR / "email_bot.log", encoding="utf-8"),
-              logging.StreamHandler(sys.stdout)],
-)
+_LOGDIR = DEFAULT_DB_PATH.parent               # data/processed — next to the DuckDB file
 log = logging.getLogger("equity-email")
+
+
+def setup_logging() -> None:
+    """The bot's logging: INFO to data/processed/email_bot.log + stdout. Called by ``main`` (not at
+    import), so the CLI / web UI can import this module without writing to the bot's log."""
+    _LOGDIR.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s equity-email | %(message)s",
+        handlers=[logging.FileHandler(_LOGDIR / "email_bot.log", encoding="utf-8"),
+                  logging.StreamHandler(sys.stdout)],
+    )
 
 
 # ----------------- disambiguation state (alert_state, '__email__' namespace) -----------------
@@ -1119,6 +1126,8 @@ def _send_pickaxe(req: EmailRequest) -> None:
                      "a filing-grounded revenue-share & forward projection, plus Google-Trends charts. "
                      "This is a heavy build (~10-15 min); the full report + PDF lands in this thread "
                      "when ready." + ("" if latest else " (Cached within 24h; add `--latest` to force fresh.)"))
+    # Name on-demand delivery threads '*-ondemand': the CLI / web UI wait for exactly those
+    # (bot.local.LocalSession) so a background-delivered report isn't lost when the command ends.
     threading.Thread(
         target=_pickaxe_worker,
         kwargs={"req": req, "to": req.sender, "subject": _re_subject(req.subject),
@@ -2754,6 +2763,7 @@ def maybe_mail_housekeeping() -> None:
 
 # ----------------- main loop -----------------
 def main() -> None:
+    setup_logging()
     if not ALLOWED:
         log.error("EMAIL_ALLOWED_SENDERS is empty — refusing to start (no auth allowlist)")
         sys.exit(1)
@@ -2841,9 +2851,31 @@ def _drain(inbox: Inbox) -> None:
     for req in reqs:
         try:
             handle_request(req)
+        except duckdb.IOException:
+            # The DB is held by another process (the `eqr` CLI mid-report, a backfill). Leave the
+            # email UNSEEN so the next cycle retries it, instead of silently dropping the request.
+            n = _db_busy_retries[req.uid] = _db_busy_retries.get(req.uid, 0) + 1
+            if n < _DB_BUSY_MAX_RETRIES:
+                log.warning("database busy — will retry request %r (attempt %d/%d)",
+                            req.subject, n, _DB_BUSY_MAX_RETRIES)
+                continue
+            log.error("database still busy after %d attempts — giving up on %r", n, req.subject)
+            _db_busy_retries.pop(req.uid, None)
+            try:
+                _reply_text(req, "⚠️ The database was busy (another job was using it) and I couldn't "
+                                 "process this after several tries. Please send it again in a few minutes.")
+            except Exception:  # noqa: BLE001
+                log.exception("busy-notice send failed for %s", req.sender)
         except Exception:  # noqa: BLE001 — one bad request shouldn't kill the loop
             log.exception("failed handling request from %s", req.sender)
+        _db_busy_retries.pop(req.uid, None)
         inbox.mark_seen([req.uid])
+
+
+# Requests that hit a busy DB (another process holds the single-writer lock) are retried on later
+# drain cycles; after this many attempts the sender is told to resend. Keyed by IMAP uid.
+_DB_BUSY_MAX_RETRIES = 5
+_db_busy_retries: dict[int, int] = {}
 
 
 if __name__ == "__main__":
