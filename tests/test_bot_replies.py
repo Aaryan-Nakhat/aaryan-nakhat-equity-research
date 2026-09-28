@@ -15,6 +15,7 @@ def session(tmp_path, monkeypatch):
     from equity_research.bot.local import LocalSession
 
     monkeypatch.setattr(db, "DEFAULT_DB_PATH", tmp_path / "t.duckdb")
+    monkeypatch.setenv("LLM_MODEL", "test/model")     # an LLM "is configured" (never called)
     monkeypatch.setattr(smtplib, "SMTP", lambda *a, **k: pytest.fail("no SMTP"))
     s = LocalSession(sender="replies@eqr.local")
     yield s
@@ -49,3 +50,18 @@ def test_tailwind_nothing_vs_timeout(session, monkeypatch):
     assert "surfaced right now" in out and "timed out" not in out
     monkeypatch.setattr(app, "_screen_run", lambda fn, **k: None)
     assert "timed out" in text_of(session.ask("tailwind"))
+
+
+def test_ai_only_commands_say_they_need_an_llm(session, monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "")
+    for cmd in ("tailwind", "pickaxe", "policy"):
+        out = text_of(session.ask(cmd))
+        assert "needs an LLM" in out and "LLM_MODEL" in out, cmd
+
+
+def test_generate_fails_fast_without_a_model(monkeypatch):
+    from equity_research.common import llm
+
+    monkeypatch.setenv("LLM_MODEL", "")
+    with pytest.raises(llm.LLMNotConfigured):
+        llm.generate("sys", "hi")

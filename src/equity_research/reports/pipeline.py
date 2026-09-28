@@ -15,6 +15,7 @@ import duckdb
 from equity_research.analysis import (forensic, fundamentals, quant, sector, technical,
                                       valuation)
 from equity_research.analysis.alerts import _categorise
+from equity_research.common import llm
 from equity_research.common.db import connect
 from equity_research.common.http import fetch_bytes
 from equity_research.reports import glossary
@@ -318,6 +319,8 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
     ``consolidated=None`` (default) auto-picks consolidated for holding-cos.
     """
     symbol = symbol.upper()
+    ai_requested = synthesize
+    synthesize = synthesize and llm.configured()   # no LLM: every number, no AI write-up (below)
     con = connect()
     try:
         have = ensure_ingested(symbol, con)
@@ -353,6 +356,12 @@ def generate_report(symbol: str, *, deep: bool = True, consolidated: bool | None
         # as-is rather than a bare "couldn't find" message.
         return brief
     if not synthesize:
+        if ai_requested and deep:              # asked for the full report, but there's no LLM
+            return (f"{brief}\n\n{'=' * 60}\n## Analysis\n\n"
+                    f"> 🤖 **The AI analysis is off** — {llm.NOT_CONFIGURED_HELP}. Everything above "
+                    "(statements, ratios, forensics, valuation, ownership, technicals) is computed "
+                    "without one; the LLM adds the business overview, the forensic write-up and "
+                    "the verdict." + _levels_section(symbol, verdict=None))
         return brief
     if pdf_path:                               # explicit filing supplied (CLI --pdf)
         thesis = synthesize_thesis(brief, symbol, pdf_path=pdf_path, deep=deep)

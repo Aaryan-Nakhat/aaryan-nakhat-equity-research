@@ -6,6 +6,7 @@
     eqr screen: value              # every email command works: screen:, sector:, tailwind, fund: …
     eqr help                       # the full command menu
     eqr serve                      # the web UI at http://localhost:8765 (+ the email bot if configured)
+    eqr doctor                     # what works on this machine, and how to fix what doesn't
     eqr bot                        # run the always-on email bot (it also serves the web UI)
 
 Reports print to the terminal and are saved (Markdown + HTML + PDF) under ``data/outputs/<date>/``
@@ -252,6 +253,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args[0] == "serve":
         return _serve()
+    if args[0] == "doctor":
+        from equity_research import doctor
+        return doctor.run()
 
     args, flags = _pop_flags(args, "--open", "--quiet", "-q", "--direct")
     if not args:

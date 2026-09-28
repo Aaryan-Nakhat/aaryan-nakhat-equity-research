@@ -311,7 +311,8 @@ cp .env.example .env                       # then fill in your own credentials
 
 Configure `.env` (all secrets are read from the environment; `.env` is gitignored — see
 [`.env.example`](.env.example) for every variable):
-- **LLM** — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
+- **LLM** *(optional to start — without one every report still builds with all its numbers; the
+  AI write-up and the discovery engines like Tailwind / Pickaxe need it)* — bring your own: set `LLM_MODEL` (the provider is inferred from it) and `LLM_API_KEY`
   (or `LLM_BASE_URL` for a custom endpoint). Runs on any provider via [LiteLLM](https://docs.litellm.ai).
 - **Email delivery** *(optional — skip it if you only use `eqr` in the terminal)* — one Gmail for
   both sending and reading requests (SMTP/IMAP app password), plus `EMAIL_ALLOWED_SENDERS` (who may
@@ -329,6 +330,7 @@ Bootstrap the local data store, then run a report or the bot:
 uv run python scripts/populate_watchlist.py               # seed the watchlist
 uv run python scripts/backfill_eod.py                     # ingest market EOD history
 uv run eqr reliance                                       # a deep report in the terminal
+uv run eqr doctor                                         # what works here, and the one-line fix for what doesn't
 uv run eqr serve                                          # web UI at http://localhost:8765 (+ the email bot if configured)
 uv run eqr bot                                            # the always-on email bot — it also serves the web UI
 ```

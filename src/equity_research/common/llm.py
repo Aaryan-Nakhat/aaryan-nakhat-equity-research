@@ -35,6 +35,20 @@ def model() -> str:
     return (os.environ.get("LLM_MODEL") or "").strip()
 
 
+def configured() -> bool:
+    """Is an LLM set up? Without one the workbench still computes every number (fundamentals,
+    forensics, valuation, technicals, screens) — only the AI write-ups and discovery need it."""
+    return bool(model())
+
+
+NOT_CONFIGURED_HELP = ("add an LLM to your `.env` — `LLM_MODEL` (+ its API key); any provider "
+                       "LiteLLM supports works, including free tiers")
+
+
+class LLMNotConfigured(RuntimeError):
+    """``generate`` was called with no model configured."""
+
+
 def _messages(system: str, user_text: str, files) -> list[dict]:
     if files:
         content: list | str = [{"type": "text", "text": user_text}]
@@ -77,8 +91,10 @@ def generate(system: str, user_text: str, *, files: list[tuple[str, bytes]] | No
     read alongside the prompt (used where the model supports it); ``json`` asks for a JSON reply;
     ``grounded`` attaches the configured web-search tool. Raises on a hard provider error — callers
     wrap this in try/except and degrade (their existing behaviour)."""
-    kwargs: dict = {"model": model_name or model(),
-                    "messages": _messages(system, user_text, files)}
+    chosen = model_name or model()
+    if not chosen:                  # fail fast and clearly (no network call, no provider error text)
+        raise LLMNotConfigured(f"No LLM configured — {NOT_CONFIGURED_HELP}.")
+    kwargs: dict = {"model": chosen, "messages": _messages(system, user_text, files)}
     if os.environ.get("LLM_API_KEY"):
         kwargs["api_key"] = os.environ["LLM_API_KEY"]
     if os.environ.get("LLM_BASE_URL"):

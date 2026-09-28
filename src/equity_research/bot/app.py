@@ -61,6 +61,7 @@ from equity_research.scrapers import ipo
 from equity_research.reports.resolve import resolve
 from equity_research.reports import fund_brief
 from equity_research import config, schedule
+from equity_research.common import llm
 
 # Delivery schedule, toggles and cadence all come from equity_research.config (env-driven, defaults =
 # original behaviour). These module-level aliases keep the rest of the file terse. See config.py.
@@ -314,6 +315,8 @@ def _send_upside_drivers(symbol: str, req: EmailRequest, name: str | None = None
                          *, ipo_mode: bool = False) -> None:
     """Upside-drivers 1-pager (opt-in deeper cut) — email body + PDF, in-thread. ``ipo_mode``
     grounds it in the IPO offer documents instead of listed filings."""
+    if _needs_llm(req, "The Upside Drivers 1-pager"):
+        return
     log.info("generating upside drivers for %s (req from %s, ipo=%s)", symbol, req.sender, ipo_mode)
     _reply_text(req, f"🚀 Building the upside-drivers 1-pager for **{symbol}**"
                      + (f" ({name})" if name else "") + " — ~1–2 min; it'll land in this thread.")
@@ -505,6 +508,15 @@ def _reply_text(req: EmailRequest, text: str) -> None:
 
 
 # ----------------- screeners (idea generation) -----------------
+def _needs_llm(req: EmailRequest, what: str) -> bool:
+    """True (after replying why) when an AI-only command runs without an LLM configured."""
+    if llm.configured():
+        return False
+    _reply_text(req, f"🤖 {what} needs an LLM — {llm.NOT_CONFIGURED_HELP}. The number-driven "
+                     "commands (a company's report figures, screens, sectors, results) work without one.")
+    return True
+
+
 def _screen_query(subject: str) -> str | None:
     """Parse a screener request → one of 'holdco' | 'investors' | 'smallcap' | 'policy' |
     'technical' | 'volume' | 'beaters' | 'institutions' | 'margins' | 'deleverage' | 'quality' |
@@ -1000,6 +1012,8 @@ def _send_sector_analysis(req: EmailRequest, canonical: str) -> None:
 def _send_tailwind(req: EmailRequest) -> None:
     """💨 Tailwind — global supply/policy shocks → verified Indian beneficiaries; reply → deep report.
     Serves the 24h cache by default; `tailwind --latest` (or `fresh`) forces a live re-scan."""
+    if _needs_llm(req, "Tailwind"):
+        return
     latest = _wants_latest(req.subject)
     log.info("running Tailwind (req from %s, latest=%s)", req.sender, latest)
     _reply_text(req, "📩 Got it — pulling the latest global supply-shock scan and the Indian names "
@@ -1122,6 +1136,8 @@ def _send_pickaxe(req: EmailRequest) -> None:
     """⛏️ Pickaxe — surging Indian demand → the indirect 'sell the pickaxes' beneficiary. Deep run
     (~10-15 min): ack now, deliver the full report + charted PDF from a background thread when ready.
     Serves the 24h cache by default; `pickaxe --latest` forces a fresh live scan."""
+    if _needs_llm(req, "Pickaxe"):
+        return
     latest = _wants_latest(req.subject)
     log.info("queuing Pickaxe build (req from %s, latest=%s)", req.sender, latest)
     _reply_text(req, "📩 Got it — running the deep demand scan: rising 'buy' searches → durable "
@@ -1140,6 +1156,8 @@ def _send_pickaxe(req: EmailRequest) -> None:
 
 def _send_suppliers(req: EmailRequest, query: str) -> None:
     """Map ONE company's smaller listed suppliers/ancillaries → numbered list; reply → deep report."""
+    if _needs_llm(req, "The supplier map"):
+        return
     cand = resolve(query)
     if not cand:
         _reply_text(req, f"Couldn't resolve '{query}' to an NSE company — try the exact name or symbol.")
@@ -1729,6 +1747,8 @@ def _send_policy_screen(req: EmailRequest) -> None:
     """Government policy / scheme radar — schemes in the latest PIB (primary) releases, with the
     sector(s) they hit and likely listed beneficiaries (watchlist names flagged). Standalone
     screen; no effect on reports/watchlist/digests."""
+    if _needs_llm(req, "The policy radar"):
+        return
     log.info("running policy radar (req from %s)", req.sender)
     _reply_text(req, "🏛️ Got it — scanning the latest **government press releases (PIB, primary "
                      "source)** for new schemes/policies and mapping each to the sectors and "
@@ -2470,6 +2490,8 @@ def maybe_tailwind() -> None:
     (news scout → analyst → grounded mapper → auditor), so it's slow (~2–4 min) but weekly. No
     email if nothing genuine surfaced; the week-marker advances only after a successful send (or a
     clean empty result), so a delivery failure re-surfaces it next heartbeat."""
+    if not llm.configured():                              # AI push — needs an LLM
+        return
     if not scan.tailwind_due():
         return
     log.info("weekly Tailwind push firing%s", schedule.catch_up_note(schedule.open_slot()))
@@ -2516,6 +2538,8 @@ def maybe_tailwind_urgent() -> None:
     small/mid-cap name) — send a compact '💨 Fresh supply shock' email. The weekly-push day is skipped
     (the full push covers it). Marks each slot done whether or not it sent, so the ~1–2 min pipeline
     runs at most once per slot; the seen-set stops it repeating a shock across slots and days."""
+    if not llm.configured():                              # AI push — needs an LLM
+        return
     now = datetime.now(IST)
     if now.weekday() == WEEKLY_PUSH_WEEKDAY:                # weekly-push day → the full push handles it
         return
@@ -2554,6 +2578,8 @@ def maybe_pickaxe() -> None:
     full build is ~10-15 min, so it runs in a BACKGROUND thread (never blocks the heartbeat); the
     month-marker advances only inside the worker after a successful send (or a clean empty result),
     so a delivery failure re-surfaces it next heartbeat. On-demand `pickaxe` runs any time."""
+    if not llm.configured():                              # AI push — needs an LLM
+        return
     if not scan.pickaxe_due() or _pickaxe_lock.locked():
         return
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
@@ -2595,6 +2621,8 @@ def _concall_ingest_worker() -> None:
 def maybe_concall_ingest() -> None:
     """Heartbeat hook: kick off the incremental concall-scoring pass at most ~hourly, in a
     background thread so it never blocks the IMAP loop. On-demand `calls` reads whatever's scored."""
+    if not llm.configured():                              # AI push — needs an LLM
+        return
     if _concall_lock.locked() or not scan.concall_ingest_due():
         return
     threading.Thread(target=_concall_ingest_worker, name="concall-ingest", daemon=True).start()
