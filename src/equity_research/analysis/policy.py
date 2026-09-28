@@ -15,7 +15,9 @@ server-side control that doesn't page reliably), so this is a "recent releases" 
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timedelta
 
 import duckdb
 
@@ -81,13 +83,44 @@ def _resolve(beneficiaries: list, by_norm: dict, by_sym: dict, watch: set[str]) 
     return out
 
 
+_SEEN_KEY = "pib_recent_releases"       # alert_state meta: releases seen in the last ~2 days
+_SEEN_HOURS = 48
+
+
+def _recent_releases(con: duckdb.DuckDBPyConnection, limit: int) -> list[dict]:
+    """PIB releases from roughly the last two days, newest first.
+
+    PIB's all-releases page lists only the *current* day, so just after midnight it's empty and a
+    morning run sees a handful. So every release seen is remembered for ``_SEEN_HOURS`` (alert_state
+    meta) and merged with today's listing and the RSS feed (the latest ~20, which spans the
+    midnight gap but carries no ministry)."""
+    now = datetime.now()
+    row = con.execute("SELECT value FROM alert_state WHERE symbol='__meta__' AND key=?",
+                      [_SEEN_KEY]).fetchone()
+    try:
+        seen = json.loads(row[0]) if row else {}
+    except (TypeError, ValueError):
+        seen = {}
+    for r in pib.latest_releases(limit) + pib.recent_releases():
+        old = seen.get(r["prid"], {})
+        seen[r["prid"]] = {"title": r.get("title") or old.get("title"),
+                           "ministry": r.get("ministry") or old.get("ministry"),
+                           "at": old.get("at") or now.isoformat(timespec="seconds")}
+    cutoff = now - timedelta(hours=_SEEN_HOURS)
+    seen = {k: v for k, v in seen.items() if v.get("title") and datetime.fromisoformat(v["at"]) >= cutoff}
+    con.execute("INSERT OR REPLACE INTO alert_state(symbol, key, value, updated_at) "
+                "VALUES ('__meta__', ?, ?, now())", [_SEEN_KEY, json.dumps(seen)])
+    newest = sorted(seen, key=lambda k: int(k) if k.isdigit() else 0, reverse=True)[:limit]
+    return [{"prid": k, "title": seen[k]["title"], "ministry": seen[k].get("ministry")} for k in newest]
+
+
 def policy_scan(con: duckdb.DuckDBPyConnection, *, limit_releases: int = 120) -> list[dict]:
     """Scan the latest PIB releases → classified government schemes with sector + beneficiary
     mapping. Returns ``[{prid, scheme, ministry, stage, sectors, mechanism, what_it_is, benefit,
     confidence, beneficiaries:[{name, symbol, why, on_watchlist}], n_listed, n_watch, link}, …]``
     — items with a watchlist hit first, then by number of resolved listed beneficiaries.
     Best-effort; [] on nothing or any failure."""
-    releases = pib.latest_releases(limit_releases)
+    releases = _recent_releases(con, limit_releases)
     if not releases:
         return []
     link_by_prid = {r["prid"]: f"https://pib.gov.in/PressReleaseIframePage.aspx?PRID={r['prid']}"

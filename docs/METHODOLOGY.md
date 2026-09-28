@@ -29,7 +29,7 @@ Scraping uses `scrapling`, in two tiers:
 | **NSE result filings** | quarterly/annual financials (catalog → XBRL) | 🟡 catalog browser + 🟢 XBRL HTTP | `nse_financials.py` |
 | **NSE SHP XBRL** | holder-level shareholding pattern | 🟢 plain HTTP | `nse_shp.py` |
 | **BSE** | scrip header/quote (mirror) | 🟢 plain HTTP | `bse.py` |
-| **AMFI** | daily NAVs for ~14k MF schemes; per-AMC NAV history | 🟢 plain HTTP | `amfi.py` |
+| **AMFI** | daily NAVs for ~14k MF schemes; per-AMC NAV history (columns read from each file's header — AMFI added Plan/Option columns in Aug-2026) | 🟢 plain HTTP | `amfi.py` |
 | **AMC sites** | monthly MF portfolio holdings (per-AMC XLSX) | 🟡 mixed | `mf_holdings.py` |
 | **PIB** (pib.gov.in) | government press releases — schemes/policies/reforms (the policy radar) | 🟢 RSS + HTML | `pib.py` |
 | **FBIL** | USD/INR reference rate | 🟢 JSON | `fbil.py` |
@@ -462,8 +462,10 @@ with zero).
 - **`screen: policy` / `policy:` — government policy radar (`analysis/policy.py`, `scrapers/pib.py`)** —
   **source:** the latest **PIB press releases** (the all-releases *listing* → the latest ~100+ releases,
   each with **title + ministry**, plain HTTP; primary & official — *no* news/social rumor). *(PIB's
-  public listing exposes only the latest ~100 releases; its date filter is a server-side control that
-  doesn't page reliably, so this is "recent", not a fixed N-day archive.)* **Transform:** title-gate to
+  public listing shows only the *current day* — empty just after midnight — and its date filter can't
+  be driven over plain HTTP, so every release seen is remembered for 48h (alert_state meta
+  `pib_recent_releases`) and merged with today's listing and the RSS feed: roughly the last two
+  days, never blank overnight.)* **Transform:** title-gate to
   plausibly-economic releases (cap ~55), fetch each body. **Model — 🤖 LLM (`synthesize.policy_impact`,
   JSON):** classifies each into {scheme, ministry, stage (announced/cabinet-approved/**draft**/
   consultation/budget/reform), affected sectors, transmission mechanism, `what_it_is`, `benefit`, and

@@ -12,6 +12,11 @@ tier), semicolon-delimited, grouped by category header then AMC header.
 
 The old ``www.amfiindia.com`` host 302-redirects to ``portal.amfiindia.com``; we hit
 the portal host directly.
+
+Both parsers locate their columns from the file's own header line (``Scheme Code;…``), not fixed
+positions: in Aug-2026 AMFI inserted ``Plan`` / ``Option`` columns into both files, which shifted
+the NAV and date columns and silently emptied the NAV series until this was made header-driven.
+A header without the columns we need raises ``AmfiFormatChanged`` rather than returning nothing.
 """
 
 from __future__ import annotations
@@ -64,6 +69,58 @@ def _asset_class(category: str) -> str:
     return "Other"               # index / ETF / FoF / other schemes
 
 
+class AmfiFormatChanged(RuntimeError):
+    """An AMFI file's header no longer carries a column we read — fail loudly, not silently."""
+
+
+# column → the header names AMFI has used for it (compared case-insensitively, spaces collapsed)
+_COLUMNS = {
+    "code": ("scheme code",),
+    "name": ("scheme name", "nav name"),
+    "isin_growth": ("isin div payout/ isin growth", "isin div payout/isin growth"),
+    "isin_reinvest": ("isin div reinvestment",),
+    "plan": ("plan",),
+    "option": ("option",),
+    "nav": ("net asset value", "nav"),
+    "date": ("date",),
+}
+_REQUIRED = ("code", "name", "nav", "date")
+
+
+def _header_map(line: str) -> dict[str, int]:
+    """{column: index} from a ``Scheme Code;…`` header line. Raises ``AmfiFormatChanged`` when a
+    required column is missing."""
+    cells = [" ".join(c.split()).lower() for c in line.split(";")]
+    out: dict[str, int] = {}
+    for col, names in _COLUMNS.items():
+        for i, c in enumerate(cells):
+            if c in names:
+                out[col] = i
+                break
+    missing = [c for c in _REQUIRED if c not in out]
+    if missing:
+        raise AmfiFormatChanged(f"AMFI header lacks {missing}: {line!r}")
+    return out
+
+
+def _cell(parts: list[str], cols: dict[str, int], col: str) -> str:
+    i = cols.get(col)
+    v = parts[i].strip() if i is not None and i < len(parts) else ""
+    return "" if v == "-" else v
+
+
+def _norm_plan(v: str) -> str | None:
+    u = v.upper()
+    return "Direct" if "DIRECT" in u else ("Regular" if "REGULAR" in u else None)
+
+
+def _norm_option(v: str) -> str | None:
+    u = v.upper()
+    if "IDCW" in u or "DIVIDEND" in u:
+        return "IDCW"
+    return "Growth" if "GROWTH" in u else None
+
+
 def _plan_option(name: str) -> tuple[str | None, str | None]:
     """Parse Direct/Regular and Growth/IDCW out of a scheme name."""
     n = name.upper()
@@ -101,13 +158,18 @@ def _is_category(line: str) -> bool:
 
 
 def _parse_navall(text: str) -> list[SchemeNav]:
-    """Parse the NAVAll layout: header, then repeating [category, AMC, data rows...]."""
+    """Parse the NAVAll layout: a header, then repeating [category, AMC, data rows...]. Columns
+    come from the header; Plan / Option from their own columns when present, else the name."""
     out: list[SchemeNav] = []
     category: str | None = None
     amc: str | None = None
+    cols: dict[str, int] | None = None
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("Scheme Code;"):
+        if not line:
+            continue
+        if line.startswith("Scheme Code;"):
+            cols = _header_map(line)
             continue
         if ";" not in line:
             if _is_amc(line):
@@ -117,22 +179,22 @@ def _parse_navall(text: str) -> list[SchemeNav]:
                 amc = None       # new category block resets the AMC context
             continue
         parts = line.split(";")
-        if len(parts) < 6 or not parts[0].strip().isdigit():
+        if cols is None or not parts[0].strip().isdigit():
             continue
-        name = parts[3].strip()
-        plan, option = _plan_option(name)
+        name = _cell(parts, cols, "name")
+        by_name = _plan_option(name)
         out.append(SchemeNav(
             scheme_code=int(parts[0].strip()),
-            isin_growth=(parts[1].strip() or None) if parts[1].strip() != "-" else None,
-            isin_reinvest=(parts[2].strip() or None) if parts[2].strip() != "-" else None,
+            isin_growth=_cell(parts, cols, "isin_growth") or None,
+            isin_reinvest=_cell(parts, cols, "isin_reinvest") or None,
             scheme_name=name,
             amc=amc,
             category=category,
             asset_class=_asset_class(category or ""),
-            plan=plan,
-            option=option,
-            nav=_num(parts[4]),
-            nav_date=_parse_date(parts[5]),
+            plan=_norm_plan(_cell(parts, cols, "plan")) or by_name[0],
+            option=_norm_option(_cell(parts, cols, "option")) or by_name[1],
+            nav=_num(_cell(parts, cols, "nav")),
+            nav_date=_parse_date(_cell(parts, cols, "date")),
         ))
     return out
 
@@ -143,7 +205,7 @@ def fetch_navall() -> list[SchemeNav]:
         text = fetch_text(_NAVALL, timeout=60)
     except Exception:  # noqa: BLE001 — best-effort, never break the pipeline
         return []
-    return _parse_navall(text)
+    return _parse_navall(text)          # AmfiFormatChanged propagates: a format change must be seen
 
 
 def amc_codes() -> list[int]:
@@ -184,16 +246,24 @@ def fetch_nav_history(amc_code: int, frm: date, to: date) -> list[tuple[int, dat
         text = fetch_text(url, timeout=90)
     except Exception:  # noqa: BLE001
         return []
+    return _parse_history(text)
+
+
+def _parse_history(text: str) -> list[tuple[int, date, float]]:
+    """``(scheme_code, nav_date, nav)`` rows from a history report (columns from its header)."""
     out: list[tuple[int, date, float]] = []
+    cols: dict[str, int] | None = None
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or ";" not in line or line.startswith("Scheme Code;"):
+        if not line or ";" not in line:
+            continue
+        if line.startswith("Scheme Code;"):
+            cols = _header_map(line)
             continue
         parts = line.split(";")
-        # Scheme Code;Scheme Name;ISIN..;ISIN..;NAV;Repurchase;Sale;Date
-        if len(parts) < 8 or not parts[0].strip().isdigit():
+        if cols is None or not parts[0].strip().isdigit():
             continue
-        nav, d = _num(parts[4]), _parse_date(parts[7])
+        nav, d = _num(_cell(parts, cols, "nav")), _parse_date(_cell(parts, cols, "date"))
         if nav is not None and d is not None:
             out.append((int(parts[0].strip()), d, nav))
     return out

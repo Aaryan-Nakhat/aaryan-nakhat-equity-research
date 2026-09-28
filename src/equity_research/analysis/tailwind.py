@@ -24,6 +24,7 @@ Every disruption ships with its **source link**. This is an idea *generator* —
 from __future__ import annotations
 
 import logging
+import re
 
 import duckdb
 
@@ -172,9 +173,15 @@ def _size_word(con: duckdb.DuckDBPyConnection, symbol: str) -> tuple[str | None,
     return "mega-cap", mcap
 
 
+# whole words / phrases only ("aspir" is a prefix: aspires, aspiring) — a bare substring test
+# flagged every tungsten-"carbide" maker as a "bid"der.
+_ASPIRATIONAL_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(k) + (r"\w*" if k == "aspir" else r"\b") for k in _ASPIRATIONAL) + ")")
+
+
 def _is_aspirational(c: dict) -> bool:
     text = f"{c.get('role', '')} {c.get('why', '')}".lower()
-    return any(k in text for k in _ASPIRATIONAL)
+    return bool(_ASPIRATIONAL_RE.search(text))
 
 
 def auditor(con: duckdb.DuckDBPyConnection, candidates: list[dict], *,

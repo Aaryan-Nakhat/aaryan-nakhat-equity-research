@@ -1517,10 +1517,12 @@ def run_watchlist_scan(con: duckdb.DuckDBPyConnection | None = None) -> ScanResu
     try:
         refresh_eod(con)
         try:                                 # accumulate the day's MF NAV universe
-            ingest_mf_navall(con)
+            got = ingest_mf_navall(con)
+            if got.get("schemes") and not got.get("navs"):
+                log.warning("AMFI NAV file parsed %d schemes but no NAVs — check its format", got["schemes"])
             ingest_mf_holdings_all(con)      # refresh covered AMCs' month-end holdings
         except Exception:  # noqa: BLE001 — MF data is a bonus, never break the scan
-            pass
+            log.exception("mutual-fund NAV / holdings refresh failed — fund data not updated today")
         syms = watchlist.symbols(con)
         # one batched browser session for all symbols' announcements
         try:
