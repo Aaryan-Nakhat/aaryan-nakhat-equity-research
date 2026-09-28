@@ -1010,10 +1010,13 @@ def _send_tailwind(req: EmailRequest) -> None:
                      "this thread shortly.")
     con = connect()
     try:
-        rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con, use_cache=not latest),
+        rep = _screen_run(lambda: tailwind_brief.build_tailwind_report(con, use_cache=not latest) or {},
                           timeout=config.TAILWIND_TIMEOUT_S)
     finally:
         con.close()
+    if rep is None:                                        # timed out / failed — not "nothing found"
+        _reply_text(req, "The Tailwind scan timed out this time — please resend `tailwind` shortly.")
+        return
     if not rep:
         _reply_text(req, "No clean global supply-shock → Indian-beneficiary setup surfaced right now "
                          "(nothing fresh crossed the bar, or no verifiable listed name). That's a "
@@ -1647,7 +1650,9 @@ def _send_results(req: EmailRequest) -> None:
     log.info("running Results Radar (req from %s)", req.sender)
     con = connect()
     try:
-        rep = _screen_run(lambda: results_brief.build_results(con))
+        # `or {}`: the builder returns None when nobody reported in the window — keep None for a
+        # real timeout/error so the two get honest, different replies
+        rep = _screen_run(lambda: results_brief.build_results(con) or {})
     finally:
         con.close()
     if rep is None:
