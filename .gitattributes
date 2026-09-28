@@ -21,3 +21,8 @@
 *.png    binary
 *.jpg    binary
 *.xlsx   binary
+# Docker files must keep LF endings — a CRLF breaks multi-line RUN steps on Windows checkouts
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+.dockerignore text eol=lf
+*.sh text eol=lf
