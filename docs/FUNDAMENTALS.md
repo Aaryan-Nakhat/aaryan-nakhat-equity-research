@@ -168,7 +168,40 @@ existed every one of the ~34 listed banks read as empty (no `RevenueFromOperatio
   concepts, and consolidation folds in insurance / AMC subsidiaries (HDFC Bank's consolidated
   cost-to-income reads ~60% vs the bank's ~40%). With "consolidated" requested, regulatory ratios are
   taken from the standalone filing and labelled as such.
-- **Not yet covered:** insurers file yet another taxonomy (premiums, claims) and still read thinly.
+
+## 🛡️ Insurers — the IRDAI taxonomies (`analysis/insurers.py`)
+
+Insurers file under IRDAI's formats, one for **life** (`GrossPremiumIncome` split into
+`IncomeFirstYearPremium` / `IncomeRenewalPremium` / `IncomeSinglePremium`, `Commission`,
+`BenefitsPaidNet`, `PersistencyRatio13ThMonth…61ThMonth`, `ConservationRatio`, `SolvencyRatio`,
+`ExpensesOfManagementRatio`, `ProfitLossAfterTaxAndExtraordinaryItems`) and one for **general**
+(`GrossPremiumsWritten`, `NetPremiumWritten`, `PremiumEarned`, `IncurredClaims`, `IncurredClaimRatio`,
+`CombinedRatio`, `UnderwritingProfitOrLoss`, `IncomeFromInvestmentsNet`, `NetRetentionRatio`,
+`SolvencyRatio`, `ProfitLossAfterTax`). Detected per frame (`fundamentals.taxonomy` / `filer_kind`).
+
+- **Normalisation:** profit, PBT, revenue ← gross premium (the standard growth measure; investment
+  income stays separate), equity share capital. **No face value is filed**, so share count = profit ÷
+  EPS and capital ÷ that snaps to ₹1/2/5/10 (every listed insurer comes out an exact ₹10 or ₹5).
+- **Net worth** is mis-tagged both ways: ICICI Lombard's FY26 `ShareholdersFunds` reads −₹562 cr (capital +
+  reserves is right); ICICI Pru Life's FY26 reserves sit under "share application money" (capital +
+  reserves ₹1,451 cr; `ShareholdersFunds` ₹13,631 cr is right). Every error seen makes it far too small,
+  so net worth = the larger positive of the two.
+- **Ratio repair:** solvency filed 100× too small by 8 of 11 insurers in some periods (< 0.5x is impossible
+  — IRDAI's floor is 1.5x); persistency / conservation < 5% → ×100; the expense ratio is repaired against
+  the insurer's own history (a reinsurer like GIC Re genuinely runs ~1%, so there's no safe fixed floor).
+- **Life metrics:** APE (first-year + 10% of single), growth, renewal share, commission ÷ premium, expense
+  ratio, persistency 13/25/37/49/61, conservation, solvency, ROE, AUM growth. **General:** GWP growth,
+  claims / expense / combined ratio, underwriting margin, retention, investment income ÷ PBT, solvency, ROE.
+  Validated against published FY25 figures (HDFC Life GPI ₹71,045 cr, PAT ₹1,802 cr; LIC PAT ₹48,151 cr;
+  ICICI Lombard GDPI ₹28,258 cr, combined 102.8%, PAT ₹2,508 cr).
+- **Health checks** (`insurers.health_checks`, thresholds `INS_*`): solvency vs the 1.5x floor; life —
+  13th / 61st-month persistency, APE growth; general — combined ratio, claims ratio rising 3 quarters,
+  investment income covering the underwriting loss; ROE.
+- Like banks: Altman / Piotroski / Beneish / Sloan return `forensic.NOT_FOR_INSURERS`, CFO/PAT is blanked,
+  peers compare on solvency and combined ratio / 13th-month persistency, and the default basis is
+  standalone (regulatory ratios borrowed from standalone on a consolidated report).
+- **Not in the structured filing:** a life insurer's VNB margin and embedded value (investor
+  presentations only — the report's LLM analysis reads those filings). History is short (FY2025+).
 
 ## Forensic / quality scores (`analysis/forensic.py`)
 

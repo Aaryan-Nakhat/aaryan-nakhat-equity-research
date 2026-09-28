@@ -25,7 +25,7 @@ import pandas as pd
 
 from equity_research import config
 from equity_research.analysis import sector, valuation
-from equity_research.analysis.fundamentals import is_bank_frame, load_annual, load_quarters, ttm
+from equity_research.analysis.fundamentals import is_bank_frame, load_annual, load_quarters, taxonomy, ttm
 
 CR = 1e7
 _MARKET_INDEX = config.MARKET_INDEX
@@ -388,8 +388,16 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
         if pat and rev:
             out["NetMargin%"] = 100 * pat / rev
         # never for a bank: its deposits aren't leverage debt, and "D/E 0.0" would read debt-free
-        if eq and not is_bank_frame(af):
+        if eq and taxonomy(af) == "corporate":
             out["D/E"] = debt / eq
+        if taxonomy(af) in ("life", "general"):   # the columns insurance investors compare
+            sol, cr, p13 = g("SolvencyRatio"), g("CombinedRatio"), g("PersistencyRatio13ThMonth")
+            if sol is not None:
+                out["Solvency(x)"] = sol
+            if cr is not None:
+                out["Combined%"] = 100 * cr
+            if p13 is not None:
+                out["Persist13%"] = 100 * p13
         if is_bank_frame(af):                    # the columns bank investors actually compare
             assets, gn = g("Assets"), g("PercentageOfGrossNpa")
             if pat and assets:
@@ -405,7 +413,8 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
     # negative/blown-up P/E) so peer tables and z-scores aren't distorted.
     bounds = {"P/E": (0, 500), "P/B": (0, 100), "ROE%": (-200, 300),
               "ROCE%": (-200, 300), "NetMargin%": (-100, 100), "D/E": (0, 50),
-              "ROA%": (-10, 10), "GNPA%": (0, 60)}
+              "ROA%": (-10, 10), "GNPA%": (0, 60),
+              "Solvency(x)": (0, 20), "Combined%": (0, 300), "Persist13%": (0, 100)}
     return {k: v for k, v in out.items()
             if v is not None and v == v and bounds[k][0] <= v <= bounds[k][1]}
 
@@ -414,7 +423,8 @@ def _ratios(con, symbol, consolidated) -> dict[str, float]:
 # PAT > revenue, or near-zero-equity outliers) so they don't distort mean/std.
 _SANE = {"P/E": (0, 150), "P/B": (0, 50), "ROE%": (-100, 100),
          "ROCE%": (-100, 100), "NetMargin%": (-100, 100), "D/E": (0, 20),
-         "ROA%": (-5, 5), "GNPA%": (0, 30)}
+         "ROA%": (-5, 5), "GNPA%": (0, 30),
+         "Solvency(x)": (0, 10), "Combined%": (50, 200), "Persist13%": (0, 100)}
 
 
 def sector_zscores(con: duckdb.DuckDBPyConnection, symbol: str,

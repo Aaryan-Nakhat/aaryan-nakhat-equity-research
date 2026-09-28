@@ -245,6 +245,16 @@ BANK_ROA_STRONG = env_float("BANK_ROA_STRONG", 1.5)
 BANK_CREDIT_COST_SPIKE_X = env_float("BANK_CREDIT_COST_SPIKE_X", 1.5)  # vs its own prior-years average
 BANK_NII_LAG_PP = env_float("BANK_NII_LAG_PP", 5.0)        # NII growth this far below loan growth = NIM squeeze
 
+# ── Insurer health checks (deep report §9 for insurers) ──
+INS_SOLVENCY_FLOOR = env_float("INS_SOLVENCY_FLOOR", 1.5)   # IRDAI's regulatory minimum (150%), in x
+INS_SOLVENCY_WARN = env_float("INS_SOLVENCY_WARN", 1.7)     # thin headroom above the floor
+INS_PERSIST13_WARN = env_float("INS_PERSIST13_WARN", 75.0)  # % of policies still paying in month 13
+INS_PERSIST13_STRONG = env_float("INS_PERSIST13_STRONG", 85.0)
+INS_PERSIST61_WARN = env_float("INS_PERSIST61_WARN", 45.0)  # % still paying in year 5
+INS_COMBINED_WARN = env_float("INS_COMBINED_WARN", 110.0)   # general insurers: claims + expenses, % of premium
+INS_COMBINED_ALARM = env_float("INS_COMBINED_ALARM", 120.0)
+INS_ROE_WEAK = env_float("INS_ROE_WEAK", 8.0)
+
 # ── Projection / fund knobs ──
 PROJ_YEARS = env_int("PROJ_YEARS", 10)                    # DCF projection horizon
 FUNDS_TRADING_DAYS = env_int("FUNDS_TRADING_DAYS", 252)

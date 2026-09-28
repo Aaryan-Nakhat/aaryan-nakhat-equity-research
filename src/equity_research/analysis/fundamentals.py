@@ -36,6 +36,45 @@ _BANK_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Insurers file under IRDAI's taxonomies — one for life insurers (premium income split first-year /
+# renewal / single, persistency, solvency), another for general insurers (premiums written/earned,
+# incurred claims, combined ratio). Same approach as banks: same-meaning tags → corporate names.
+# The top line is gross premium (the standard growth measure); investment income stays separate.
+_LIFE_ALIASES: dict[str, tuple[str, ...]] = {
+    "ProfitLossForPeriod": ("ProfitLossAfterTaxAndExtraordinaryItems", "ProfitLossAfterTaxBeforeExtraordinaryItems"),
+    "ProfitBeforeTax": ("ProfitLossBeforeTax",),
+    "RevenueFromOperations": ("GrossPremiumIncome",),
+    "EquityShareCapital": ("PaidUpEquityShareCapital", "ShareCapital"),
+}
+_GENERAL_ALIASES: dict[str, tuple[str, ...]] = {
+    "ProfitLossForPeriod": ("ProfitLossAfterTax",),
+    "ProfitBeforeTax": ("ProfitOrLossBeforeTax",),
+    "RevenueFromOperations": ("GrossPremiumsWritten",),
+    "EquityShareCapital": ("PaidUpEquityCapital", "ShareCapital"),
+}
+_INSURER_EPS = "BasicAndDilutedEPSAfterExtraordinaryItemsNetOfTaxExpenseForThePeriodNotToBeAnnualized"
+
+
+def insurer_kind(df: pd.DataFrame) -> str | None:
+    """'life' / 'general' for a frame filed under an IRDAI insurer taxonomy, else None."""
+    if df is None or df.empty:
+        return None
+    if df.attrs.get("taxonomy") in ("life", "general"):
+        return df.attrs["taxonomy"]
+    if "GrossPremiumIncome" in df.columns:
+        return "life"
+    if "GrossPremiumsWritten" in df.columns:
+        return "general"
+    return None
+
+
+def taxonomy(df: pd.DataFrame) -> str:
+    """'bank' / 'life' / 'general' / 'corporate' — which filing format a frame came from."""
+    if is_bank_frame(df):
+        return "bank"
+    return insurer_kind(df) or "corporate"
+
+
 def is_bank_frame(df: pd.DataFrame) -> bool:
     """True for a frame filed under the banking taxonomy. Corporates report 'FinanceCosts', never
     'InterestExpended', so both RBI interest tags together identify a bank — before or after
@@ -79,10 +118,67 @@ def _fix_bank_ratio_scale(df: pd.DataFrame) -> None:
         bump("PercentageOfGrossNpa", bad)
 
 
+def _fix_insurer_ratio_scale(df: pd.DataFrame) -> None:
+    """Insurers also file some periods' ratios 100x too small (fractions: 1.77 solvency = 177%).
+    Solvency < 0.5x is impossible for an operating insurer (IRDAI's floor is 1.5x); persistency /
+    conservation < 5% never happen. The expense-of-management ratio has no safe absolute floor (a
+    reinsurer like GIC Re genuinely runs ~1%), so it's repaired against the insurer's own history."""
+    def bump(col: str, mask: pd.Series) -> None:
+        df.loc[mask, col] = df.loc[mask, col] * 100
+
+    for col in df.columns:
+        s = df[col]
+        if col == "SolvencyRatio":
+            bump(col, (s > 0) & (s < 0.5))
+        elif col.startswith("PersistencyRatio") or col == "ConservationRatio":
+            bump(col, (s > 0) & (s < 0.05))
+        elif col == "ExpensesOfManagementRatio":
+            med = s[s > 0].median()
+            if med == med:
+                bump(col, (s > 0) & (s < med / 30))
+
+
+def _derive_face_value(df: pd.DataFrame) -> None:
+    """Insurers don't file a face value, so there's no share count (and no market cap). Profit ÷
+    EPS gives the share count; share capital ÷ that snaps to a standard face value (₹1/2/5/10)."""
+    if "FaceValueOfEquityShareCapital" in df.columns or _INSURER_EPS not in df.columns:
+        return
+    cap = df.get("EquityShareCapital")
+    pat, eps = df.get("ProfitLossForPeriod"), df[_INSURER_EPS]
+    if cap is None or pat is None:
+        return
+    raw = (cap / (pat / eps)).replace([np.inf, -np.inf], np.nan).dropna()
+    snapped = [fv for fv in (1, 2, 5, 10) for r in raw if r > 0 and abs(r / fv - 1) < 0.1]
+    if snapped:
+        df["FaceValueOfEquityShareCapital"] = float(pd.Series(snapped).mode().iloc[0])
+
+
 def _normalise(df: pd.DataFrame) -> pd.DataFrame:
-    """Copy same-meaning bank tags onto their corporate names (never overwriting a real value),
-    derive total equity = capital + reserves, and repair mis-scaled ratio filings. Non-bank frames
-    are returned untouched."""
+    """Copy same-meaning bank / insurer tags onto their corporate names (never overwriting a real
+    value), derive total equity = capital + reserves, and repair mis-scaled ratio filings. Corporate
+    frames are returned untouched."""
+    kind = insurer_kind(df)
+    if kind:
+        df = df.copy()
+        _fix_insurer_ratio_scale(df)
+        for canon, alts in (_LIFE_ALIASES if kind == "life" else _GENERAL_ALIASES).items():
+            for alt in alts:
+                if alt in df.columns:
+                    df[canon] = df[canon].fillna(df[alt]) if canon in df.columns else df[alt]
+        # Net worth: insurers mis-tag it in both directions — ICICI Lombard's FY26 'ShareholdersFunds'
+        # reads -₹562 cr (capital + reserves is right), ICICI Pru Life's FY26 reserves sit under 'share
+        # application money' (so capital + reserves is ₹1,451 cr; its 'ShareholdersFunds' ₹13,631 cr is
+        # right). Every observed error makes net worth far too SMALL, so take the larger positive one.
+        cands = []
+        if "ShareCapital" in df.columns and "ReservesAndSurplus" in df.columns:
+            cands.append(df["ShareCapital"] + df["ReservesAndSurplus"])
+        if "ShareholdersFunds" in df.columns:
+            cands.append(df["ShareholdersFunds"])
+        if cands:
+            df["Equity"] = pd.concat(cands, axis=1).where(lambda x: x > 0).max(axis=1)
+        _derive_face_value(df)
+        df.attrs["taxonomy"] = kind
+        return df
     if not is_bank_frame(df):
         return df
     df = df.copy()
@@ -96,6 +192,19 @@ def _normalise(df: pd.DataFrame) -> pd.DataFrame:
         df["Equity"] = df["Equity"].fillna(eq) if "Equity" in df.columns else eq
     df.attrs["taxonomy"] = "bank"
     return df
+
+
+def filer_kind(con: duckdb.DuckDBPyConnection, symbol: str) -> str:
+    """'bank' / 'life' / 'general' / 'corporate' for ``symbol`` from what it files (either basis)."""
+    row = con.execute(
+        """SELECT max(CASE WHEN element = 'InterestEarned' THEN 1 ELSE 0 END),
+                  max(CASE WHEN element = 'RevenueFromOperations' THEN 1 ELSE 0 END),
+                  max(CASE WHEN element = 'GrossPremiumIncome' THEN 1 ELSE 0 END),
+                  max(CASE WHEN element = 'GrossPremiumsWritten' THEN 1 ELSE 0 END)
+           FROM financials WHERE symbol = ?""", [symbol]).fetchone()
+    if not row or row[1] == 1:
+        return "corporate"
+    return "bank" if row[0] == 1 else "life" if row[2] == 1 else "general" if row[3] == 1 else "corporate"
 
 
 def is_bank(con: duckdb.DuckDBPyConnection, symbol: str) -> bool:
@@ -283,9 +392,10 @@ def annual_overview(con: duckdb.DuckDBPyConnection, symbol: str,
     o["cfo_to_pat_x"] = cfo / net
     o["accruals_%_assets"] = 100 * (net - cfo) / assets   # high positive = aggressive
     o["roa_%"] = 100 * net / assets
-    if is_bank_frame(a):
-        # A bank's operating cash flow is mostly deposit & loan movements, not earnings being
-        # collected — CFO/PAT and accruals say nothing about its earnings quality.
+    if taxonomy(a) != "corporate":
+        # A bank's operating cash flow is mostly deposit & loan movements, an insurer's is premiums
+        # in / claims out and investment flows — CFO/PAT and accruals say nothing about either's
+        # earnings quality.
         o["cfo_to_pat_x"] = np.nan
         o["accruals_%_assets"] = np.nan
     return o.replace([np.inf, -np.inf], np.nan)

@@ -243,7 +243,8 @@ source → formula → model).
   valuation / forensic / technical section a plain-English **"how to read this."** **Banks get a
   bank-shaped report** — NII, NIM, cost-to-income, credit cost, gross/net NPAs & provision coverage,
   CET1, CD ratio and ✅/⚠️ bank health checks in place of the industrial statements and Altman /
-  Piotroski / Beneish (which don't apply to lenders). Opt-in **Upside Drivers 1-pager** (reply `1`) —
+  Piotroski / Beneish (which don't apply to lenders); **insurers get an insurer report** — premiums &
+  APE, persistency, claims / combined ratio, underwriting vs investment profit, solvency. Opt-in **Upside Drivers 1-pager** (reply `1`) —
   forward catalysts, each with an estimated **₹cr / % impact**.
 - **Pushed digests** — **pre-market** (08:30: GIFT Nifty implied open · overnight US/Asia · India VIX ·
   FII futures · headlines · an LLM overnight read), **full watchlist** (18:00: market-context header ·

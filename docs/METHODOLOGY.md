@@ -166,6 +166,19 @@ basis; a consolidated report borrows the regulatory ratios from the standalone f
 errors (ratios 100× too small, consolidated zeros) are repaired at load — see
 [`FUNDAMENTALS.md`](FUNDAMENTALS.md). **Model:** none.
 
+### 🛡️ §1–§9 for an insurer (`analysis/insurers.py`, `deep_brief._insurer_sections`) — deterministic
+Insurers file IRDAI's taxonomies, so an insurer's report swaps the industrial statements for insurer
+ones. **Life:** §1 gross premium (first-year / renewal / single), **APE** (first-year + 10% of single),
+commission, opex, benefits, investment income, PAT · §2 premium & APE growth, renewal share, commission ÷
+premium, expense-of-management ratio, ROE · §3 net worth, AUM · §4 **persistency** 13/25/37/49/61-month,
+conservation · §5 **solvency**. **General:** §1 GWP → NWP → earned → claims → commission / opex →
+**underwriting P/L** + investment income → PAT · §2 claims / expense / **combined ratio**, underwriting
+margin, retention, investment income ÷ PBT, ROE · §3 net worth, investments (the float) · §4 where the
+profit comes from · §5 solvency & retention. Both: §6–§7 why cash-flow quality and industrial ratios don't
+apply · §8 quarterly trend · §9 industrial scores marked *not applicable* and replaced by **insurer health
+checks** (thresholds `config.INS_*`). Standalone by default. VNB / embedded value aren't in the filing.
+Filing slips repaired at load — see [`FUNDAMENTALS.md`](FUNDAMENTALS.md). **Model:** none.
+
 ### §9 Forensic deep-dive (`analysis/forensic.py`) — deterministic scores
 A score is emitted **only when every input is present** (missing inputs are listed; never proxied
 with zero).

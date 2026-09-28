@@ -20,8 +20,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from equity_research.analysis import (forensic, fundamentals, lenders, ownership, quant, sector,
-                                      technical, valuation)
+from equity_research.analysis import (forensic, fundamentals, insurers, lenders, ownership, quant,
+                                      sector, technical, valuation)
 from equity_research.analysis.fundamentals import load_annual
 from equity_research.reports import glossary
 
@@ -310,8 +310,11 @@ def _peer_comparison(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: 
     """Peer table grouped into large / mid / small cap (≤5 per tier), companies shown by
     **name** not symbol, the target marked ◄. Peers share the NSE industry. [] if too thin."""
     names = _names(con)
-    pcols = (["P/E", "P/B", "ROE%", "ROA%", "NetMargin%", "GNPA%"] if fundamentals.is_bank(con, symbol)
-             else ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"])
+    pcols = {"bank": ["P/E", "P/B", "ROE%", "ROA%", "NetMargin%", "GNPA%"],
+             "life": ["P/E", "P/B", "ROE%", "NetMargin%", "Solvency(x)", "Persist13%"],
+             "general": ["P/E", "P/B", "ROE%", "NetMargin%", "Solvency(x)", "Combined%"],
+             }.get(fundamentals.filer_kind(con, symbol),
+                   ["P/E", "P/B", "ROE%", "ROCE%", "NetMargin%", "D/E"])
     recs = []
     for ps in [symbol, *sector.peers(con, symbol)]:
         r = quant._ratios(con, ps, consolidated)
@@ -712,6 +715,227 @@ def _bank_forensics(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFram
     return L
 
 
+_INS_REGULATORY = ("solvency_x", "expense_ratio_%", "conservation_%", "persistency_13m_%",
+                   "persistency_25m_%", "persistency_37m_%", "persistency_49m_%", "persistency_61m_%",
+                   "claims_ratio_%", "combined_ratio_%", "retention_%")
+
+
+def _insurer_frames(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                    consolidated: bool) -> tuple[str, pd.DataFrame, pd.DataFrame, bool]:
+    """(kind, annual metrics, quarterly metrics, borrowed) for an insurer. On a consolidated report
+    the regulatory ratios (solvency, persistency, combined ratio) come from the standalone filing."""
+    kind = fundamentals.taxonomy(af)
+    am = insurers.metrics(kind, af)
+    qm = insurers.metrics(kind, fundamentals.load_quarters(con, symbol, consolidated), quarterly=True)
+    borrowed = False
+    if consolidated:
+        for frame_name, std in (("am", insurers.metrics(kind, load_annual(con, symbol, False))),
+                                ("qm", insurers.metrics(kind, fundamentals.load_quarters(con, symbol, False),
+                                                        quarterly=True))):
+            m = am if frame_name == "am" else qm
+            if m.empty or std.empty:
+                continue
+            for col in _INS_REGULATORY:
+                if col in std and col in m:
+                    gap = m[col].isna() & std[col].reindex(m.index).notna()
+                    if gap.any():
+                        m.loc[gap, col] = std[col].reindex(m.index)[gap]
+                        borrowed = True
+    return kind, am, qm, borrowed
+
+
+def _insurer_sections(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                      consolidated: bool) -> list[str]:
+    """§1–§8 for an insurer (life or general) instead of the industrial statements."""
+    kind, am, qm, borrowed = _insurer_frames(con, symbol, af, consolidated)
+    life = kind == "life"
+    L = [("> 🛡️ **This is a life insurer**, so it's read on an insurer's numbers — the premium engine, "
+          "new business (APE), how long policies stay (persistency) and capital (solvency) — rather "
+          "than industrial yardsticks (EBITDA, working capital, free cash flow) that don't fit a "
+          "business that collects premiums now and pays benefits years later.") if life else
+         ("> 🛡️ **This is a general insurer**, so it's read on an insurer's numbers — premiums, claims, "
+          "the combined ratio, underwriting vs investment profit, and capital (solvency) — rather than "
+          "industrial yardsticks (EBITDA, working capital, free cash flow) that don't fit a business "
+          "that collects premiums now and pays claims later."), ""]
+    if am.empty:
+        return L + ["_No annual insurer statements on file._", ""]
+
+    def row(label: str, col: str, years: list, nd: int = 0, pct: bool = False,
+            lo: float | None = None, hi: float | None = None, *, x: bool = False) -> list[str]:
+        vals = am[col] if col in am else pd.Series(np.nan, index=am.index)
+        return [label] + [_f(vals.get(y), nd, pct=pct, x=x, lo=lo, hi=hi) for y in years]
+
+    def fy(years: list) -> list[str]:
+        return [f"FY{y.year}" for y in years]
+
+    years = [y for y in am.index if not pd.isna(am.at[y, "gross_premium_cr"])]
+    if life and years:
+        L += ["## 1. Premiums & profit (life insurer)", _table(["₹ crore"] + fy(years), [
+            row("Gross premium income", "gross_premium_cr", years),
+            row("  First-year premium (new regular policies)", "first_year_premium_cr", years),
+            row("  Renewal premium (existing policies)", "renewal_premium_cr", years),
+            row("  Single premium (one-time)", "single_premium_cr", years),
+            row("**APE** (first-year + 10% of single)", "ape_cr", years),
+            row("Net premium (after reinsurance)", "net_premium_cr", years),
+            row("Commission", "commission_cr", years),
+            row("Operating expenses", "opex_cr", years),
+            row("Benefits paid (claims, maturities, surrenders)", "benefits_paid_cr", years),
+            row("Investment income (incl. policyholders' funds)", "investment_income_cr", years),
+            row("Profit before tax", "pbt_cr", years),
+            row("**Net profit (PAT)**", "pat_cr", years),
+        ]), ""]
+        L += ["## 2. Growth, efficiency & returns", _table(["Metric"] + fy(years), [
+            row("Gross premium YoY", "gross_premium_yoy_%", years, 1, True, -100, 500),
+            row("APE (new business) YoY", "ape_yoy_%", years, 1, True, -100, 500),
+            row("Renewal share of premium", "renewal_share_%", years, 1, True, 0, 100),
+            row("Commission ÷ premium", "commission_ratio_%", years, 1, True, 0, 100),
+            row("Expense-of-management ratio", "expense_ratio_%", years, 1, True, 0, 100),
+            row("PAT YoY", "pat_yoy_%", years, 1, True, -100, 1000),
+            row("ROE", "roe_%", years, 1, True, -100, 100),
+        ]), "",
+            "**How to read this.** **APE** (annualised premium equivalent) is the industry's measure "
+            "of *new* business — first-year regular premium plus a tenth of single premium, so a "
+            "one-time payment doesn't swamp it. A high **renewal share** means most premium is "
+            "recurring from policies already sold — steadier revenue. **Commission** and the "
+            "**expense-of-management ratio** show what it costs to sell and run the book (IRDAI caps "
+            "the latter). Reported profit understates a growing life insurer — new policies cost "
+            "money up front and pay back over years — which is why analysts value life insurers on "
+            "embedded value and VNB margin (in investor presentations, not this filing), not P/E.", ""]
+    elif years:
+        L += ["## 1. Premiums, claims & profit (general insurer)", _table(["₹ crore"] + fy(years), [
+            row("Gross premium written (GWP)", "gross_premium_cr", years),
+            row("Net premium written (after reinsurance)", "net_premium_cr", years),
+            row("Premium earned", "premium_earned_cr", years),
+            row("Claims incurred", "claims_incurred_cr", years),
+            row("Commission & brokerage", "commission_cr", years),
+            row("Operating expenses", "opex_cr", years),
+            row("**Underwriting profit / (loss)**", "underwriting_cr", years),
+            row("Investment income", "investment_income_cr", years),
+            row("Profit before tax", "pbt_cr", years),
+            row("**Net profit (PAT)**", "pat_cr", years),
+        ]), ""]
+        L += ["## 2. Underwriting ratios & returns", _table(["Metric"] + fy(years), [
+            row("GWP YoY", "gross_premium_yoy_%", years, 1, True, -100, 500),
+            row("Claims ratio", "claims_ratio_%", years, 1, True, 0, 300),
+            row("Expense ratio", "expense_ratio_%", years, 1, True, 0, 150),
+            row("**Combined ratio**", "combined_ratio_%", years, 1, True, 0, 300),
+            row("Underwriting margin (on earned premium)", "underwriting_margin_%", years, 1, True, -200, 100),
+            row("Retention (net ÷ gross premium)", "retention_%", years, 1, True, 0, 100),
+            row("Investment income ÷ PBT", "investment_share_of_pbt_%", years, 0, True, -500, 1000),
+            row("PAT YoY", "pat_yoy_%", years, 1, True, -100, 1000),
+            row("ROE", "roe_%", years, 1, True, -100, 100),
+        ]), "",
+            "**How to read this.** The **claims ratio** is claims as a % of premium; the **expense "
+            "ratio** is the cost of selling and running the policies. Together they make the "
+            "**combined ratio**: under 100% means the insurance itself is profitable (an underwriting "
+            "profit); above 100% means claims + costs exceed premium and the profit has to come from "
+            "investing the premium float. Most Indian general insurers run ~100–110% — so a "
+            "combined ratio creeping up, or investment income no longer covering the underwriting "
+            "loss, is the thing to watch. **Retention** is how much risk it keeps rather than passing "
+            "to reinsurers.", ""]
+
+    by = [y for y in am.index if not pd.isna(am.at[y, "networth_cr"])]
+    if by:
+        L += ["## 3. Balance sheet (insurer)", _table(["₹ crore"] + fy(by), [
+            row("**Net worth (shareholders' funds)**", "networth_cr", by),
+            row("Investments (assets under management)" if life else "Investments (the premium float)",
+                "investments_cr", by),
+        ] + ([row("AUM growth YoY", "aum_yoy_%", by, 1, True, -100, 500)] if life else [])), ""]
+
+    if life:
+        py = [y for y in am.index if not pd.isna(am.at[y, "persistency_13m_%"])]
+        if py:
+            L += ["## 4. Persistency — how long policies stay", _table(["Metric"] + fy(py), [
+                row("13th-month persistency", "persistency_13m_%", py, 1, True, 0, 100),
+                row("25th-month persistency", "persistency_25m_%", py, 1, True, 0, 100),
+                row("37th-month persistency", "persistency_37m_%", py, 1, True, 0, 100),
+                row("49th-month persistency", "persistency_49m_%", py, 1, True, 0, 100),
+                row("61st-month persistency", "persistency_61m_%", py, 1, True, 0, 100),
+                row("Conservation ratio", "conservation_%", py, 1, True, 0, 100),
+            ]), "",
+                "**How to read this.** **Persistency** is the share of policies still paying premium "
+                "13, 25 … 61 months after sale. Because a life policy only turns profitable after "
+                "several years of premiums, low persistency means profit is lost to lapses — and a low "
+                "13th-month number is the classic sign of mis-selling. Above ~85% at month 13 is "
+                "strong; the **conservation ratio** is the renewal premium kept vs the prior year.", ""]
+        sy = [y for y in am.index if not pd.isna(am.at[y, "solvency_x"])]
+        if sy:
+            L += ["## 5. Solvency (capital)", _table(["Metric"] + fy(sy), [
+                row("Solvency ratio (x)", "solvency_x", sy, 2, x=True, lo=0, hi=20)]), "",
+                "**How to read this.** Available capital ÷ the capital IRDAI requires. The floor is "
+                "**1.5x** — below it the regulator can curb new business. Well above means room to grow "
+                "without raising fresh equity (no dilution).", ""]
+    else:
+        wy = [y for y in am.index if not pd.isna(am.at[y, "underwriting_cr"])]
+        if wy:
+            L += ["## 4. Where the profit comes from", _table(["₹ crore"] + fy(wy), [
+                row("Underwriting profit / (loss)", "underwriting_cr", wy),
+                row("+ Investment income", "investment_income_cr", wy),
+                row("= Profit before tax", "pbt_cr", wy),
+            ]), ""]
+        sy = [y for y in am.index if not pd.isna(am.at[y, "solvency_x"])]
+        if sy:
+            L += ["## 5. Capital & reinsurance", _table(["Metric"] + fy(sy), [
+                row("Solvency ratio (x)", "solvency_x", sy, 2, x=True, lo=0, hi=20),
+                row("Retention", "retention_%", sy, 1, True, 0, 100)]), "",
+                "**How to read this.** **Solvency** is available capital ÷ the capital IRDAI requires "
+                "— the floor is **1.5x**, and well above it means room to grow without fresh equity.", ""]
+    if borrowed:
+        L += ["_Solvency, persistency and underwriting ratios are regulatory figures reported for the "
+              "**insurer** itself; consolidated filings leave them blank, so they are taken from the "
+              "standalone results._", ""]
+    L += ["## 6. Cash flow — context only for an insurer",
+          "An insurer's operating cash flow is premiums coming in and claims / benefits going out, "
+          "plus large investment flows — it follows the timing of the book, not how well profit "
+          "turns into cash, so CFO ÷ PAT, free cash flow and accruals aren't earnings-quality signals "
+          "here and are left out.", "",
+          "## 7. Why the industrial ratios are left out",
+          "EBITDA, interest cover, debt ÷ equity, working-capital days and the Altman / Piotroski / "
+          "Beneish scores assume an industrial balance sheet. An insurer's liabilities are "
+          "policyholders' money and its assets are the investments backing them, so those numbers "
+          "would mislead. The measures above, and the health checks in §9, replace them.", ""]
+
+    if not qm.empty:
+        q = qm.tail(8)
+
+        def qrow(label: str, col: str, nd: int = 0, pct: bool = False,
+                 lo: float | None = None, hi: float | None = None, *, x: bool = False) -> list[str]:
+            vals = q[col] if col in q else pd.Series(np.nan, index=q.index)
+            return [label] + [_f(v, nd, pct=pct, x=x, lo=lo, hi=hi) for v in vals]
+        rows = ([qrow("Gross premium (₹cr)", "gross_premium_cr"), qrow("APE (₹cr)", "ape_cr"),
+                 qrow("APE YoY", "ape_yoy_%", 1, True, lo=-100, hi=500),
+                 qrow("Net profit (₹cr)", "pat_cr"), qrow("PAT YoY", "pat_yoy_%", 1, True, lo=-100, hi=1000),
+                 qrow("13th-month persistency", "persistency_13m_%", 1, True, lo=0, hi=100),
+                 qrow("61st-month persistency", "persistency_61m_%", 1, True, lo=0, hi=100),
+                 qrow("Solvency (x)", "solvency_x", 2, x=True, lo=0, hi=20)] if life else
+                [qrow("GWP (₹cr)", "gross_premium_cr"),
+                 qrow("GWP YoY", "gross_premium_yoy_%", 1, True, lo=-100, hi=500),
+                 qrow("Claims ratio", "claims_ratio_%", 1, True, lo=0, hi=300),
+                 qrow("Combined ratio", "combined_ratio_%", 1, True, lo=0, hi=300),
+                 qrow("Underwriting P/(L) (₹cr)", "underwriting_cr"),
+                 qrow("Investment income (₹cr)", "investment_income_cr"),
+                 qrow("Net profit (₹cr)", "pat_cr"), qrow("PAT YoY", "pat_yoy_%", 1, True, lo=-100, hi=1000),
+                 qrow("Solvency (x)", "solvency_x", 2, x=True, lo=0, hi=20)])
+        L += [f"## 8. Quarterly trend (last {len(q)}q)",
+              _table(["Quarter"] + [str(i.date()) for i in q.index], rows), ""]
+    return L
+
+
+def _insurer_forensics(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
+                       consolidated: bool) -> list[str]:
+    """§9 for an insurer: why the industrial scores don't apply, then the insurer health checks."""
+    kind, am, qm, _ = _insurer_frames(con, symbol, af, consolidated)
+    icon = {"ok": "✅", "warn": "⚠️", "alarm": "🔴"}
+    L = ["- **Altman Z · Piotroski F · Beneish M · Sloan accruals — not applicable to insurers.** "
+         "They are built from industrial balance-sheet items (inventories, receivables, current "
+         "assets, PP&E) an insurer doesn't have, so they are replaced by the checks below.",
+         "", "**🛡️ Insurer health checks** (from the figures in §1–§8):"]
+    checks = insurers.health_checks(kind, am, qm)
+    L += [f"- {icon[s]} {t}" for s, t in checks] or ["- _Not enough insurer data on file to run the checks._"]
+    L.append("")
+    return L
+
+
 def _statement_sections(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
                         consolidated: bool) -> tuple[list[str], pd.Series, pd.Series]:
     """§1–§8 for an industrial / services company: income statement, margins, balance sheet,
@@ -942,9 +1166,13 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                   f"- Signals: {', '.join(ts['signals'])}"]
         return "\n".join(L)
 
-    bank = fundamentals.is_bank_frame(af)
+    kind = fundamentals.taxonomy(af)
+    bank, insurer = kind == "bank", kind in ("life", "general")
     if bank:                                            # 🏦 a bank's own statements & ratios
         L += _bank_sections(con, symbol, af, consolidated)
+        cfo = pat = None
+    elif insurer:                                       # 🛡️ an insurer's own statements & ratios
+        L += _insurer_sections(con, symbol, af, consolidated)
         cfo = pat = None
     else:                                               # industrial / services statements
         body, cfo, pat = _statement_sections(con, symbol, af, consolidated)
@@ -957,6 +1185,8 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         "FROM shareholding WHERE symbol = ? ORDER BY period_end DESC LIMIT 1", [symbol]).fetchone()
     if bank:
         L += _bank_forensics(con, symbol, af, consolidated)
+    elif insurer:
+        L += _insurer_forensics(con, symbol, af, consolidated)
     else:
         mcap = valuation.market_cap(con, symbol, consolidated, shares_override=target_shares)
         z = forensic.altman_z(con, symbol, consolidated=consolidated, market_cap=mcap)
@@ -1269,6 +1499,13 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  "average advances; provision coverage = 1 − net NPA ÷ gross NPA. NPA % and CET1 are "
                  "as reported by the bank (a few filings state them 100× too small; those are "
                  "rescaled).")
+    elif insurer:
+        L.append("- Insurer ratios come from the IRDAI results filing: APE = first-year premium + "
+                 "10% of single premium; ROE on average net worth; net worth = the larger of "
+                 "(capital + reserves) and the filed shareholders' funds (insurers mis-tag one "
+                 "or the other); share count = profit ÷ EPS (no face value is filed). Solvency / "
+                 "persistency filed 100× too small in some periods are rescaled. VNB margin and "
+                 "embedded value aren't in the structured filing.")
     else:
         L.append("- COGS, EBITDA and FCFF/FCFE use documented approximations "
                  "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "

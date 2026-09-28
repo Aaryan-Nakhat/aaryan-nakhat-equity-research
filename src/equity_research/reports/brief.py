@@ -12,7 +12,7 @@ from datetime import date
 import duckdb
 import numpy as np
 
-from equity_research.analysis import forensic, fundamentals, lenders, sector, technical, valuation
+from equity_research.analysis import forensic, fundamentals, insurers, lenders, sector, technical, valuation
 
 
 def _fmt(v, nd=2, pct=False, suffix=""):
@@ -26,8 +26,12 @@ def build_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     """Markdown brief of every quant signal we have for ``symbol``."""
     L: list[str] = [f"# {symbol} — analytical brief ({'consolidated' if consolidated else 'standalone'})",
                     f"_Report generated {date.today():%d-%b-%Y}._\n"]
-    if fundamentals.is_bank(con, symbol):
+    kind = fundamentals.filer_kind(con, symbol)
+    if kind == "bank":
         L += _bank_lines(con, symbol, consolidated)
+        return "\n".join(L + _market_lines(con, symbol, consolidated, target_shares))
+    if kind in ("life", "general"):
+        L += _insurer_lines(con, symbol, consolidated, kind)
         return "\n".join(L + _market_lines(con, symbol, consolidated, target_shares))
 
     # --- Fundamentals: TTM + annual trend ---
@@ -105,6 +109,39 @@ def _bank_lines(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool)
              "balance sheets); these checks replace them._")
     icon = {"ok": "✅", "warn": "⚠️", "alarm": "🔴"}
     L += [f"- {icon[s]} {t}" for s, t in lenders.health_checks(am, qm)] or ["- n/a (insufficient data)"]
+    return L
+
+
+def _insurer_lines(con: duckdb.DuckDBPyConnection, symbol: str, consolidated: bool,
+                   kind: str) -> list[str]:
+    """An insurer's fundamentals + health checks (industrial scores don't apply — see
+    analysis/insurers)."""
+    am = insurers.metrics(kind, fundamentals.load_annual(con, symbol, consolidated))
+    qm = insurers.metrics(kind, fundamentals.load_quarters(con, symbol, consolidated), quarterly=True)
+    L = [f"## Fundamentals ({'life' if kind == 'life' else 'general'} insurer)"]
+    if not am.empty:
+        a, fy = am.iloc[-1], am.index[-1].year
+        if kind == "life":
+            L.append(f"- FY{fy}: gross premium ₹{_fmt(a.get('gross_premium_cr'),0)} cr "
+                     f"({_fmt(a.get('gross_premium_yoy_%'),1,pct=True)} YoY) · APE ₹{_fmt(a.get('ape_cr'),0)} cr "
+                     f"({_fmt(a.get('ape_yoy_%'),1,pct=True)}) · net profit ₹{_fmt(a.get('pat_cr'),0)} cr")
+            L.append(f"- Renewal share {_fmt(a.get('renewal_share_%'),1,pct=True)} · commission "
+                     f"{_fmt(a.get('commission_ratio_%'),1,pct=True)} of premium · expense ratio "
+                     f"{_fmt(a.get('expense_ratio_%'),1,pct=True)} · ROE {_fmt(a.get('roe_%'),1,pct=True)}")
+        else:
+            L.append(f"- FY{fy}: GWP ₹{_fmt(a.get('gross_premium_cr'),0)} cr "
+                     f"({_fmt(a.get('gross_premium_yoy_%'),1,pct=True)} YoY) · underwriting "
+                     f"₹{_fmt(a.get('underwriting_cr'),0)} cr + investment income "
+                     f"₹{_fmt(a.get('investment_income_cr'),0)} cr → net profit ₹{_fmt(a.get('pat_cr'),0)} cr")
+            L.append(f"- Claims ratio {_fmt(a.get('claims_ratio_%'),1,pct=True)} · combined ratio "
+                     f"{_fmt(a.get('combined_ratio_%'),1,pct=True)} · retention "
+                     f"{_fmt(a.get('retention_%'),1,pct=True)} · ROE {_fmt(a.get('roe_%'),1,pct=True)}")
+    L.append("\n## Insurer health checks")
+    L.append("- _Altman Z / Piotroski F / Beneish M don't apply to insurers (built for industrial "
+             "balance sheets); these checks replace them._")
+    icon = {"ok": "✅", "warn": "⚠️", "alarm": "🔴"}
+    L += ([f"- {icon[s]} {t}" for s, t in insurers.health_checks(kind, am, qm)]
+          or ["- n/a (insufficient data)"])
     return L
 
 
