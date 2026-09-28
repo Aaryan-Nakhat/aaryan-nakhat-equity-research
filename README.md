@@ -1,52 +1,265 @@
 # 📈 aaryan-nakhat-equity-research
 
-> **Type a company name. Get the report an analyst would write** — for Indian stocks (NSE / BSE),
-> self-hosted, from primary sources only. Ask in a **local web UI**, your **terminal** or by **email**.
+> **Type a company name. Get the report an analyst would write** — for Indian stocks (NSE / BSE), self-hosted,
+> from primary sources only. Ask in a **local web UI**, your **terminal** or by **email**.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Data](https://img.shields.io/badge/data-primary%20%2F%20official%20only-2E7D32)
 ![LLM](https://img.shields.io/badge/LLM-provider--agnostic%20(BYO)-6E56CF)
 ![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
 ![Delivery](https://img.shields.io/badge/UI-web%20·%20CLI%20·%20email-0088CC)
-![Self-hosted](https://img.shields.io/badge/self--hosted-yes-informational)
+![License](https://img.shields.io/badge/license-MIT-informational)
 
-<p align="center"><img src="docs/media/demo.gif" alt="Asking for “adani”, picking Adani Power from the list, and the deep report arriving in the web UI" width="880"></p>
+<p align="center"><img src="docs/media/demo.gif" alt="Typing “adani”, picking Adani Power from the matches, and touring the finished deep report: filings-based overview, forensics, ownership changes, smart-money cost, employee sentiment, reverse-DCF, verdict, trading levels and charts" width="900"></p>
 
-## 📄 Real reports it wrote
-
-Unedited output from 28-Sep-2026 — click a picture for the full PDF. *(Samples, not investment advice.)*
-
-| ⚡ Adani Power — deep report | 🏦 HDFC Bank — a bank, read as a bank | 🛡️ ICICI Lombard — an insurer |
-|:---:|:---:|:---:|
-| [<img src="docs/samples/adani-power.png" width="280" alt="Adani Power deep report">](docs/samples/adani-power.pdf) | [<img src="docs/samples/hdfc-bank.png" width="280" alt="HDFC Bank deep report">](docs/samples/hdfc-bank.pdf) | [<img src="docs/samples/icici-lombard.png" width="280" alt="ICICI Lombard deep report">](docs/samples/icici-lombard.pdf) |
-| **💨 Tailwind** — global shocks → Indian beneficiaries | **🔥 Hotlist** — names several screens agree on | **🔄 Sector rotation** — every sector ranked |
-| [<img src="docs/samples/tailwind.png" width="280" alt="Tailwind report">](docs/samples/tailwind.png) | [<img src="docs/samples/hotlist.png" width="280" alt="Hotlist report">](docs/samples/hotlist.png) | [<img src="docs/samples/sector-rotation.png" width="280" alt="Sector rotation report">](docs/samples/sector-rotation.png) |
+**[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
+**[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
+**[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[How it thinks](#-how-it-thinks)** ·
+**[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
 
-- **Every number is computed, not generated.** Financials come straight from exchange XBRL filings;
-  ratios, forensics (Altman / Beneish / Piotroski), valuation (reverse-DCF, own-history percentiles) and
-  technicals are deterministic Python. The LLM only reads filings and writes the thesis.
-- **Primary sources only** — exchanges, SEBI, RBI, MOSPI, company filings. No blogs, aggregators or data vendors.
-- **Shaped to the business** — banks get NIM / NPAs / CET1, insurers get APE / persistency / combined ratio /
-  solvency, everyone else the industrial statements. Not one template with n/a everywhere.
-- **It finds ideas, not just analyses them** — screeners, a 🔥 hotlist of names several screens agree on,
-  💨 **Tailwind** (a global export ban → the Indian companies that benefit, via a four-agent pipeline),
-  ⛏️ **Pickaxe** (surging demand → who sells the shovels), 🎙️ earnings-call **say-do gap**, sector rotation.
-- **Yours** — runs on your machine, any LLM (or none: every number still builds), MIT.
+- **Every number is computed, not generated.** Financials come straight from exchange XBRL filings; ratios,
+  forensics, valuation and technicals are deterministic Python. The LLM reads filings and writes the argument —
+  it never supplies a figure. With no LLM configured at all, every report still builds with every number.
+- **Primary sources only** — NSE / BSE, SEBI, RBI, AMFI, PIB, company filings. No blogs, aggregators or data vendors.
+- **Shaped to the business** — a bank is read on NIM, NPAs and capital; an insurer on combined ratio, persistency
+  and solvency; everyone else on the industrial statements. Not one template with "n/a" everywhere.
+- **It finds ideas, not just analyses them** — 12 screeners, a hotlist of names several screens agree on, agent
+  pipelines that turn a foreign export ban or a demand surge into verified Indian beneficiaries, and a
+  management-says vs numbers-show read of every earnings call.
+- **Yours** — runs on your machine, any LLM provider (or none), MIT-licensed.
+
+## 🔬 The deep report
+
+Ask for any listed company in plain words (`adani power`, `hdfc` → pick from a list, `INFY`). A few minutes later:
+a report of ~15 sections plus a PDF with charts. **[Full Adani Power PDF](docs/samples/adani-power.pdf)** ·
+[HDFC Bank](docs/samples/hdfc-bank.pdf) · [ICICI Lombard](docs/samples/icici-lombard.pdf) — unedited output of 29-Sep-2026.
+
+**It starts from the company's own filings** — what the business does, its revenue mix, market position — read
+from the annual report, investor presentations and concall transcripts, with the page it came from.
+
+![Business overview read from the filings](docs/samples/dr-overview.png)
+
+**Forensics** — Altman Z (distress), Beneish M (earnings manipulation), Piotroski F (fundamental strength),
+accruals and promoter pledge, each with what the number means.
+
+![Forensic deep-dive](docs/samples/dr-forensic.png)
+
+**Who owns it, and who just moved** — every promoter and >1% holder from the SEBI shareholding filings, and the
+quarter-on-quarter diff: who entered, added, trimmed or exited.
+
+![Ownership changes](docs/samples/dr-ownership.png)
+
+**💰 Smart-money cost** — what each institution likely paid (from the price range of the quarters it bought in),
+so you can see who's sitting on gains and might book profit. Holders who bought before the data starts are
+marked unknown, not guessed.
+
+![Smart-money cost and profit-booking risk](docs/samples/dr-smart-money.png)
+
+**🏢 The inside view** — what employees say about the company and its management, graded A→E against its own
+industry.
+
+![Employee and management sentiment](docs/samples/dr-inside-view.png)
+
+**What the price already assumes** — a reverse-DCF (the growth today's price implies), a Monte-Carlo DCF, and
+the multiple against the company's own history and its peers.
+
+![Reverse-DCF](docs/samples/dr-reverse-dcf.png)
+
+![Monte-Carlo DCF fair-value distribution](docs/samples/dr-chart-montecarlo.png)
+
+**The verdict, argued** — earnings quality, returns, balance sheet, growth, forensics and valuation, each read by
+the LLM from the computed brief and the filings, ending in a verdict it has to justify.
+
+![Verdict](docs/samples/dr-verdict.png)
+
+**Trading levels** — support and resistance zones computed from swing pivots, moving averages, 52-week extremes,
+volume-by-price and round numbers, and a reward-to-risk entry / stop / target that defers to the fundamental verdict.
+
+![Support and resistance chart](docs/samples/dr-chart-levels.png)
+
+<details>
+<summary><b>Banks and insurers get their own report</b> — NIM, NPAs, CET1 · combined ratio, solvency, persistency</summary>
+
+A lender has no EBITDA and an insurer has no working capital, so they're read on the numbers that matter for them,
+with their own health checks — and the industrial forensics (Altman, Beneish, Piotroski) are left out rather than
+misapplied.
+
+![HDFC Bank: asset quality](docs/samples/bank-asset-quality.png)
+
+![ICICI Lombard: underwriting ratios](docs/samples/insurer-underwriting.png)
+
+</details>
+
+Reply **`1`** after any report for the **Upside Drivers 1-pager**: forward catalysts from the concalls and investor
+presentations, each with an estimated ₹ cr / % impact and how certain it is.
+
+## 🔎 Find ideas you didn't ask for
+
+Every screen replies with a ranked, numbered list — pick a number for that company's deep report.
+
+**🔥 `hotlist`** — the names that several screens flag at once (volume breakouts, market beaters, institutional
+buying, value + clean books, small-cap capex). Agreement between independent screens is a stronger lead than any one.
+
+![Hotlist](docs/samples/hotlist.png)
+
+**`screen: value`** — the Nifty 500 ranked on quality (Piotroski) + clean forensics (Altman, Beneish, accruals, no pledge)
++ cheap against its own history.
+
+![Value screen](docs/samples/screen-value.png)
+
+**`screen: smallcap`** — ₹1,000–10,000 cr companies in a capex cycle (capex vs its 3-year base and depreciation,
+self-funded, rising ROCE, smart money in), with distress, manipulation, pledge and shrinking-revenue traps gated out.
+
+![Small-cap capex screen](docs/samples/screen-smallcap.png)
+
+<details>
+<summary><b>9 more screens</b> — volume breakouts · market beaters · institutional buying · margin momentum · debt payers · compounders · holdcos below NAV · marquee investors · chart setups</summary>
+
+**`screen: volume`** — near a 52-week high, in an uptrend, on a volume surge.
+
+![Volume breakouts](docs/samples/screen-volume.png)
+
+**`screen: beaters`** — beating the Nifty 500 over 3, 6 and 12 months and still trending.
+
+![Market beaters](docs/samples/screen-beaters.png)
+
+**`screen: institutions`** — promoters raising their own stake, with the institution adding alongside.
+
+![Institutional buying](docs/samples/screen-institutions.png)
+
+**`screen: margins`** — net margin expanding on growing revenue.
+
+![Margin momentum](docs/samples/screen-margins.png)
+
+**`screen: deleverage`** — cut debt over 3–4 years while staying profitable.
+
+![Debt payers](docs/samples/screen-deleverage.png)
+
+**`screen: quality`** — high ROCE, low debt, steady growth, clean books.
+
+![Compounders](docs/samples/screen-quality.png)
+
+**`screen: holdco`** — listed holding companies trading below the value of their listed stakes.
+
+![Holding companies below NAV](docs/samples/screen-holdco.png)
+
+**`screen: investors`** — where ~25 tracked marquee investors entered, added, trimmed or exited.
+
+![Marquee investors](docs/samples/screen-investors.png)
+
+**`screen: technical`** — the strongest chart setups, each with entry, stop and target.
+
+![Technical setups](docs/samples/screen-technical.png)
+
+</details>
+
+## 🌍 Agents that read the world
+
+**💨 `tailwind`** — when a country restricts exports of something (a ban, a quota, a tariff), buyers need another
+supplier. Four agents find the Indian listed companies that *are* that supplier: a scout reads ~30 commodity
+chokepoints in the news and the US Federal Register, an analyst keeps only real disruptions (citing its evidence by
+number), a web-search mapper finds existing producers, and a Python auditor drops any name that isn't a real,
+plausible NSE listing. Pushed weekly, plus same-day alerts when a fresh shock lands.
+
+![Tailwind](docs/samples/tailwind.png)
+
+**⛏️ `pickaxe`** — the demand-side mirror: rising "buy" searches on Google Trends and demand news → the durable theme →
+not the crowded producer but the supplier to it (the feed, vaccine, packaging or equipment maker), each with its
+price, P/E vs sector, support/resistance and a revenue-share projection read from its filings, with sources.
+
+
+**🏛️ `policy`** — the latest government press releases (PIB), often at the cabinet-approval or draft stage, mapped
+to the sectors and listed companies they help.
+
+## 🧭 Sectors, investors and earnings
+
+**`sector: defence`** (or pharma, banks, IT…) — the sector index's trend, relative strength and valuation against its
+own history, who's accumulating, and the best and cheapest names inside it, plus its listed supply chain.
+
+![Sector: defence](docs/samples/sector-defence.png)
+
+**`sector: rotation`** — every sector ranked: leaders, laggards, and the ones turning up from cheap.
+
+![Sector rotation](docs/samples/sector-rotation.png)
+
+**🎙️ `concalls`** — every recent earnings call scored twice: the **tone** of what management said (from the
+transcript) and the **execution** in the quarter's numbers (from the filings). Upbeat talk on soft numbers is a
+caution; quiet talk on strong numbers is an under-the-radar lead.
+
+![Concalls: say-do gap](docs/samples/concalls.png)
+
+**📈 `results`** — companies that just reported, ranked by growth, whether it's accelerating, and margin inflection
+(during results season; it's empty between seasons).
+
+**👤 `investor: <name>`** — a marquee investor's disclosed holdings, last-quarter moves and their cost vs today.
+
+![Investor: Mukul Agrawal](docs/samples/investor.png)
+
+**🔗 `suppliers: <company>`** — the smaller listed suppliers feeding a big name.
+
+![Suppliers: BEL](docs/samples/suppliers.png)
+
+## 💵 Funds, IPOs, levels and alerts
+
+**`fund: <name>`** — any of ~14,000 mutual-fund schemes: returns, rolling consistency, risk, SIP/XIRR, alpha / beta /
+capture vs its benchmark, category rank and, where the AMC publishes it, the portfolio.
+
+![Mutual fund report](docs/samples/fund.png)
+
+![Growth of ₹100 invested in the fund](docs/samples/fund-chart.png)
+
+**`ipo: ongoing` / `ipo: upcoming` / `ipo: <name>`** — a pre-listing note from the offer documents: fresh issue vs
+offer-for-sale, valuation at the band vs listed peers, an accounting and governance flag, risks, subscription, and
+apply / avoid / neutral.
+
+![Live IPOs](docs/samples/ipo.png)
+
+**`levels: <name>`** — the quick one: support/resistance zones, structure and a setup with a chart, in ~30 seconds and
+without the LLM.
+
+![Levels](docs/samples/levels.png)
+
+**🔔 `alert: order win`** — watch every company's exchange filings for a phrase and get an email within ~20 minutes of
+a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking risk and which to trim first.
+**📬 Arrives by itself** (with email set up): a pre-market brief at 08:30 (GIFT Nifty implied open, overnight
+markets, FII positioning), midday and evening watchlist digests, and weekly screen, sector, Tailwind, concall and
+results pushes.
 
 ## 🧠 How it thinks
 
-<p align="center"><img src="docs/media/tailwind-agents.png" alt="Tailwind: Scout, Analyst, Mapper and Auditor agents turning a Philippine ube export ban into a verified Indian small-cap" width="880"></p>
+<p align="center"><img src="docs/media/tailwind-agents.png" alt="Tailwind: four agents turning a Philippine ube export ban into a verified Indian small-cap" width="880"></p>
 
-The LLMs read, triage and write; **Python computes every number and checks every name they propose.** In
-💨 Tailwind the Analyst must cite each disruption by the *number* of a signal the Scout actually fetched,
-and the Auditor drops any company that isn't a real NSE listing in a plausible industry. The case above is
-real, including the part where the stock gave the move back, and the part where the alert came late and
-the code changed because of it.
+The LLMs read, triage and write; **Python computes every number and checks every name they propose.**
 
-**→ [How it thinks](docs/HOW_IT_THINKS.md)**: the deep-report flow, the Tailwind and ⛏️ Pickaxe agent
-pipelines, the full case, and the one-process architecture, as diagrams.
+```mermaid
+flowchart LR
+    S["① Scout<br/>news · US Federal Register"] --> A["② Analyst (LLM)<br/>cites evidence by number"]
+    A --> M["③ Mapper (LLM + web)<br/>existing producers only"]
+    M --> U["④ Auditor (Python)<br/>real NSE listing? plausible?"]
+    U --> O["verified names,<br/>smallest first"]
+    A -. "no valid source" .-> X1["✗"]
+    U -. "hallucinated" .-> X2["✗"]
+```
+
+**A real case, including the part that didn't work.** On Saturday 19-Sep-2026 the weekly Tailwind digest carried a
+low-severity catalyst: the Philippines restricting exports of ube (purple yam). There's no "purple-yam stock", so the
+mapper went one layer out, to natural colours and food ingredients, and three small-caps passed the auditor.
+
+| From Friday 18-Sep's close | Tue 22 | Mon 28 |
+|---|---:|---:|
+| AVT Natural Products | **+14.7%** | +1.1% |
+| Vidhi Specialty Food Ingredients | +4.5% | +2.7% |
+| Dynemic Products | +0.7% | −2.3% |
+| *Nifty 50* | *−0.1%* | *−2.4%* |
+
+One of three ran and gave most of it back within a week — an idea generator, not a call. And the alert came late:
+the mid-week check only fired for high-severity shocks, so this waited for Saturday. It now runs three times each
+trading day and also breaks in for a fresh shock of any severity with a small- or mid-cap beneficiary.
+
+**→ [How it thinks, in full](docs/HOW_IT_THINKS.md)** — the deep-report flow, the Tailwind and Pickaxe pipelines,
+and the one-process architecture, as diagrams.
 
 ## 🚀 Quickstart
 
@@ -69,24 +282,9 @@ No LLM key yet? Every report still builds with all its numbers; the AI write-up 
 `/data`, and **set `WEB_PASSWORD`** — the server refuses to listen publicly without one, so strangers
 can't run reports on your LLM key.
 
-## 📖 What you can ask
-
-Plain words work — `adani power`, `hdfc` (→ a numbered list to pick from), `fund: parag parikh flexi cap`.
-The same commands work in the browser, as `eqr <command>` in a terminal, or as an email subject.
-
-| Ask | You get |
-|---|---|
-| `infosys` *(any company or NSE symbol)* | The **deep report** — business overview, fundamentals, forensics, valuation, technicals, shareholding + smart-money cost, employee sentiment — with a PDF |
-| `screen: value` · `quality` · `volume` · `beaters` · `institutions` · `smallcap` · `holdco` … | **Idea screeners** — a ranked, numbered list; pick one for its deep report |
-| `hotlist` | 🔥 Names several screeners flag at once |
-| `tailwind` · `pickaxe` | 💨 Global supply shocks / ⛏️ demand surges → verified Indian beneficiaries |
-| `sector: defence` · `sector: rotation` | 🧭 A top-down sector read / every sector ranked |
-| `concalls` · `results` | 🎙️ Management tone vs delivered numbers / 📈 the strongest fresh results |
-| `fund: <name>` · `ipo: upcoming` · `levels: <name>` | 💵 Mutual-fund report / 🟢 IPO note / 📈 entry-stop-target |
-| `alert: order win` | 🔔 An alert whenever any company files an announcement matching the phrase |
-
-**→ [Every command, with details](docs/COMMANDS.md)** · digests also arrive by themselves (pre-market 08:30,
-midday, evening, weekly screens) if you set up email.
+**Three ways to ask, one flow.** The browser UI has autocomplete for every command, live progress, reports with
+their charts and PDFs, and a history. In a terminal it's `eqr <anything>` (`eqr pick 2` answers a list). By email,
+the command is the subject line. **[Every command →](docs/COMMANDS.md)**
 
 ```bash
 eqr adani power              # deep report in the terminal (saved as Markdown + HTML + PDF)
@@ -198,7 +396,7 @@ src/equity_research/
 scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py / make_samples.py /
                render_card.py rebuild the README media)
 data/          raw scrapes + processed artifacts (gitignored)
-docs/          reference docs · docs/samples/ real sample reports · docs/media/ the demo GIF
+docs/          reference docs · docs/samples/ real sample reports (specs.txt rebuilds them) · docs/media/ the demo GIF
 tests/         tests
 ```
 

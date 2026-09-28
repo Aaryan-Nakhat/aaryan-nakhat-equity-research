@@ -1,0 +1,43 @@
+# scripts/make_samples.py specs for the README gallery — one per line (see the script's docstring).
+# Deep report (Adani Power): whole-report PDF + the sections that set it apart
+adani-power=*adani-power.html
+dr-overview=*adani-power.html#What the company does>1
+dr-forensic=*adani-power.html#Forensic deep-dive!
+dr-ownership=*adani-power.html#Ownership changes
+dr-smart-money=*adani-power.html#Smart-money cost
+dr-inside-view=*adani-power.html#Inside view
+dr-reverse-dcf=*adani-power.html#reverse-DCF
+dr-verdict=*adani-power.html#Verdict
+dr-levels=*adani-power.html#Trading levels
+dr-chart-montecarlo=*adani-power.html@Monte-Carlo
+dr-chart-levels=*adani-power.html@support (green)
+dr-chart-returns=*adani-power.html@Returns on capital
+# Banks and insurers get their own shape
+hdfc-bank=*hdfc-bank.html
+bank-asset-quality=*hdfc-bank.html#Asset quality>1
+icici-lombard=*icici-lombard.html
+insurer-underwriting=*icici-lombard.html#Underwriting ratios>1
+# Idea screeners and discovery engines (top of each list)
+screen-value=*screen-value.html
+screen-volume=*screen-volume.html
+screen-beaters=*screen-beaters.html
+screen-institutions=*screen-institutions.html
+screen-margins=*screen-margins.html
+screen-deleverage=*screen-deleverage.html
+screen-quality=*screen-quality.html
+screen-holdco=*screen-holdco.html
+screen-investors=*screen-investors.html
+screen-smallcap=*screen-smallcap.html
+screen-technical=*screen-technical.html
+hotlist=*hotlist.html
+sector-defence=*sector-defence.html
+sector-rotation=*sector-rotation.html
+investor=*investor-mukul-agrawal.html
+suppliers=*suppliers-bel.html
+concalls=*concalls.html
+levels=*levels-adani-power.html
+levels-chart=*levels-adani-power.html@support (green)
+ipo=*ipo-ongoing.html
+fund=*fund-parag-parikh-flexi-cap.html
+tailwind=*tailwind.html
+fund-chart=*fund-parag-parikh-flexi-cap.html@NAV

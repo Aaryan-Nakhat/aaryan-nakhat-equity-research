@@ -4,9 +4,10 @@
 
 1. **Record.** Starts the web server in-process (against ``--db``, ideally a copy with the
    watchlist emptied so no personal data shows), drives it in headless Chromium with Playwright —
-   type a group name, click one of the numbered buttons, wait for the deep report, scroll into it —
-   with an injected cursor + click ripple, and logs when and where each action happened.
-2. **Retime.** The multi-minute report build is sped through (~40×); interactions stay real-time.
+   type a group name, click one of the numbered buttons, wait for the deep report, open it, then
+   tour its highlights (``TOUR``: forensics, ownership, smart-money cost, inside view, reverse-DCF,
+   verdict, levels, charts) with a caption on each — with an injected cursor + click ripple.
+2. **Retime.** The multi-minute report build is squeezed into ~2.5 s; interactions stay real-time.
 3. **Auto-zoom.** Every moment eases toward the region the action happened in (the search box while
    typing, the buttons, the report), like Screen Studio / Recordly — but deterministic, so the GIF is
    re-generated with one command whenever the UI changes.
@@ -35,7 +36,21 @@ sys.path.insert(0, str(ROOT / "src"))
 
 W, H = 1280, 800                  # recorded viewport
 OUT_W = 960                       # GIF width (keeps it small enough for a README)
-FPS = 15
+FPS = 12                          # frames per second — ~40 s must fit GitHub's 10 MB inline-image limit
+
+# The deep-report tour: (a heading or chart caption to find, the caption shown while it's on screen)
+TOUR = [
+    ("Business overview", "🏢  Reads the company's own filings: what it does, revenue mix, market share"),
+    ("Forensic deep-dive", "🕵️  Forensics: Altman Z · Beneish M · Piotroski F · accruals · pledge"),
+    ("Ownership changes", "👥  Who entered, added, trimmed or exited — holder by holder"),
+    ("Smart-money cost", "💰  What the institutions paid, and whether they're sitting on gains"),
+    ("Inside view", "🧑‍💼  What employees say about management, graded A→E vs its industry"),
+    ("reverse-DCF", "🧾  The growth today's price already assumes (reverse-DCF)"),
+    ("Verdict", "🎯  The verdict, argued from the numbers above"),
+    ("Trading levels", "📈  Entry · stop · target from computed support and resistance"),
+    ("Monte-Carlo", "📊  Monte-Carlo DCF: where the price sits in the fair-value spread"),
+]
+OUTRO = "Every number computed from exchange filings · open source · runs on your machine"
 
 CURSOR_JS = r"""
 (() => {
@@ -58,6 +73,20 @@ CURSOR_JS = r"""
       requestAnimationFrame(() => { r.style.transform = 'scale(1.9)'; r.style.opacity = '0'; });
       setTimeout(() => r.remove(), 500);
     }, true);
+  };
+  window.__caption = (text) => {
+    let c = document.getElementById('__cap');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = '__cap';
+      Object.assign(c.style, {position: 'fixed', left: '50%', bottom: '26px', transform: 'translateX(-50%)',
+        maxWidth: '86%', padding: '12px 22px', borderRadius: '14px', background: 'rgba(10,61,36,.94)',
+        color: '#fff', font: '600 22px/1.3 "Segoe UI", system-ui, sans-serif', textAlign: 'center',
+        boxShadow: '0 8px 28px rgba(0,0,0,.25)', zIndex: 2147483645, transition: 'opacity .25s'});
+      document.documentElement.appendChild(c);
+    }
+    c.style.opacity = '0';
+    setTimeout(() => { c.textContent = text; c.style.opacity = '1'; }, 180);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();
@@ -93,7 +122,7 @@ def record(query: str, pick: str, workdir: Path) -> tuple[Path, list[Beat]]:
         time.sleep(0.05)
     base = f"http://127.0.0.1:{port}"
 
-    marks: list[tuple[str, float, tuple | None]] = []
+    beats: list[Beat] = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         ctx = browser.new_context(viewport={"width": W, "height": H}, color_scheme="light",
@@ -101,78 +130,97 @@ def record(query: str, pick: str, workdir: Path) -> tuple[Path, list[Beat]]:
         ctx.add_init_script(CURSOR_JS)
         page = ctx.new_page()
         t0 = time.monotonic()
+        clock = [0.0]                                   # where the next beat starts (source seconds)
 
-        def mark(name: str, box=None) -> None:
-            rect = (box["x"], box["y"], box["width"], box["height"]) if box else None
-            marks.append((name, time.monotonic() - t0, rect))
+        def now() -> float:
+            return time.monotonic() - t0
+
+        def beat(speed: float, box=None) -> None:
+            """Close the stretch since the previous beat: play it at ``speed``, framed on ``box``."""
+            rect = (box["x"], box["y"], box["width"], box["height"]) if isinstance(box, dict) else box
+            beats.append(Beat(clock[0], now(), speed, rect))
+            clock[0] = now()
 
         page.goto(base)
         page.wait_for_selector("#q")
         page.mouse.move(W * 0.62, H * 0.62)
-        mark("open")
-        time.sleep(1.4)
+        clock[0] = now()                                # start once the page has painted
+        time.sleep(1.0)
+        beat(1.0)
 
+        # ask — plain words, a group name on purpose
         box = page.locator(".ask-box").bounding_box()
-        mark("type", box)
-        page.mouse.move(box["x"] + 120, box["y"] + box["height"] / 2, steps=25)
+        page.mouse.move(box["x"] + 120, box["y"] + box["height"] / 2, steps=18)
         page.mouse.down()
         page.mouse.up()
-        page.keyboard.type(query, delay=110)
-        time.sleep(0.5)
+        page.keyboard.type(query, delay=80)
+        time.sleep(0.3)
         page.keyboard.press("Escape")
         page.keyboard.press("Enter")
-        mark("submitted", box)
-
+        time.sleep(0.3)
+        beat(1.0, box)
         page.wait_for_selector(".menu-opts button", timeout=180_000)
-        time.sleep(0.4)
-        mark("menu", page.locator(".card").first.bounding_box())
-        time.sleep(1.6)
+        beat(max(1.0, (now() - clock[0]) / 0.6), box)    # resolving the name → 0.6 s
+
+        # several matches → pick one, quickly
+        card = page.locator(".card").first
+        time.sleep(0.5)
         btn = page.locator(".menu-opts button", has_text=pick).first
         b = btn.bounding_box()
-        page.mouse.move(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2, steps=30)
-        time.sleep(0.3)
+        page.mouse.move(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2, steps=16)
+        time.sleep(0.2)
         btn.click()
-        mark("picked", b)
+        time.sleep(0.5)
+        beat(1.0, card.bounding_box())
 
-        page.locator(".card").first.locator(".pill.running").wait_for(timeout=60_000)
-        time.sleep(1.2)
-        mark("working", page.locator(".card").first.bounding_box())
+        # the build (~5 min) → ~2.5 s
         card = page.locator(".card").first
+        card.locator(".pill.running").wait_for(timeout=60_000)
+        work_box = card.bounding_box()
         card.locator(".report iframe").wait_for(timeout=900_000)
         card.locator(".pill.done").wait_for(timeout=900_000)
-        time.sleep(2.0)                                   # let the preview paint
-        mark("report", None)
-        rep = card.locator(".report").bounding_box()
-        page.mouse.move(W * 0.72, rep["y"] + 60, steps=25)
-        page.evaluate("y => window.scrollTo({top: y, behavior: 'smooth'})", rep["y"] - 90)
-        time.sleep(1.6)
-        rep = card.locator(".report").bounding_box()
-        mark("read", rep)
-        # scroll inside the report preview: the business overview → the statements
-        frame = card.frame_locator(".report iframe")
-        for y in (350, 900, 1500):
-            frame.locator("body").evaluate("(b, y) => b.ownerDocument.defaultView.scrollTo({top: y, behavior: 'smooth'})", y)
-            time.sleep(1.5)
-        mark("end", None)
-        time.sleep(0.8)
+        time.sleep(1.5)                                  # let the preview paint
+        beat(max(1.0, (now() - clock[0]) / 2.5), work_box)
+
+        # open the whole report in place, then tour the parts nobody else computes
+        more = card.locator(".report-more")
+        if more.is_visible():
+            mb = more.bounding_box()
+            page.evaluate("y => window.scrollTo({top: y, behavior: 'smooth'})", max(0, mb["y"] - H + 140))
+            time.sleep(0.8)
+            mb = more.bounding_box()
+            page.mouse.move(mb["x"] + mb["width"] / 2, mb["y"] + mb["height"] / 2, steps=14)
+            more.click()
+            time.sleep(0.8)
+        beat(1.0)
+        frame_el = card.locator(".report iframe")
+        for needle, caption in TOUR:
+            y = frame_el.evaluate(
+                """(f, n) => { const h = [...f.contentDocument.querySelectorAll('h1,h2,h3,h4,figcaption')]
+                                 .find(x => x.textContent.toLowerCase().includes(n.toLowerCase()));
+                               if (!h) return null;
+                               const el = h.tagName === 'FIGCAPTION' ? h.parentElement : h;
+                               return f.getBoundingClientRect().top + window.scrollY
+                                      + el.getBoundingClientRect().top; }""", needle)
+            if y is None:
+                print(f"  (tour: no section matching {needle!r} — skipped)")
+                continue
+            page.evaluate("t => window.__caption(t)", caption)
+            page.evaluate("y => window.scrollTo({top: y, behavior: 'smooth'})", max(0, y - 70))
+            time.sleep(0.9)
+            beat(1.0)                                    # the scroll, full frame
+            page.mouse.move(W * 0.70, H * 0.55, steps=10)
+            time.sleep(2.2)
+            fb = frame_el.bounding_box()
+            beat(1.0, {"x": fb["x"], "y": 40, "width": fb["width"], "height": H - 140})   # read it, closer
+        page.evaluate("t => window.__caption(t)", OUTRO)
+        page.evaluate("() => window.scrollTo({top: 0, behavior: 'smooth'})")
+        time.sleep(2.4)
+        beat(1.0)
         video = Path(page.video.path())
         ctx.close()
         browser.close()
     srv.should_exit = True
-
-    (workdir / "marks.json").write_text(json.dumps(marks, indent=1))
-    t = {name: at for name, at, _ in marks}
-    r = {name: rect for name, _, rect in marks}
-    beats = [
-        Beat(t["open"], t["type"], 1.0, None),                        # the page, once it has painted
-        Beat(t["type"], t["submitted"] + 0.6, 1.0, r["type"]),        # typing — zoom on the box
-        Beat(t["submitted"] + 0.6, t["menu"], 6.0, None),             # resolving the name (sped up)
-        Beat(t["menu"], t["picked"] + 0.4, 1.0, r["menu"]),           # the pick buttons — zoom in
-        Beat(t["picked"] + 0.4, t["working"], 1.0, r["working"]),     # the job card starts
-        Beat(t["working"], t["report"], max(1.0, (t["report"] - t["working"]) / 3.0), r["working"]),  # ~5 min → 3 s
-        Beat(t["report"], t["read"], 1.0, None),                      # scroll to the report
-        Beat(t["read"], t["end"] + 0.8, 1.0, r["read"]),              # read it — zoom in
-    ]
     return video, beats
 
 
