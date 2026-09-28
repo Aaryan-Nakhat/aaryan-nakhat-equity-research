@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import html as _html
 import os
+import re
 
 import markdown as _md
 from playwright.sync_api import sync_playwright
@@ -109,6 +110,26 @@ def _wrap_tables(html: str) -> str:
                .replace("</table>", "</table></div>")
 
 
+_LIST_ITEM = re.compile(r"^\s{0,3}(?:[-*+]|\d+[.)])\s+\S")
+
+
+def _separate_lists(markdown_text: str) -> str:
+    """Put a blank line before a list that directly follows a paragraph line.
+
+    Python-Markdown (unlike GitHub) only starts a list after a blank line, so the LLM's
+    "…as follows:\\n- **Retail:** …" otherwise renders as one run-on paragraph."""
+    out: list[str] = []
+    fenced = False
+    for line in markdown_text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif (not fenced and out and _LIST_ITEM.match(line) and out[-1].strip()
+              and not _LIST_ITEM.match(out[-1]) and not out[-1].startswith((" ", "\t", "|", ">"))):
+            out.append("")
+        out.append(line)
+    return "\n".join(out)
+
+
 def render_html(markdown_text: str, title: str = "",
                 images: list[tuple[str, bytes]] | None = None) -> str:
     """Render a markdown report string to a full styled HTML document.
@@ -118,7 +139,7 @@ def render_html(markdown_text: str, title: str = "",
     (wrapped text, no zoom-out) without changing the printed PDF.
     ``images`` (caption, png-bytes) are appended as a Charts section.
     """
-    body = _wrap_tables(_md.markdown(markdown_text,
+    body = _wrap_tables(_md.markdown(_separate_lists(markdown_text),
                                      extensions=["tables", "fenced_code", "sane_lists"]))
     return (f'<!doctype html><html><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'

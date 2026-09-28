@@ -455,7 +455,10 @@ PUSH  Saturday >=18:00 IST, once per ISO week → screen_digest → ONE "Screene
   **viewport tag** plus an `@media only screen and (max-width: 600px)` block that wraps
   table cells and fenced blocks and lets a genuinely wide table scroll inside its own
   `.tablewrap` box. `only screen` keeps all of it out of the **PDF**, which still prints
-  A4-landscape with `nowrap` financial tables.
+  A4-landscape with `nowrap` financial tables. Before rendering, `_separate_lists` puts a
+  blank line before a list that directly follows a paragraph line — Python-Markdown (unlike
+  GitHub) won't start a list without one, so the LLM's "…as follows:\n- **Retail:** …"
+  used to come out as one run-on paragraph.
 - **Config**: `IMAP_HOST/PORT/USER/PASS`, the existing `SMTP_*` /
   `REPORT_FROM` / `REPORT_TO`, and `EMAIL_ALLOWED_SENDERS`. Send requests *from*
   a different address you own (e.g. work) *to* the bot's Gmail, so requests never
