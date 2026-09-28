@@ -35,6 +35,19 @@ Unedited output from 28-Sep-2026 — click a picture for the full PDF. *(Samples
   ⛏️ **Pickaxe** (surging demand → who sells the shovels), 🎙️ earnings-call **say-do gap**, sector rotation.
 - **Yours** — runs on your machine, any LLM (or none: every number still builds), MIT.
 
+## 🧠 How it thinks
+
+<p align="center"><img src="docs/media/tailwind-agents.png" alt="Tailwind: Scout, Analyst, Mapper and Auditor agents turning a Philippine ube export ban into a verified Indian small-cap" width="880"></p>
+
+The LLMs read, triage and write; **Python computes every number and checks every name they propose.** In
+💨 Tailwind the Analyst must cite each disruption by the *number* of a signal the Scout actually fetched,
+and the Auditor drops any company that isn't a real NSE listing in a plausible industry. The case above is
+real, including the part where the stock gave the move back, and the part where the alert came late and
+the code changed because of it.
+
+**→ [How it thinks](docs/HOW_IT_THINKS.md)**: the deep-report flow, the Tailwind and ⛏️ Pickaxe agent
+pipelines, the full case, and the one-process architecture, as diagrams.
+
 ## 🚀 Quickstart
 
 ```bash
@@ -162,6 +175,7 @@ reports from the terminal (`eqr`) or email, + a pre-market (08:30), midday (12:3
 watchlist digest over email. Docs:
 
 - [`docs/COMMANDS.md`](docs/COMMANDS.md) — every command, with details.
+- [`docs/HOW_IT_THINKS.md`](docs/HOW_IT_THINKS.md) — the agent pipelines and request flow as diagrams, plus a real case.
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.
@@ -181,7 +195,8 @@ src/equity_research/
   web/         the local web UI (FastAPI + plain JS, no build step)
   cli.py       the `eqr` terminal command
   common/      config, storage, shared utilities
-scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py records the demo GIF)
+scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py / make_samples.py /
+               render_card.py rebuild the README media)
 data/          raw scrapes + processed artifacts (gitignored)
 docs/          reference docs · docs/samples/ real sample reports · docs/media/ the demo GIF
 tests/         tests

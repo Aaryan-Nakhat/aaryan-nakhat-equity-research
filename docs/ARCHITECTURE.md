@@ -9,6 +9,8 @@ in [`SCRAPING.md`](SCRAPING.md),
 [`FUNDAMENTALS.md`](FUNDAMENTALS.md), [`TECHNICAL.md`](TECHNICAL.md),
 [`REPORTS.md`](REPORTS.md), [`ALERTS.md`](ALERTS.md).
 
+For the same system as Mermaid diagrams (request flow, the Tailwind / Pickaxe agent pipelines, the one-process server) see [`HOW_IT_THINKS.md`](HOW_IT_THINKS.md).
+
 ## Full pipeline
 
 ```
