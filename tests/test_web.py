@@ -49,7 +49,63 @@ def wait_done(client, job_id: str, timeout: float = 60) -> dict:
 
 
 def test_health(client):
-    assert client.get("/api/health").json() == {"ok": True, "service": "eqr", "active": 0}
+    assert client.get("/api/health").json() == {"ok": True, "service": "eqr", "auth": False}
+    assert client.get("/api/status").json() == {"active": 0}
+
+
+# ----------------------------- sign-in (WEB_PASSWORD) -----------------------------
+@pytest.fixture
+def locked(env):
+    from equity_research.web.jobs import JobManager
+    from equity_research.web.server import create_app
+
+    manager = JobManager(max_workers=1)
+    with TestClient(create_app(manager, password="s3cret"), follow_redirects=False) as c:
+        yield c
+    manager.close()
+
+
+def test_everything_but_login_needs_a_password(locked):
+    assert locked.get("/").status_code == 303 and locked.get("/").headers["location"] == "/login"
+    assert locked.get("/api/jobs").status_code == 401
+    assert locked.post("/api/jobs", json={"text": "help"}).status_code == 401
+    assert locked.get("/files/x.html").status_code == 401
+    assert locked.get("/api/health").json()["auth"] is True        # the CLI's probe stays open
+    assert locked.get("/static/app.css").status_code == 200        # the login page needs its CSS
+    assert locked.get("/login").status_code == 200
+
+
+def test_wrong_password_is_refused(locked):
+    r = locked.post("/login", content="password=nope",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 401 and "That password isn" in r.text and "eqr_session" not in r.cookies
+
+
+def test_signing_in_sets_a_session_that_opens_the_app(locked):
+    r = locked.post("/login", content="password=s3cret",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 303 and r.headers["location"] == "/"
+    assert locked.get("/").status_code == 200 and locked.get("/api/jobs").status_code == 200
+    locked.cookies.clear()
+    locked.cookies.set("eqr_session", "forged")
+    assert locked.get("/api/jobs").status_code == 401
+
+
+def test_bearer_token_is_accepted(locked):
+    assert locked.get("/api/jobs", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+    assert locked.get("/api/jobs", headers={"Authorization": "Bearer nope"}).status_code == 401
+
+
+def test_no_password_means_localhost_only(monkeypatch):
+    from equity_research import config
+    from equity_research.web import server as web
+
+    monkeypatch.setattr(config, "WEB_PASSWORD", "")
+    assert web.refuse_reason("127.0.0.1") is None
+    assert "WEB_PASSWORD" in web.refuse_reason("0.0.0.0")
+    assert web.start_background("0.0.0.0", 1) is None               # refuses, doesn't bind
+    monkeypatch.setattr(config, "WEB_PASSWORD", "s3cret")
+    assert web.refuse_reason("0.0.0.0") is None
 
 
 def test_a_command_runs_and_its_report_is_saved_and_served(client, env):
@@ -154,6 +210,34 @@ def test_cli_forwards_to_a_running_server(env, monkeypatch, capsys):
         out = capsys.readouterr().out
         assert "Saved:" in out and str(env / "out") in out           # the server saved it
         assert json.loads((env / "cli_state.json").read_text())["root"]  # picks will work
+    finally:
+        srv.should_exit = True
+        t.join(timeout=5)
+
+
+def test_cli_with_a_password_protected_server(env, monkeypatch, capsys):
+    from equity_research import cli, config
+    from equity_research.web import server as web
+
+    port = _free_port()
+    monkeypatch.setattr(config, "WEB_PORT", port)
+    monkeypatch.setattr(config, "WEB_HOST", "127.0.0.1")
+    monkeypatch.setattr(config, "WEB_PASSWORD", "s3cret")
+    monkeypatch.setattr(cli, "load_env", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "_STATE_FILE", env / "cli_state.json")
+    srv = web._server("127.0.0.1", port)                          # built while the password is set
+    t = threading.Thread(target=srv.run, daemon=True)
+    t.start()
+    try:
+        for _ in range(100):
+            if srv.started:
+                break
+            time.sleep(0.05)
+        assert cli.main(["help", "--quiet"]) == 0                  # same password → works
+        assert "Saved:" in capsys.readouterr().out
+        monkeypatch.setattr(config, "WEB_PASSWORD", "")            # this machine lacks it
+        assert cli.main(["help", "--quiet"]) == 1
+        assert "needs a password" in capsys.readouterr().err
     finally:
         srv.should_exit = True
         t.join(timeout=5)

@@ -30,6 +30,7 @@
 
     <div class="nav-title">Saved reports</div>
     <ul class="history" id="history"><li class="muted small">Nothing yet — run something.</li></ul>
+    {% if auth %}<a class="signout" href="/logout">Sign out</a>{% endif %}
   </aside>
 
   <main class="main">

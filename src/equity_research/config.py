@@ -124,6 +124,9 @@ WEB_UI_ENABLED = env_bool("WEB_UI_ENABLED", True)      # the email bot also serv
 WEB_HOST = env_str("WEB_HOST", "127.0.0.1")            # localhost only unless WEB_PASSWORD is set
 WEB_PORT = env_int("WEB_PORT", 8765)
 WEB_MAX_JOBS = env_int("WEB_MAX_JOBS", 2)              # reports built in parallel (each ~5 min + LLM cost)
+# Set this to require a login (browser) / bearer token (CLI). Required before WEB_HOST may be anything
+# but localhost — an open UI on a VPS would let anyone run reports on your LLM key.
+WEB_PASSWORD = env_str("WEB_PASSWORD", "")
 HEARTBEAT_SECONDS = env_int("HEARTBEAT_SECONDS", 300)     # IMAP IDLE wait + scheduler heartbeat
 MENU_TTL_HOURS = env_int("MENU_TTL_HOURS", 24)            # how long a numbered "which one?" menu lasts
 RECONNECT_BACKOFF_S = env_int("RECONNECT_BACKOFF_S", 15)  # backoff after an IMAP session error

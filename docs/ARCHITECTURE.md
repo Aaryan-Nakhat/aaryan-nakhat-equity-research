@@ -89,6 +89,10 @@ clients follow over Server-Sent Events (`GET /api/jobs/{id}/events`). The CLI pr
 opens the database while the bot runs. Replies are routed to a job by conversation root; the web
 and CLI share one local sender, so a menu opened in one can be picked in the other. Saved reports
 are indexed in `data/outputs/history.jsonl` and served from `/files/…` (confined to the outputs folder).
+**Access:** localhost-only by default; with `WEB_PASSWORD` the browser signs in once (an HttpOnly,
+SameSite=Lax HMAC session cookie — which also blocks cross-site posts) and the CLI sends it as a bearer
+token; `/api/health` stays open (it reveals nothing but that a server is there). Without a password
+the server refuses any `WEB_HOST` other than localhost.
 
 ## Flow A — Pull: you ask for a stock
 

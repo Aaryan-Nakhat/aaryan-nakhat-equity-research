@@ -196,14 +196,25 @@ def _via_server(base: str, payload: dict,
                 printer: _Printer) -> tuple[str, str, list[tuple[int, str]]]:
     """Submit to the server and print its replies as they stream in (the server saves the files).
     Returns (root, subject, menu). Raises RuntimeError with the server's message on failure."""
+    import urllib.error
     import urllib.request
 
+    from equity_research import config
+
+    auth = {"Authorization": f"Bearer {config.WEB_PASSWORD}"} if config.WEB_PASSWORD else {}
     req = urllib.request.Request(base + "/api/jobs", data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        job = json.load(r)
+                                 headers={"Content-Type": "application/json", **auth}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            job = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise RuntimeError("The server needs a password — set the same WEB_PASSWORD in this "
+                               "machine's .env.") from e
+        raise RuntimeError(f"The server refused the command (HTTP {e.code}).") from e
     menu: list[tuple[int, str]] = []
-    with urllib.request.urlopen(f"{base}/api/jobs/{job['id']}/events", timeout=120) as stream:
+    events = urllib.request.Request(f"{base}/api/jobs/{job['id']}/events", headers=auth)
+    with urllib.request.urlopen(events, timeout=120) as stream:
         for raw in stream:
             line = raw.decode("utf-8").rstrip("\n").rstrip("\r")
             if line.startswith("event: end"):

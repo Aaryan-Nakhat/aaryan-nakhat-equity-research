@@ -17,16 +17,19 @@ background thread of the email bot (``start_background``), so one process owns t
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
-import threading
-
 import re
+import threading
+import urllib.parse
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -74,9 +77,71 @@ class JobRequest(BaseModel):
     subject: str | None = None
 
 
-def create_app(manager: JobManager | None = None) -> FastAPI:
-    """The FastAPI app. ``manager`` is injectable for tests; by default one is made on first use."""
+_COOKIE = "eqr_session"
+_OPEN_PATHS = ("/login", "/logout", "/api/health")     # reachable without signing in
+
+
+def is_loopback(host: str) -> bool:
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
+def session_token(password: str) -> str:
+    """The session cookie value: an HMAC of the password (changing the password signs everyone out)."""
+    return hmac.new(password.encode(), b"eqr-session-v1", hashlib.sha256).hexdigest()
+
+
+def _authorised(request: Request, password: str) -> bool:
+    cookie = request.cookies.get(_COOKIE, "")
+    auth = request.headers.get("authorization", "")
+    bearer = auth[7:] if auth.lower().startswith("bearer ") else ""
+    return (hmac.compare_digest(cookie, session_token(password))
+            or (bool(bearer) and hmac.compare_digest(bearer, password)))
+
+
+def _install_auth(app: FastAPI, password: str) -> None:
+    """With ``WEB_PASSWORD`` set: the browser signs in once (an HttpOnly, SameSite=Lax cookie — which
+    also blocks cross-site form/fetch posts), the CLI sends ``Authorization: Bearer <password>``."""
+
+    @app.middleware("http")
+    async def require_login(request: Request, call_next):
+        path = request.url.path
+        if path in _OPEN_PATHS or path.startswith("/static/") or _authorised(request, password):
+            return await call_next(request)
+        if path.startswith(("/api/", "/files/")):
+            return JSONResponse({"detail": "sign in required"}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page() -> HTMLResponse:
+        return HTMLResponse(_templates().get_template("login.html").render(error=None))
+
+    @app.post("/login")
+    async def login(request: Request):
+        form = urllib.parse.parse_qs((await request.body()).decode("utf-8", "replace"))
+        given = (form.get("password") or [""])[0]
+        if not hmac.compare_digest(given, password):
+            await asyncio.sleep(0.8)                      # slow down guessing
+            return HTMLResponse(_templates().get_template("login.html").render(
+                error="That password isn't right."), status_code=401)
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie(_COOKIE, session_token(password), httponly=True, samesite="lax",
+                        max_age=30 * 24 * 3600)
+        return resp
+
+    @app.get("/logout")
+    def logout() -> RedirectResponse:
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie(_COOKIE)
+        return resp
+
+
+def create_app(manager: JobManager | None = None, *, password: str | None = None) -> FastAPI:
+    """The FastAPI app. ``manager`` is injectable for tests; by default one is made on first use.
+    ``password`` (default ``WEB_PASSWORD``) turns on sign-in."""
     app = FastAPI(title="Equity Research Workbench", docs_url=None, redoc_url=None)
+    password = config.WEB_PASSWORD if password is None else password
+    if password:
+        _install_auth(app, password)
     state: dict[str, JobManager | None] = {"m": manager}
     lock = threading.Lock()
 
@@ -88,7 +153,12 @@ def create_app(manager: JobManager | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"ok": True, "service": SERVICE, "active": jobs().active()}
+        # open without sign-in (the CLI probes it) — so it reveals nothing beyond "a server is here"
+        return {"ok": True, "service": SERVICE, "auth": bool(password)}
+
+    @app.get("/api/status")
+    def status() -> dict:
+        return {"active": jobs().active()}
 
     @app.post("/api/jobs")
     def create(req: JobRequest) -> dict:
@@ -144,7 +214,8 @@ def create_app(manager: JobManager | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
         cmds = json.dumps(command_catalog(), ensure_ascii=False).replace("</", "<\\/")  # stay inside <script>
-        return HTMLResponse(_templates().get_template("index.html").render(commands_json=cmds))
+        return HTMLResponse(_templates().get_template("index.html").render(
+            commands_json=cmds, auth=bool(password)))
 
     app.mount("/static", StaticFiles(directory=_WEB_DIR / "static"), name="static")
 
@@ -166,9 +237,20 @@ def _server(host: str, port: int):
                                          access_log=False))
 
 
+def refuse_reason(host: str) -> str | None:
+    """Why the server won't start on ``host`` — anything beyond localhost needs ``WEB_PASSWORD`` (an
+    open UI on a VPS would let anyone run reports on your LLM key). None when it's fine."""
+    if is_loopback(host) or config.WEB_PASSWORD:
+        return None
+    return (f"refusing to serve on {host} without WEB_PASSWORD — set a password in .env, or keep "
+            "WEB_HOST=127.0.0.1")
+
+
 def serve(host: str | None = None, port: int | None = None) -> None:
     """Run the server in the foreground (``eqr serve`` without email configured)."""
     host, port = host or config.WEB_HOST, port or config.WEB_PORT
+    if (why := refuse_reason(host)):
+        raise SystemExit(why)
     log.info("web UI on http://%s:%d", host, port)
     _server(host, port).run()
 
@@ -177,6 +259,9 @@ def start_background(host: str | None = None, port: int | None = None) -> thread
     """Run the server in a daemon thread (hosted by the email bot). Returns None — and the bot
     carries on without a UI — if it can't start (e.g. the port is taken by another instance)."""
     host, port = host or config.WEB_HOST, port or config.WEB_PORT
+    if (why := refuse_reason(host)):
+        log.error("web UI: %s — continuing without it", why)
+        return None
     server = _server(host, port)
 
     def run() -> None:

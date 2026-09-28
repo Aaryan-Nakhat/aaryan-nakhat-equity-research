@@ -17,7 +17,10 @@ machine, from the public sources below when **you** run it.
   filings, holdings; no hosted API that re-serves exchange values to others).
 - **Do not run this as a hosted service** that scrapes exchanges on behalf of
   many users — that shifts the terms-of-use exposure onto you, at scale. This
-  tool is designed to be **self-hosted for one user's own research.**
+  tool is designed to be **self-hosted for one user's own research.** The web UI
+  is for you: it binds to localhost, and if you put it on your own server, set
+  `WEB_PASSWORD` (it refuses to listen beyond localhost without one) — don't open
+  it to the public.
 - **Throttle and cache** — the defaults are gentle; keep them that way. Don't
   hammer any endpoint.
 - **Attribute** the sources that ask for it (AMFI, PIB, government data).

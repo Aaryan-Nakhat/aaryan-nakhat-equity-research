@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Equity Research Workbench</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="login">
+  <form method="post" action="/login" class="login-card">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M7 22l6-7 5 4 7-9"/></svg>
+    <h1>Equity Research</h1>
+    <p class="muted">This workbench is password-protected.</p>
+    {% if error %}<p class="err">{{ error }}</p>{% endif %}
+    <label for="pw" class="sr-only">Password</label>
+    <input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password" autofocus required>
+    <button class="btn-run" type="submit">Sign in</button>
+  </form>
+</main>
+</body>
+</html>

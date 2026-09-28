@@ -336,7 +336,9 @@ uv run eqr bot                                            # the always-on email 
 **One process owns the database.** DuckDB allows one writing process at a time, so the server
 (`eqr serve`, or the email bot) runs everything — the web UI, the email loop and CLI jobs — and a
 `eqr` command sent while it's running is forwarded to it (`--direct` forces a local run). The web
-server binds to localhost only (`WEB_HOST` / `WEB_PORT`; `WEB_UI_ENABLED=false` turns it off).
+server binds to localhost only (`WEB_HOST` / `WEB_PORT`; `WEB_UI_ENABLED=false` turns it off). Set
+`WEB_PASSWORD` to require a sign-in — the server refuses to listen beyond localhost without one, so an
+instance on a VPS can't be used by strangers to run reports on your LLM key.
 
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.
