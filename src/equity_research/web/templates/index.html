@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Equity Research Workbench</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M7 22l6-7 5 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" aria-label="Navigation">
+    <a class="brand" href="/">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M7 22l6-7 5 4 7-9"/></svg>
+      <span><b>Equity Research</b><small>Indian stocks · NSE / BSE</small></span>
+    </a>
+    <button class="btn-new" id="newBtn" type="button">＋ New question</button>
+
+    <div class="nav-title">Quick runs</div>
+    <div class="quick" id="quick">
+      <button type="button" data-cmd="hotlist">🔥 Hotlist</button>
+      <button type="button" data-cmd="tailwind">💨 Tailwind</button>
+      <button type="button" data-cmd="concalls">🎙️ Concalls</button>
+      <button type="button" data-cmd="results">📈 Results</button>
+      <button type="button" data-cmd="sector: rotation">🧭 Sectors</button>
+      <button type="button" data-cmd="screen: value">🔎 Value</button>
+      <button type="button" data-cmd="help">📖 All commands</button>
+    </div>
+
+    <div class="nav-title">Saved reports</div>
+    <ul class="history" id="history"><li class="muted small">Nothing yet — run something.</li></ul>
+  </aside>
+
+  <main class="main">
+    <form class="ask" id="ask" autocomplete="off">
+      <div class="ask-box">
+        <svg class="ask-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" name="q" type="text" spellcheck="false" aria-label="Ask for a company or a command"
+               placeholder="A company (infosys, hdfc bank) or a command (screen: value, tailwind, sector: pharma)…">
+        <kbd class="kbd-slash" title="Press / to type">/</kbd>
+        <button class="btn-run" type="submit">Run</button>
+      </div>
+      <ul class="suggest" id="suggest" role="listbox" hidden></ul>
+    </form>
+
+    <section class="empty" id="empty">
+      <h1>What do you want to research?</h1>
+      <p class="lede">Type a company in plain words — one match goes straight to a full deep report
+        (fundamentals, forensics, valuation, ownership, a PDF); several give you a list to pick from.
+        Or run any screener, sector read or radar.</p>
+      <div class="examples">
+        <button type="button" data-cmd="infosys"><b>infosys</b><span>Full deep report</span></button>
+        <button type="button" data-cmd="hdfc"><b>hdfc</b><span>Several matches → pick one</span></button>
+        <button type="button" data-cmd="hotlist"><b>hotlist</b><span>Names lighting up across screens</span></button>
+        <button type="button" data-cmd="tailwind"><b>tailwind</b><span>Global shocks → Indian beneficiaries</span></button>
+        <button type="button" data-cmd="sector: defence"><b>sector: defence</b><span>Top-down sector read</span></button>
+        <button type="button" data-cmd="fund: parag parikh flexi cap"><b>fund: parag parikh</b><span>Mutual fund report</span></button>
+      </div>
+      <p class="fine">Deep reports take a few minutes — you can start another while you wait.
+        Everything is saved on this machine under <code>data/outputs/</code>.</p>
+    </section>
+
+    <section class="feed" id="feed" aria-live="polite"></section>
+  </main>
+</div>
+
+<template id="tpl-card">
+  <article class="card">
+    <header class="card-head">
+      <div class="card-title"><span class="card-q"></span><span class="card-sub"></span></div>
+      <div class="card-meta"><span class="pill"></span><span class="elapsed"></span></div>
+    </header>
+    <div class="card-body"></div>
+  </article>
+</template>
+
+<script>window.EQR_COMMANDS = {{ commands_json | safe }};</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

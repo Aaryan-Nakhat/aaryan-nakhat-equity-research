@@ -96,6 +96,22 @@ def test_pick_answers_the_conversations_menu(client):
     assert any("2 option(s)" in n for n in notes)            # answered in the same conversation
 
 
+def test_the_page_and_its_assets_are_served(client):
+    page = client.get("/")
+    assert page.status_code == 200 and 'id="q"' in page.text and "EQR_COMMANDS" in page.text
+    assert "</script>" not in page.text.split("EQR_COMMANDS", 1)[1].split("</script>", 1)[0]
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_command_catalogue_comes_from_the_bots_help(client):
+    cmds = client.get("/api/commands").json()
+    names = {c["cmd"] for c in cmds}
+    assert {"screen: value", "hotlist", "tailwind", "booking"} <= names
+    assert not any(c["cmd"].startswith("1") for c in cmds)          # "reply 1" isn't a command
+    assert all(c["desc"] and c["section"] for c in cmds)
+
+
 def test_bad_requests(client):
     assert client.post("/api/jobs", json={"text": "  "}).status_code == 400
     assert client.post("/api/jobs", json={"pick": 1}).status_code == 400

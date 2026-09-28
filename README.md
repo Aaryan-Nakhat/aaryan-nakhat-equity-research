@@ -17,10 +17,14 @@ engines** that surface stocks you didn't name. Bring your own LLM (any provider,
 
 Personal use. Not a hosted product.
 
-## 📖 What you can ask it (terminal or email)
+## 📖 What you can ask it (browser, terminal or email)
 
-Every command below works two ways, with the same flow:
+Every command below works three ways, with the same flow:
 
+- **In your browser** — `eqr serve` (or the running email bot) serves a local web UI at
+  **http://localhost:8765**: a command bar with autocomplete of every command, live progress while a
+  report builds (start another meanwhile), the report inline with its PDFs, numbered picks as
+  buttons, and a history of every saved report.
 - **From your terminal** with **`eqr`** — no email setup needed. Plain words are fine
   (`eqr hdfc bank`, `eqr fund: parag parikh flexi cap`); one match goes straight to the report,
   several give a **numbered list — answer with `eqr pick <n>`**. Reports print to the terminal and

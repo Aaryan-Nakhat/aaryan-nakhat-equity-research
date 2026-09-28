@@ -42,6 +42,7 @@ _WORDING: list[tuple[re.Pattern[str], str]] = [(re.compile(p, re.I), r) for p, r
     (r"in the previous email", "above"),
     (r"send a fresh email", "run a new command"),
     (r"send a company name in the subject line", "give a company name"),
+    (r"reply `(\d+)` after", r"pick \1 after"),
     (r"\b(?:email|reply) `", "run `"),
     (r"everything you can email me — put the command in the \*\*subject\*\* line",
      "everything you can ask — type a command"),

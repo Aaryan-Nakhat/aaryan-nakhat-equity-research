@@ -55,7 +55,8 @@ th, td { border: 1px solid #dbe5e0; padding: 6px 10px; text-align: right; white-
          color: #161616; vertical-align: top; }
 th { background: #0a5c34; text-align: center; font-weight: 700; color: #ffffff;
      border-color: #0a5c34; white-space: nowrap; }
-td:first-child, th:first-child { text-align: left; font-weight: 600; color: #0a3d24; }
+td:first-child { text-align: left; font-weight: 600; color: #0a3d24; }
+th:first-child { text-align: left; }   /* keeps the white header text (dark-on-dark before) */
 tr:nth-child(even) td { background: #eef4f1; }
 tr:hover td { background: #e2efe9; }
 code, pre { font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; }

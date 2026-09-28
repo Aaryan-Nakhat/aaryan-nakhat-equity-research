@@ -21,8 +21,13 @@ import json
 import logging
 import threading
 
+import re
+from functools import lru_cache
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from equity_research import config
@@ -32,6 +37,34 @@ from equity_research.web.jobs import JobManager, read_history
 log = logging.getLogger("equity-research.web")
 
 SERVICE = "eqr"
+_WEB_DIR = Path(__file__).resolve().parent
+
+
+@lru_cache(maxsize=1)
+def _templates():
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+    return Environment(loader=FileSystemLoader(_WEB_DIR / "templates"),
+                       autoescape=select_autoescape(["html"]))
+
+
+@lru_cache(maxsize=1)
+def command_catalog() -> list[dict]:
+    """Every command, from the same help table the bot emails (so the UI can't drift from the real
+    commands): ``[{"cmd", "also", "desc", "section"}]``. ``cmd`` is the first backticked form."""
+    from equity_research.bot.app import _HELP_SECTIONS
+
+    out = []
+    for title, _intro, rows in _HELP_SECTIONS:
+        for first, desc in rows:
+            if first.strip().lower().startswith("reply"):
+                continue                                   # a reply-a-number, not a command
+            forms = re.findall(r"`([^`]+)`", first)
+            if not forms:
+                continue
+            out.append({"cmd": forms[0], "also": forms[1:],
+                        "desc": re.sub(r"\*\*|__", "", desc).strip(), "section": title})
+    return out
 
 
 class JobRequest(BaseModel):
@@ -103,6 +136,17 @@ def create_app(manager: JobManager | None = None) -> FastAPI:
     @app.get("/api/history")
     def history(limit: int = 200) -> list[dict]:
         return read_history(limit)
+
+    @app.get("/api/commands")
+    def commands() -> list[dict]:
+        return command_catalog()
+
+    @app.get("/", response_class=HTMLResponse)
+    def index() -> HTMLResponse:
+        cmds = json.dumps(command_catalog(), ensure_ascii=False).replace("</", "<\\/")  # stay inside <script>
+        return HTMLResponse(_templates().get_template("index.html").render(commands_json=cmds))
+
+    app.mount("/static", StaticFiles(directory=_WEB_DIR / "static"), name="static")
 
     @app.get("/files/{path:path}")
     def files(path: str) -> FileResponse:
