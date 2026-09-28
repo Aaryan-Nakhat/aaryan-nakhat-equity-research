@@ -60,7 +60,7 @@ from equity_research.reports.synthesize import fund_thesis
 from equity_research.scrapers import ipo
 from equity_research.reports.resolve import resolve
 from equity_research.reports import fund_brief
-from equity_research import config
+from equity_research import config, schedule
 
 # Delivery schedule, toggles and cadence all come from equity_research.config (env-driven, defaults =
 # original behaviour). These module-level aliases keep the rest of the file terse. See config.py.
@@ -2399,23 +2399,20 @@ def _push_screen_digest(md_text: str) -> bool:
         log.error("no REPORT_TO / allowlist — cannot send screen digest")
         return False
     today = datetime.now(IST).date().isoformat()
-    emailer.send_report(f"📡 Screener movements — {today}", md_text, to=to,
+    emailer.send_report(f"📡 Screener movements — {today}{schedule.catch_up_note(schedule.open_slot())}", md_text, to=to,
                         html=emailer.body_html(md_text, "Screener movements"))
     log.info("screen digest sent to %s", to)
     return True
 
 
 def maybe_screen_digest() -> None:
-    """Fire the weekly trigger-based screener digest once per ISO week (Saturday ≥18:00 IST):
+    """Fire the weekly trigger-based screener digest once per week (Saturday ≥18:00 IST, or caught up within WEEKLY_CATCHUP_HOURS if missed):
     holdco / fundamental / investor deltas vs the last run. No email if nothing crossed a
     threshold. Fingerprints advance ONLY after a successful send, so a delivery failure
     re-surfaces the same deltas next time rather than eating them."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:      # Saturday evening, weekly
-        return
     if not screen_digest.due_this_week():
         return
-    log.info("weekly screen digest firing")
+    log.info("weekly screen digest firing%s", schedule.catch_up_note(schedule.open_slot()))
     con = connect()
     try:
         delta = screen_digest.build_screen_delta(con)
@@ -2433,16 +2430,13 @@ def maybe_screen_digest() -> None:
 
 
 def maybe_sector_rotation() -> None:
-    """Fire the weekly sector-rotation push once per ISO week (Saturday ≥18:00 IST): all sectors
+    """Fire the weekly sector-rotation push once per week (Saturday ≥18:00 IST, or caught up within WEEKLY_CATCHUP_HOURS if missed): all sectors
     ranked by relative strength vs Nifty + valuation vs their own history — leaders, laggards, and
     value-turning candidates. Reads the latest EOD, so a weekend fire is fine. The week-marker
     advances only after a successful send."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:      # Saturday evening, weekly
-        return
     if not scan.sector_rotation_due():
         return
-    log.info("weekly sector-rotation push firing")
+    log.info("weekly sector-rotation push firing%s", schedule.catch_up_note(schedule.open_slot()))
     con = connect()
     try:
         body = sector_brief.build_sector_rotation(con)
@@ -2459,24 +2453,21 @@ def maybe_sector_rotation() -> None:
         log.error("no REPORT_TO / allowlist — cannot send sector rotation")
         return
     today = datetime.now(IST).date().isoformat()
-    emailer.send_report(f"🔄 Sector rotation — {today}", body, to=to,
+    emailer.send_report(f"🔄 Sector rotation — {today}{schedule.catch_up_note(schedule.open_slot())}", body, to=to,
                         html=emailer.body_html(body, "Sector rotation"))
     scan.mark_sector_rotation()                             # advance week-marker ONLY after send
     log.info("weekly sector-rotation push sent to %s", to)
 
 
 def maybe_tailwind() -> None:
-    """Fire the weekly 💨 Tailwind push once per ISO week (Saturday ≥18:00 IST): scout global
+    """Fire the weekly 💨 Tailwind push once per week (Saturday ≥18:00 IST, or caught up within WEEKLY_CATCHUP_HOURS if missed): scout global
     policy/supply shocks → verified Indian beneficiaries. Runs the full 4-tier agent pipeline
     (news scout → analyst → grounded mapper → auditor), so it's slow (~2–4 min) but weekly. No
     email if nothing genuine surfaced; the week-marker advances only after a successful send (or a
     clean empty result), so a delivery failure re-surfaces it next heartbeat."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:          # Saturday evening, weekly
-        return
     if not scan.tailwind_due():
         return
-    log.info("weekly Tailwind push firing")
+    log.info("weekly Tailwind push firing%s", schedule.catch_up_note(schedule.open_slot()))
     con = connect()
     try:
         rep = tailwind_brief.build_tailwind_report(con)
@@ -2494,7 +2485,7 @@ def maybe_tailwind() -> None:
         log.error("no REPORT_TO / allowlist — cannot send Tailwind")
         return
     today = datetime.now(IST).date().isoformat()
-    emailer.send_report(f"💨 Tailwind — {today}", rep["markdown"], to=to,
+    emailer.send_report(f"💨 Tailwind — {today}{schedule.catch_up_note(schedule.open_slot())}", rep["markdown"], to=to,
                         html=emailer.body_html(rep["markdown"], "Tailwind"))
     scan.mark_tailwind()                                    # advance week-marker ONLY after send
     scan.add_tailwind_seen(rep.get("keys", []))            # so the mid-week urgent alert won't repeat these
@@ -2558,9 +2549,6 @@ def maybe_pickaxe() -> None:
     full build is ~10-15 min, so it runs in a BACKGROUND thread (never blocks the heartbeat); the
     month-marker advances only inside the worker after a successful send (or a clean empty result),
     so a delivery failure re-surfaces it next heartbeat. On-demand `pickaxe` runs any time."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:          # Saturday evening (monthly due-gate below)
-        return
     if not scan.pickaxe_due() or _pickaxe_lock.locked():
         return
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
@@ -2571,7 +2559,7 @@ def maybe_pickaxe() -> None:
     log.info("monthly Pickaxe push firing (background)")
     threading.Thread(
         target=_pickaxe_worker,
-        kwargs={"req": None, "to": to, "subject": f"⛏️ Pickaxe — {today}",
+        kwargs={"req": None, "to": to, "subject": f"⛏️ Pickaxe — {today}{schedule.catch_up_note(schedule.open_slot())}",
                 "use_cache": False, "weekly": True},
         name="pickaxe-monthly", daemon=True).start()
 
@@ -2608,12 +2596,9 @@ def maybe_concall_ingest() -> None:
 
 
 def maybe_call_radar() -> None:
-    """Fire the 🎙️ Concalls push once per ISO week (Saturday ≥18:00 IST): the week's most notable
+    """Fire the 🎙️ Concalls push once per week (Saturday ≥18:00 IST, or caught up within WEEKLY_CATCHUP_HOURS if missed): the week's most notable
     earnings calls (forward tone vs delivered numbers). Reads the pre-scored table, so it's cheap.
     On-demand `calls` runs any time."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:
-        return
     if not scan.call_radar_due():
         return
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
@@ -2635,7 +2620,7 @@ def maybe_call_radar() -> None:
     today = datetime.now(IST).date().isoformat()
     note = ("\n\n_(Weekly digest — email **`calls`** any time for the interactive radar where you can "
             "reply a number for a name's deep report.)_")
-    emailer.send_report(f"🎙️ Concalls — {today}", rep["markdown"] + note, to=to,
+    emailer.send_report(f"🎙️ Concalls — {today}{schedule.catch_up_note(schedule.open_slot())}", rep["markdown"] + note, to=to,
                         html=emailer.body_html(rep["markdown"] + note, "Concalls"))
     scan.mark_call_radar()                                       # advance week-marker ONLY after send
     log.info("weekly Concalls push sent (%d calls) to %s", len(rep["picks"]), to)
@@ -2672,11 +2657,8 @@ def maybe_results_ingest() -> None:
 
 
 def maybe_results() -> None:
-    """Fire the 📈 Results Radar push once per ISO week (Saturday ≥18:00 IST): the strongest
+    """Fire the 📈 Results Radar push once per week (Saturday ≥18:00 IST, or caught up within WEEKLY_CATCHUP_HOURS if missed): the strongest
     just-reported quarters. Reads the numbers (no LLM), so it's cheap. On-demand `results` any time."""
-    now = datetime.now(IST)
-    if now.weekday() != WEEKLY_PUSH_WEEKDAY or now.hour < SCAN_HOUR:
-        return
     if not scan.results_radar_due():
         return
     to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
@@ -2698,7 +2680,7 @@ def maybe_results() -> None:
     today = datetime.now(IST).date().isoformat()
     note = ("\n\n_(Weekly digest — email **`results`** any time for the live radar where you can reply a "
             "number for a name's deep report.)_")
-    emailer.send_report(f"📈 Results Radar — {today}", rep["markdown"] + note, to=to,
+    emailer.send_report(f"📈 Results Radar — {today}{schedule.catch_up_note(schedule.open_slot())}", rep["markdown"] + note, to=to,
                         html=emailer.body_html(rep["markdown"] + note, "Results Radar"))
     scan.mark_results_radar()                                  # advance week-marker ONLY after send
     log.info("weekly Results Radar push sent (%d names) to %s", len(rep["picks"]), to)

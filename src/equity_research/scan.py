@@ -26,7 +26,7 @@ from equity_research.ingest import (
     store_pledge,
 )
 from equity_research.scrapers import fbil, mcx, nse_api, nse_shp
-from equity_research import config, watchlist
+from equity_research import config, schedule, watchlist
 
 
 _IST = config.TZ
@@ -305,46 +305,51 @@ def _iso_week(dt: datetime) -> str:
     return f"{y}-W{w:02d}"
 
 
-def sector_rotation_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly sector-rotation push hasn't fired yet this week."""
+def weekly_due(key: str, con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """A weekly push keyed ``key`` may fire now: its slot is open (the push day, or within the
+    catch-up window after a slot the machine slept through) and it hasn't gone out for that slot."""
+    slot = schedule.open_slot()
+    if slot is None:
+        return False
     own = con is None
     con = con or connect()
     try:
-        return _meta(con, "last_sector_rotation_week") != _iso_week(datetime.now(_IST))
+        return not schedule.is_done(_meta(con, key), slot)
     finally:
         if own:
             con.close()
+
+
+def mark_weekly(key: str, con: duckdb.DuckDBPyConnection | None = None) -> None:
+    """Record that the push keyed ``key`` went out for the currently open slot."""
+    slot = schedule.open_slot() or schedule.weekly_slot()
+    own = con is None
+    con = con or connect()
+    try:
+        _set_meta(con, key, schedule.slot_key(slot))
+    finally:
+        if own:
+            con.close()
+
+
+def sector_rotation_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
+    """True while this week's slot is open (push day, or the catch-up window after a
+    missed one) and its push hasn't gone out yet."""
+    return weekly_due("last_sector_rotation_week", con)
 
 
 def mark_sector_rotation(con: duckdb.DuckDBPyConnection | None = None) -> None:
-    own = con is None
-    con = con or connect()
-    try:
-        _set_meta(con, "last_sector_rotation_week", _iso_week(datetime.now(_IST)))
-    finally:
-        if own:
-            con.close()
+    mark_weekly("last_sector_rotation_week", con)
 
 
 def tailwind_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly 💨 Tailwind global-shock push hasn't fired this week."""
-    own = con is None
-    con = con or connect()
-    try:
-        return _meta(con, "last_tailwind_week") != _iso_week(datetime.now(_IST))
-    finally:
-        if own:
-            con.close()
+    """True while this week's slot is open (push day, or the catch-up window after a
+    missed one) and its push hasn't gone out yet."""
+    return weekly_due("last_tailwind_week", con)
 
 
 def mark_tailwind(con: duckdb.DuckDBPyConnection | None = None) -> None:
-    own = con is None
-    con = con or connect()
-    try:
-        _set_meta(con, "last_tailwind_week", _iso_week(datetime.now(_IST)))
-    finally:
-        if own:
-            con.close()
+    mark_weekly("last_tailwind_week", con)
 
 
 def tailwind_urgent_slot_done(slot: str, con: duckdb.DuckDBPyConnection | None = None) -> bool:
@@ -506,24 +511,13 @@ def hotlist_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None
 
 
 def call_radar_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly 🎙️ Concalls push hasn't fired this week."""
-    own = con is None
-    con = con or connect()
-    try:
-        return _meta(con, "last_call_radar_week") != _iso_week(datetime.now(_IST))
-    finally:
-        if own:
-            con.close()
+    """True while this week's slot is open (push day, or the catch-up window after a
+    missed one) and its push hasn't gone out yet."""
+    return weekly_due("last_call_radar_week", con)
 
 
 def mark_call_radar(con: duckdb.DuckDBPyConnection | None = None) -> None:
-    own = con is None
-    con = con or connect()
-    try:
-        _set_meta(con, "last_call_radar_week", _iso_week(datetime.now(_IST)))
-    finally:
-        if own:
-            con.close()
+    mark_weekly("last_call_radar_week", con)
 
 
 _CONCALL_INGEST_MIN_GAP_MIN = config.CONCALL_INGEST_GAP_MIN
@@ -560,24 +554,13 @@ def mark_concall_ingest(con: duckdb.DuckDBPyConnection | None = None) -> None:
 
 
 def results_radar_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — the weekly 📈 Results Radar push hasn't fired this week."""
-    own = con is None
-    con = con or connect()
-    try:
-        return _meta(con, "last_results_radar_week") != _iso_week(datetime.now(_IST))
-    finally:
-        if own:
-            con.close()
+    """True while this week's slot is open (push day, or the catch-up window after a
+    missed one) and its push hasn't gone out yet."""
+    return weekly_due("last_results_radar_week", con)
 
 
 def mark_results_radar(con: duckdb.DuckDBPyConnection | None = None) -> None:
-    own = con is None
-    con = con or connect()
-    try:
-        _set_meta(con, "last_results_radar_week", _iso_week(datetime.now(_IST)))
-    finally:
-        if own:
-            con.close()
+    mark_weekly("last_results_radar_week", con)
 
 
 _RESULTS_INGEST_MIN_GAP_MIN = config.RESULTS_INGEST_GAP_MIN
@@ -674,22 +657,27 @@ def _year_month(dt: datetime) -> str:
 
 
 def pickaxe_due(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per calendar month — the monthly ⛏️ Pickaxe demand-theme push hasn't fired this
-    month yet (the heavy deep-enrichment build only warrants a monthly cadence + on-demand)."""
+    """True once per calendar month — the monthly ⛏️ Pickaxe demand-theme push hasn't fired for the
+    month of the open weekly slot (first Saturday, or its catch-up window; a missed first Saturday is
+    also picked up by the next one). The heavy deep-enrichment build only warrants a monthly cadence."""
+    slot = schedule.open_slot()
+    if slot is None:
+        return False
     own = con is None
     con = con or connect()
     try:
-        return _meta(con, "last_pickaxe_month") != _year_month(datetime.now(_IST))
+        return _meta(con, "last_pickaxe_month") != _year_month(slot)
     finally:
         if own:
             con.close()
 
 
 def mark_pickaxe(con: duckdb.DuckDBPyConnection | None = None) -> None:
+    slot = schedule.open_slot() or datetime.now(_IST)
     own = con is None
     con = con or connect()
     try:
-        _set_meta(con, "last_pickaxe_month", _year_month(datetime.now(_IST)))
+        _set_meta(con, "last_pickaxe_month", _year_month(slot))
     finally:
         if own:
             con.close()

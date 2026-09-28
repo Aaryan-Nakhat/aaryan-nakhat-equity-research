@@ -18,7 +18,7 @@ from datetime import date, datetime
 
 import duckdb
 
-from equity_research import config
+from equity_research import config, schedule
 from equity_research.analysis import holdco, investors, screener
 from equity_research.common.db import connect
 from equity_research.reports import md
@@ -136,7 +136,8 @@ def commit_screen_state(con: duckdb.DuckDBPyConnection, delta: dict) -> None:
     _set_meta(con, "screen_fp_holdco", json.dumps(fp.get("holdco", {})))
     _set_meta(con, "screen_fp_fundamental", json.dumps(fp.get("fundamental", {})))
     _set_meta(con, "screen_fp_investors", json.dumps(fp.get("investors", [])))
-    _set_meta(con, "last_screen_week", _iso_week(datetime.now(_IST)))
+    _set_meta(con, "last_screen_week",
+              schedule.slot_key(schedule.open_slot() or schedule.weekly_slot()))
 
 
 # ----------------- formatting -----------------
@@ -234,17 +235,16 @@ def format_screen_digest(delta: dict) -> str | None:
 
 
 # ----------------- cadence -----------------
-def _iso_week(dt: datetime) -> str:
-    y, w, _ = dt.isocalendar()
-    return f"{y}-W{w:02d}"
-
-
 def due_this_week(con: duckdb.DuckDBPyConnection | None = None) -> bool:
-    """True once per ISO week — hasn't run yet in the current week."""
+    """True while this week's slot is open (push day, or the catch-up window after a missed one)
+    and the digest hasn't gone out for it yet."""
+    slot = schedule.open_slot()
+    if slot is None:
+        return False
     own = con is None
     con = con or connect()
     try:
-        return _meta(con, "last_screen_week") != _iso_week(datetime.now(_IST))
+        return not schedule.is_done(_meta(con, "last_screen_week"), slot)
     finally:
         if own:
             con.close()

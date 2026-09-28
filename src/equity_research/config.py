@@ -115,6 +115,9 @@ PREMARKET_CUTOFF_HOUR = env_int("PUSH_PREMARKET_CUTOFF_HOUR", 12)
 MIDDAY = env_time("PUSH_MIDDAY", "12:30")                 # midday digest (h, m)
 MIDDAY_CUTOFF_HOUR = env_int("PUSH_MIDDAY_CUTOFF_HOUR", 14)
 WEEKLY_PUSH_WEEKDAY = env_weekday("WEEKLY_PUSH_DAY", "Sat")   # which weekday weekly pushes fire on
+# If the machine was asleep/off at the weekly slot, send the missed weekly pushes on the next wake
+# within this many hours of it (48 → by Monday 18:00). 0 = only on the push day itself.
+WEEKLY_CATCHUP_HOURS = env_int("WEEKLY_CATCHUP_HOURS", 48)
 HEARTBEAT_SECONDS = env_int("HEARTBEAT_SECONDS", 300)     # IMAP IDLE wait + scheduler heartbeat
 MENU_TTL_HOURS = env_int("MENU_TTL_HOURS", 24)            # how long a numbered "which one?" menu lasts
 RECONNECT_BACKOFF_S = env_int("RECONNECT_BACKOFF_S", 15)  # backoff after an IMAP session error

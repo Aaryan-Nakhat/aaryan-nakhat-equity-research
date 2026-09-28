@@ -14,7 +14,13 @@ weekends and NSE trading holidays** — `scan.market_open_today()` checks the eq
 
 The watchlist scan (this doc) is one of several scheduled pushes. All fire from the same IMAP-IDLE
 heartbeat, each gated once per its window via an `alert_state` `__meta__` marker; each degrades
-independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](REPORTS.md) /
+independently.
+
+**Missed weekly slot → catch-up.** The weekly pushes belong to a *slot* (Saturday 18:00 by default,
+`WEEKLY_PUSH_DAY` / `PUSH_EOD_HOUR`). If the machine was asleep or off then, each one is sent on the next
+wake within `WEEKLY_CATCHUP_HOURS` (default **48h** → by Monday 18:00), with the email subject tagged
+“(catch-up for Sat 26-Sep)”; after that it's stale and skipped. The sent-marker records the **slot's
+date** (`schedule.py`), so a Monday catch-up never counts as the coming Saturday's push. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](REPORTS.md) /
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 | Push | When (IST) | Gate | What |
@@ -22,9 +28,11 @@ independently. Fuller detail on the non-watchlist ones lives in [`REPORTS.md`](R
 | 🌅 **Pre-market** | first wake **08:30–12:00**, once/trading-day | `maybe_premarket` / `already_premarket_today` | GIFT Nifty implied Nifty open + overnight global + VIX/FII + headlines. **Catch-up by design** — the laptop is asleep at 08:30, so it fires on first wake (usually the ~09:25 login) and self-relabels to a "gap so far" snapshot past the 09:15 open. |
 | 🔔 **Midday** | **12:30–14:00**, once/trading-day | `maybe_intraday` | Same-day live digest (below). |
 | 📊 **Full digest** | first wake **≥18:00**, once/trading-day | `maybe_scan` | The watchlist scan (this doc). |
-| 📡 **Screener movements** | **Sat ≥18:00**, once/ISO-week | `maybe_screen_digest` | Trigger-based deltas across the screens (nothing crossed → no email). |
-| 🔄 **Sector rotation** | **Sat ≥18:00**, once/ISO-week | `maybe_sector_rotation` | All sectors ranked — leaders/laggards/value-turning. |
-| 💨 **Tailwind** | **Sat ≥18:00** weekly + **Mon–Fri** urgent break-ins at **08:30 / 12:30 / 18:00** | `maybe_tailwind` / `maybe_tailwind_urgent` | Global supply-shock → verified Indian beneficiaries; the urgent pass sends only when a fresh shock lands (high-severity, or carrying a small/mid-cap name). |
+| 📡 **Screener movements** | **Sat ≥18:00**, once/week (catch-up ≤48h) | `maybe_screen_digest` | Trigger-based deltas across the screens (nothing crossed → no email). |
+| 🔄 **Sector rotation** | **Sat ≥18:00**, once/week (catch-up ≤48h) | `maybe_sector_rotation` | All sectors ranked — leaders/laggards/value-turning. |
+| 💨 **Tailwind** | **Sat ≥18:00** weekly (catch-up ≤48h) + **Mon–Fri** urgent break-ins at **08:30 / 12:30 / 18:00** | `maybe_tailwind` / `maybe_tailwind_urgent` | Global supply-shock → verified Indian beneficiaries; the urgent pass sends only when a fresh shock lands (high-severity, or carrying a small/mid-cap name). |
+| 🎙️ **Concalls** / 📈 **Results Radar** | **Sat ≥18:00**, once/week (catch-up ≤48h) | `maybe_call_radar` / `maybe_results` | The week's most notable earnings calls / strongest just-reported quarters. |
+| ⛏️ **Pickaxe** | first **Sat ≥18:00** of the month (or its catch-up) | `maybe_pickaxe` | Surging demand → indirect beneficiaries (background build). |
 | 🧹 **Mailbox housekeeping** | every heartbeat (≤ every 15 min) | `maybe_mail_housekeeping` | Moves processed **workbench** mail (requests handled + reports sent, matched by the `X-EquityBot` header) on the bot's own Gmail to Trash **~30 min after sending**, scoped to the client address so personal mail is untouched. `mail_cleanup.sweep_server_mailbox`. |
 
 ## Pieces

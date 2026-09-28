@@ -332,7 +332,7 @@ identically with zero configuration; modules `from equity_research import config
 overridable):
 
 - **Tier 1 (headline).** `TIMEZONE`; the delivery schedule (`PUSH_PREMARKET`, `PUSH_MIDDAY`,
-  `PUSH_EOD_HOUR`, `WEEKLY_PUSH_DAY`, `TAILWIND_URGENT_SLOTS` — empty disables urgent alerts,
+  `PUSH_EOD_HOUR`, `WEEKLY_PUSH_DAY`, `WEEKLY_CATCHUP_HOURS` (missed-slot catch-up, `schedule.py`), `TAILWIND_URGENT_SLOTS` — empty disables urgent alerts,
   `HEARTBEAT_SECONDS`, `MENU_TTL_HOURS`); per-push **feature toggles** (`ENABLE_PREMARKET … ENABLE_
   MAIL_HOUSEKEEPING`, all default on, gated at the heartbeat call sites so on-demand email commands
   still work when a push is off); cache TTLs; render/screen timeouts; market-cap bands
