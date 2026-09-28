@@ -6,15 +6,18 @@ Default DB lives under ``data/processed/`` (gitignored).
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
-# data/processed/equity.duckdb at the repo root (this file is src/equity_research/common/).
+# data/processed/equity.duckdb at the repo root (this file is src/equity_research/common/),
+# unless the EQR_DB_PATH environment variable points elsewhere (a Docker volume, a test).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_DB_PATH = _REPO_ROOT / "data" / "processed" / "equity.duckdb"
+DEFAULT_DB_PATH = (Path(os.environ["EQR_DB_PATH"]) if os.environ.get("EQR_DB_PATH")
+                   else _REPO_ROOT / "data" / "processed" / "equity.duckdb")
 
 # One CREATE per landing table. Column order here is the contract ingest writes to.
 _SCHEMA = [

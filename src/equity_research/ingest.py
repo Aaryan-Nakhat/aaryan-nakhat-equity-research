@@ -82,7 +82,8 @@ def backfill_index_history(con: duckdb.DuckDBPyConnection, *, years: float = 5.0
     (that's how holidays are detected — no calendar needed). Idempotent: with
     ``only_missing`` it skips dates already stored, so re-runs are cheap. Returns a
     small stats dict."""
-    start = (pd.Timestamp.today().normalize() - pd.DateOffset(years=years)).date()
+    # days, not DateOffset(years=…): that rejects fractional years (1.1 → ValueError)
+    start = (pd.Timestamp.today().normalize() - pd.Timedelta(days=round(years * 365.25))).date()
     end = date.today()
     have: set[date] = set()
     if only_missing:

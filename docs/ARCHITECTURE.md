@@ -94,6 +94,18 @@ SameSite=Lax HMAC session cookie — which also blocks cross-site posts) and the
 token; `/api/health` stays open (it reveals nothing but that a server is there). Without a password
 the server refuses any `WEB_HOST` other than localhost.
 
+**First run.** `eqr doctor` (`doctor.py`) reports what works (.env, LLM, email, NSE opt-in, PDF
+renderer, data, server) with a one-line fix for each gap. `eqr demo` (`demo.py`) fetches a starter set
+on the user's own machine — company list, Nifty-500 sectors, ~13 months of prices + index closes from
+NSE's plain-HTTP archives, then financials + ownership for 12 companies chosen to show every report
+shape (industrial, bank, life insurer, AMC, NBFC — and all three HDFC names for the pick-list demo) via
+the NSE tier after a one-time consent — ≈12 min, idempotent, then it starts the web UI. With no LLM
+configured the deep report still builds every number (skipping the filing downloads only the AI
+reads) and AI-only commands say they need one. **Docker:** the `Dockerfile` runs `eqr serve` with data
+in `/data` (`EQR_DB_PATH`, `EQR_OUTPUT_DIR`); `docker-compose.yml` publishes to 127.0.0.1 only
+(`EQR_IN_CONTAINER` lets the server bind 0.0.0.0 inside the container, with a warning); on a VPS,
+`WEB_PASSWORD` is required.
+
 ## Flow A — Pull: you ask for a stock
 
 ```

@@ -8,9 +8,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from equity_research.common.db import DEFAULT_DB_PATH
+from equity_research.common.db import _REPO_ROOT
 
-REPO_ROOT = DEFAULT_DB_PATH.parents[2]          # <repo>/data/processed/equity.duckdb → <repo>
+REPO_ROOT = _REPO_ROOT
 DEFAULT_ENV_PATH = REPO_ROOT / ".env"
 
 

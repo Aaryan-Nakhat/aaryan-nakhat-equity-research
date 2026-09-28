@@ -7,6 +7,7 @@
     eqr help                       # the full command menu
     eqr serve                      # the web UI at http://localhost:8765 (+ the email bot if configured)
     eqr doctor                     # what works on this machine, and how to fix what doesn't
+    eqr demo                       # first run: fetch a starter set (~12 min), then open the web UI
     eqr bot                        # run the always-on email bot (it also serves the web UI)
 
 Reports print to the terminal and are saved (Markdown + HTML + PDF) under ``data/outputs/<date>/``
@@ -253,6 +254,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args[0] == "serve":
         return _serve()
+    if args[0] == "demo":
+        from equity_research import demo
+        return demo.run(args[1:])
     if args[0] == "doctor":
         from equity_research import doctor
         return doctor.run()

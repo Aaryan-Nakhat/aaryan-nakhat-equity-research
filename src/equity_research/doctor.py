@@ -85,7 +85,7 @@ def _data() -> Check:
     from equity_research.common.db import DEFAULT_DB_PATH, connect
 
     if not DEFAULT_DB_PATH.exists():
-        return Check("warn", "Data", "no database yet", "run `eqr demo` (≈10 min) to fetch a starter set")
+        return Check("warn", "Data", "no database yet", "run `eqr demo` (≈12 min) to fetch a starter set")
     try:
         con = connect()
     except duckdb.IOException:

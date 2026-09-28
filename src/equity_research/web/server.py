@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import re
 import threading
 import urllib.parse
@@ -241,6 +242,13 @@ def refuse_reason(host: str) -> str | None:
     """Why the server won't start on ``host`` — anything beyond localhost needs ``WEB_PASSWORD`` (an
     open UI on a VPS would let anyone run reports on your LLM key). None when it's fine."""
     if is_loopback(host) or config.WEB_PASSWORD:
+        return None
+    if os.environ.get("EQR_IN_CONTAINER"):
+        # Inside Docker the server has to listen on all interfaces for port publishing to work;
+        # exposure is decided by the host's port mapping (the shipped compose file publishes to
+        # 127.0.0.1 only). Allowed — but said loudly, because publishing it wider needs a password.
+        log.warning("web UI listening on %s inside a container with no WEB_PASSWORD — keep the port "
+                    "published to 127.0.0.1 only, or set WEB_PASSWORD before exposing it", host)
         return None
     return (f"refusing to serve on {host} without WEB_PASSWORD — set a password in .env, or keep "
             "WEB_HOST=127.0.0.1")

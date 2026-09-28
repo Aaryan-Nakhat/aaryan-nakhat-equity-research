@@ -1,13 +1,13 @@
 # 📈 aaryan-nakhat-equity-research
 
-> A self-hosted equity-research workbench for **Indian stocks (NSE / BSE)** — you drive the whole
-> thing by **emailing a command**, and an always-on bot emails back decision-grade reports.
+> A self-hosted equity-research workbench for **Indian stocks (NSE / BSE)** — ask in plain words in a
+> **local web UI**, your **terminal** or by **email**, and get back decision-grade reports.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Data](https://img.shields.io/badge/data-primary%20%2F%20official%20only-2E7D32)
 ![LLM](https://img.shields.io/badge/LLM-provider--agnostic%20(BYO)-6E56CF)
 ![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
-![Delivery](https://img.shields.io/badge/delivery-email%20bot-0088CC)
+![Delivery](https://img.shields.io/badge/UI-web%20·%20CLI%20·%20email-0088CC)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-yes-informational)
 
 Pulls **primary, official, government-backed data only** (exchanges, SEBI, RBI, MOSPI, company
@@ -16,6 +16,27 @@ technical + forensic analysis**, and turns it into readable reports + a set of *
 engines** that surface stocks you didn't name. Bring your own LLM (any provider, via `.env`).
 
 Personal use. Not a hosted product.
+
+## 🚀 Quickstart
+
+```bash
+git clone https://github.com/Aaryan-Nakhat/aaryan-nakhat-equity-research && cd aaryan-nakhat-equity-research
+uv sync && uv run playwright install chromium     # Python 3.12 via uv; Chromium renders the PDFs
+cp .env.example .env                              # optional: add an LLM key for the AI write-ups
+uv run eqr demo                                   # ≈12 min, one time: fetch a starter set, open the web UI
+```
+
+`eqr demo` downloads ~13 months of prices and the financials of a dozen well-known companies **on your
+machine** (it asks once before using NSE's site — see [Data sources & terms](#data-sources--terms)), then
+opens **http://localhost:8765**. `eqr doctor` shows what's working and the one-line fix for what isn't.
+No LLM key yet? Every report still builds with all its numbers; the AI write-up is what the key adds.
+
+**Docker** instead: `docker compose up -d` (web UI on http://localhost:8765), then once
+`docker compose run --rm eqr eqr demo --yes --no-serve` (≈12 min) for the starter set. Data lives in a volume.
+
+**On a VPS** (Openship, Coolify, Railway, a plain server): deploy the `Dockerfile`, mount a volume at
+`/data`, and **set `WEB_PASSWORD`** — the server refuses to listen publicly without one, so strangers
+can't run reports on your LLM key.
 
 ## 📖 What you can ask it (browser, terminal or email)
 
