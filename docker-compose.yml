@@ -1,12 +1,10 @@
-# docker compose up -d   →  http://localhost:8765
+# cp .env.example .env && docker compose up -d   →  http://localhost:8765
 # First run:  docker compose run --rm eqr eqr demo --yes --no-serve   (≈12 min starter set)
 services:
   eqr:
     build: .
     image: equity-research:latest
-    env_file:
-      - path: .env
-        required: false          # runs without one (web UI, prices, technicals); add keys as you go
+    env_file: .env               # create it first: cp .env.example .env (fine to leave mostly empty)
     ports:
       # Your machine only. To reach it from elsewhere (a VPS), set WEB_PASSWORD in .env first,
       # then publish "8765:8765" (or put it behind your reverse proxy / Openship / Coolify).

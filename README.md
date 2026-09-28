@@ -31,7 +31,7 @@ machine** (it asks once before using NSE's site — see [Data sources & terms](#
 opens **http://localhost:8765**. `eqr doctor` shows what's working and the one-line fix for what isn't.
 No LLM key yet? Every report still builds with all its numbers; the AI write-up is what the key adds.
 
-**Docker** instead: `docker compose up -d` (web UI on http://localhost:8765), then once
+**Docker** instead: `cp .env.example .env && docker compose up -d` (web UI on http://localhost:8765), then once
 `docker compose run --rm eqr eqr demo --yes --no-serve` (≈12 min) for the starter set. Data lives in a volume.
 
 **On a VPS** (Openship, Coolify, Railway, a plain server): deploy the `Dockerfile`, mount a volume at
