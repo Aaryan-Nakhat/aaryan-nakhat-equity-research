@@ -56,8 +56,32 @@ def _prepare(df: pd.DataFrame, colmap: dict[str, str], d: date,
     return out
 
 
+class NoSession(ScrapeError):
+    """No trading session on the requested date (NSE answered a holiday URL with another day's file).
+    A ``ScrapeError``, so every caller's "no file → try the previous day" handling still applies."""
+
+    def __init__(self, d: date, served: date) -> None:
+        self.url, self.status = None, None
+        RuntimeError.__init__(self, f"no session on {d}: NSE served the {served} bhavcopy")
+
+
+def _file_date(df: pd.DataFrame) -> date | None:
+    """The session date a bhavcopy is actually for (its ``DATE1`` column, e.g. '11-Sep-2026')."""
+    if "DATE1" not in df.columns or df.empty:
+        return None
+    try:
+        return pd.to_datetime(str(df["DATE1"].iloc[0]).strip(), format="%d-%b-%Y").date()
+    except (ValueError, TypeError):
+        return None
+
+
 def ingest_bhavcopy(d: date, con: duckdb.DuckDBPyConnection) -> int:
     df = nse_archives.fetch_bhavcopy(d)
+    # On a market holiday NSE serves the *previous* session's file under the holiday's URL. Stored
+    # as-is it becomes a phantom duplicate candle dated on the holiday — so trust the file's own date.
+    file_day = _file_date(df)
+    if file_day is not None and file_day != d:
+        raise NoSession(d, file_day)
     num = ["prev_close", "open", "high", "low", "last", "close", "avg_price",
            "ttl_trd_qnty", "turnover_lacs", "no_of_trades", "deliv_qty", "deliv_per"]
     out = _prepare(df, _EOD_MAP, d, num)

@@ -55,6 +55,37 @@ def fetch_bhavcopy(d: date) -> pd.DataFrame:
 
 
 _SYMBOL_CHANGES = "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
+_ETF_LIST = "https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv"
+
+
+_EQUITY_LISTS = ("https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",
+                 "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv")
+
+
+def fetch_face_values() -> dict[str, float]:
+    """``{symbol: face value (₹)}`` for every listed main-board and SME equity (NSE's own lists,
+    plain HTTP). A list that can't be fetched is skipped."""
+    out: dict[str, float] = {}
+    for url in _EQUITY_LISTS:
+        try:
+            df = _read_csv(fetch_bytes(url))
+        except Exception:  # noqa: BLE001 — the other list still helps
+            continue
+        cols = {c.strip().upper().replace("_", " "): c for c in df.columns}
+        sym, fv = cols.get("SYMBOL"), cols.get("FACE VALUE")
+        if not sym or not fv:
+            continue
+        for s, v in zip(df[sym], pd.to_numeric(df[fv], errors="coerce")):
+            if isinstance(s, str) and v == v and v > 0:
+                out[s.strip().upper()] = float(v)
+    return out
+
+
+def fetch_etf_symbols() -> set[str]:
+    """Symbols of every ETF listed on NSE (the exchange's own ETF list, plain HTTP)."""
+    df = _read_csv(fetch_bytes(_ETF_LIST))
+    col = next((c for c in df.columns if c.lower() == "symbol"), None)
+    return {str(v).strip().upper() for v in df[col].dropna()} if col else set()
 
 
 def fetch_symbol_changes() -> dict[str, str]:

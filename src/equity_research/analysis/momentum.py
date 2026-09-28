@@ -61,7 +61,7 @@ def scan(con: duckdb.DuckDBPyConnection, *, limit: int = 20,
             SELECT symbol, trade_date, close, high,
                    ttl_trd_qnty AS vol, deliv_per, turnover_lacs,
                    row_number() OVER (PARTITION BY symbol ORDER BY trade_date DESC) AS rn
-            FROM equity_eod
+            FROM equity_eod_adj          -- split/bonus-adjusted: 52-week highs and volumes comparable
             WHERE series IN ('EQ', 'BE', 'BZ')
               AND symbol IN (SELECT symbol FROM equity_master)   -- real listed equities (no ETFs/bonds)
         ),

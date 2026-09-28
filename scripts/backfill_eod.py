@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 
+from equity_research.analysis import corporate_actions
 from equity_research.common.db import connect
 from equity_research.ingest import ingest_eod_range
 
@@ -23,6 +24,7 @@ def main(argv: list[str]) -> int:
     con = connect()
     try:
         summary = ingest_eod_range(start, end, con)
+        summary["price_adjustments"] = corporate_actions.refresh(con, since=start)
         n = con.execute("SELECT COUNT(DISTINCT trade_date) FROM equity_eod").fetchone()[0]
     finally:
         con.close()

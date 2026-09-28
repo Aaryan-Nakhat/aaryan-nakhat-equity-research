@@ -1,8 +1,46 @@
 # Technical analysis (Phase 3)
 
-Indicators computed from the daily EOD series in `equity_eod` (NSE bhavcopy,
-incl. delivery %). All in `analysis/technical.py`; pure functions over the price
-history.
+Indicators computed from the daily EOD series (NSE bhavcopy, incl. delivery %), read through
+the **`equity_eod_adj` view — adjusted for splits, bonuses, consolidations, rights issues and
+demergers** (see *Corporate-action adjustment* below). All in `analysis/technical.py`; pure
+functions over the price history.
+
+## Corporate-action adjustment (`analysis/corporate_actions.py`)
+
+NSE's bhavcopy is **unadjusted**: on Adani Power's 1:5 split (ex 22-Sep-2025) the close simply
+went ₹709 → ₹170. Uncorrected, that bends every moving average, fakes a 52-week high, wrecks
+3/6/12-month returns and beta, and mis-places smart-money cost zones. So each action gets a
+**price factor** in `price_adjustments`, and the `equity_eod_adj` view scales every earlier price by
+the product of later factors (volumes by the inverse; `prev_close` by the factor of the session it
+belongs to). Actions dated after the last session on file aren't applied yet.
+
+| Action | Factor (new ÷ old price) | Source |
+|---|---|---|
+| Split F1 → F2 | F2 / F1 | NSE corporate-action subject |
+| Bonus a:b (a new per b held) | b / (a + b) | NSE subject |
+| Consolidation F1 → F2 | F2 / F1 (> 1) | NSE subject |
+| Rights a:b at face value + premium | theoretical ex-rights price ÷ previous close = (b·P + a·issue) / ((a+b)·P); no adjustment when the issue price ≥ market | NSE subject + face value (NSE equity lists, else filings) + the ex-date's previous close |
+| Demerger | the ex-date's **discovered open** (NSE's special pre-open session) ÷ previous close | NSE record + bhavcopy |
+| ETF unit split / any split-shaped gap with no NSE record | the standard ratio the opening gap matches (1/2, 1/3, 1/5, 1/10 …) | bhavcopy (`prev_close` in the same file) |
+
+Rules that keep it honest: NSE's record wins where it exists (and is filed under a company's
+former symbols too, but only where that name traded at the ex-date). With NSE's record available,
+a **stock** gap it doesn't explain is recorded as `unexplained` and **not** applied — never guessed;
+with NSE access off (the default), a gap that unambiguously matches a standard ratio is applied
+and labelled "could also be a demerger". Listing days (the previous close is the issue price) and
+rights entitlements (`…-RE`, which collapse at expiry) are excluded. Validated on the live store:
+the rights formula lands within ~5% of the actual opening prices (Calsoft 0.578 vs 0.596,
+Captrust 0.656 vs 0.689, Genesys 0.682 vs 0.654).
+
+Runs after each daily EOD ingest (`scan.refresh_eod` → `maybe_refresh`, the last ~10 days; a full
+history pass the first time) and in `eqr demo`. **Before 2025 the store holds only fiscal-year-end
+sessions**, so demergers/rights from those years can't be sized from the bhavcopy and stay recorded
+but unapplied; splits and bonuses (exact ratios) apply regardless.
+
+**Holiday files.** On a market holiday NSE serves the *previous* session's bhavcopy under the
+holiday's URL; stored as-is it became a duplicate candle dated on the holiday (14 such dates since
+2025). `ingest_bhavcopy` now checks the file's own `DATE1` and treats a mismatch as "no session";
+`repair_phantom_sessions` removed the ones already stored.
 
 `load_prices` reads the **`EQ` + trade-for-trade (`BE`/`BZ`) series** (one row per date,
 `EQ` preferred) — small / surveillance names trade in `BE`, so an `EQ`-only read left them

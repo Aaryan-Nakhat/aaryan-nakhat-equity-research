@@ -186,6 +186,23 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _wait_until_serving(srv, port: int, timeout: float = 30.0) -> None:
+    """Block until the in-process server answers — generous, because a loaded test run can take
+    well over the few seconds an idle machine needs to import and bind."""
+    import urllib.request
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if srv.started:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2):
+                    return
+            except OSError:
+                pass
+        time.sleep(0.05)
+    pytest.fail(f"test server on :{port} didn't come up within {timeout:.0f}s")
+
+
 def test_cli_forwards_to_a_running_server(env, monkeypatch, capsys):
     """The real thing: a server in this process on a free port, and `eqr help` sent to it."""
     from equity_research import cli, config
@@ -201,10 +218,7 @@ def test_cli_forwards_to_a_running_server(env, monkeypatch, capsys):
     t = threading.Thread(target=srv.run, daemon=True)
     t.start()
     try:
-        for _ in range(100):
-            if srv.started:
-                break
-            time.sleep(0.05)
+        _wait_until_serving(srv, port)
         assert cli._server_base() == f"http://127.0.0.1:{port}"
         assert cli.main(["help", "--quiet"]) == 0
         out = capsys.readouterr().out
@@ -229,10 +243,7 @@ def test_cli_with_a_password_protected_server(env, monkeypatch, capsys):
     t = threading.Thread(target=srv.run, daemon=True)
     t.start()
     try:
-        for _ in range(100):
-            if srv.started:
-                break
-            time.sleep(0.05)
+        _wait_until_serving(srv, port)
         assert cli.main(["help", "--quiet"]) == 0                  # same password → works
         assert "Saved:" in capsys.readouterr().out
         monkeypatch.setattr(config, "WEB_PASSWORD", "")            # this machine lacks it

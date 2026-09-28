@@ -16,7 +16,8 @@ from datetime import date, datetime, timedelta
 
 import duckdb
 
-from equity_research.analysis import alerts, fundamentals, positioning, technical, valuation
+from equity_research.analysis import (alerts, corporate_actions, fundamentals, positioning, technical,
+                                     valuation)
 from equity_research.common.db import connect
 from equity_research.common.http import ScrapeError, fetch_bytes
 from equity_research.ingest import (
@@ -727,7 +728,8 @@ def pickaxe_cache_put(report: dict, con: duckdb.DuckDBPyConnection | None = None
 
 
 def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | None:
-    """Ingest the latest available trading day's full EOD set (idempotent)."""
+    """Ingest the latest available trading day's full EOD set (idempotent), then bring the
+    split / bonus / rights / demerger price adjustments up to date for it."""
     today = date.today()
     for i in range(lookback + 1):
         d = today - timedelta(days=i)
@@ -735,9 +737,13 @@ def refresh_eod(con: duckdb.DuckDBPyConnection, lookback: int = 7) -> date | Non
             continue
         try:
             ingest_eod(d, con)
-            return d
         except ScrapeError:
             continue
+        try:
+            corporate_actions.maybe_refresh(con)
+        except Exception:  # noqa: BLE001 — never lose the day's prices over the adjustments
+            log.exception("price-adjustment refresh failed — prices stored unadjusted for now")
+        return d
     return None
 
 
@@ -1019,13 +1025,13 @@ def watchlist_movers(con: duckdb.DuckDBPyConnection) -> list[dict]:
     out: list[dict] = []
     for sym in watchlist.symbols(con):
         row = con.execute(
-            "SELECT trade_date, close, prev_close, deliv_per FROM equity_eod "
+            "SELECT trade_date, close, prev_close, deliv_per FROM equity_eod_adj "
             "WHERE symbol = ? AND series = 'EQ' ORDER BY trade_date DESC LIMIT 1", [sym]).fetchone()
         if not row or row[1] is None:
             continue
         d, close, prev, deliv = row
         hl = con.execute(
-            "SELECT max(high), min(low) FROM equity_eod WHERE symbol = ? AND series = 'EQ' "
+            "SELECT max(high), min(low) FROM equity_eod_adj WHERE symbol = ? AND series = 'EQ' "
             "AND trade_date >= ?", [sym, d - timedelta(days=365)]).fetchone()
         hi, lo = (hl or (None, None))
         chg = (close / prev - 1) * 100 if prev else None

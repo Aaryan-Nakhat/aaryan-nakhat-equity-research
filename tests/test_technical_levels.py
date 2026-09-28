@@ -12,21 +12,21 @@ import pandas as pd
 import pytest
 
 from equity_research.analysis import technical as T
+from equity_research.common.db import ensure_schema
 
 
 def _make_con(closes: list[float]) -> duckdb.DuckDBPyConnection:
-    """In-memory DuckDB with an ``equity_eod`` table holding a daily series for 'TEST'."""
+    """In-memory DuckDB (the real schema) holding a daily series for 'TEST' in ``equity_eod``."""
     con = duckdb.connect(":memory:")
-    con.execute(
-        "CREATE TABLE equity_eod (symbol VARCHAR, series VARCHAR, trade_date DATE, "
-        "open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, ttl_trd_qnty DOUBLE, deliv_per DOUBLE)")
+    ensure_schema(con)
     start = np.datetime64("2024-01-01")
     rows = []
     for i, c in enumerate(closes):
         d = str(start + np.timedelta64(i, "D"))
-        rows.append(("TEST", "EQ", d, c, c * 1.01, c * 0.99, c, 100000.0, 55.0))
+        rows.append(("TEST", "EQ", d, c, c * 1.01, c * 0.99, c, 100000, 55.0))
     con.executemany(
-        "INSERT INTO equity_eod VALUES (?,?,?,?,?,?,?,?,?)", rows)
+        "INSERT INTO equity_eod (symbol, series, trade_date, open, high, low, close, ttl_trd_qnty, "
+        "deliv_per) VALUES (?,?,?,?,?,?,?,?,?)", rows)
     return con
 
 

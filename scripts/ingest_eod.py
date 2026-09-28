@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timedelta
 
+from equity_research.analysis import corporate_actions
 from equity_research.common.db import DEFAULT_DB_PATH, connect
 from equity_research.ingest import ingest_eod
 
@@ -31,6 +32,7 @@ def main(argv: list[str]) -> int:
     con = connect()
     try:
         counts = ingest_eod(d, con)
+        corporate_actions.maybe_refresh(con)
     finally:
         con.close()
     for table, n in counts.items():

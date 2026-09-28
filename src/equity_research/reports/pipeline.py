@@ -37,16 +37,21 @@ log = logging.getLogger("equity-research")
 def _detect_share_action(con: duckdb.DuckDBPyConnection, symbol: str,
                          consolidated: bool) -> dict | None:
     """Best-effort: has ``symbol`` done a **bonus/split with an ex-date after the FY-end
-    of the share count** used for market cap? If so the P/E, P/B, market cap and DCF are
-    computed on the pre-action count and read slightly off — the deep report flags it (but
-    still shows the numbers as-is). Returns the action dict or ``None``. Never raises — a
-    live-feed hiccup must not break the report."""
+    of the share count** that ``price_adjustments`` hasn't recorded yet (e.g. it went ex today,
+    before the next refresh)? Then the P/E, P/B, market cap and DCF are on the pre-action count
+    and the deep report flags it. Actions already on record are applied by
+    ``valuation.snapshot`` and need no flag. Returns the action dict or ``None``. Never raises
+    — a live-feed hiccup must not break the report."""
     try:
-        fy_end = valuation.snapshot(con, symbol, consolidated).get("shares_fy_end")
+        snap = valuation.snapshot(con, symbol, consolidated)
+        fy_end = snap.get("shares_fy_end")
         if not fy_end:
             return None
         rows = nse_api.corporate_actions_symbol(symbol)
-        return valuation.detect_share_action(rows, fy_end)
+        action = valuation.detect_share_action(rows, fy_end)
+        if action and action["ex_date"] in (snap.get("shares_adjusted_ex") or []):
+            return None
+        return action
     except Exception:  # noqa: BLE001 — degrade to no-flag, never break the report
         log.exception("share-action detection failed for %s", symbol)
         return None

@@ -240,8 +240,12 @@ with zero).
 
 ### §10 Valuation (`analysis/valuation.py`, `sector.py`)
 - **Shares** = `EquityShareCapital / FaceValue` (both ₹, from the latest annual filing).
-- **Market cap** = shares × latest EOD close. *(A bonus/split since the FY-end makes this stale —
-  auto-detected from NSE corporate actions and flagged; `detect_share_action`.)*
+- **Market cap** = shares × latest EOD close, where shares are **brought forward from the filing
+  through every split, bonus, consolidation and rights issue since that FY-end** (`price_adjustments`
+  → `corporate_actions.share_multiplier_since`; e.g. LIC's 1:1 bonus of 29-May-2026 doubles the
+  FY26 count, so its P/E reads ~8.5, not ~4). The report says which actions were applied; only an
+  action not yet on record (ex today) is still flagged via `detect_share_action`. Buybacks, QIPs
+  and ESOP allotments since the filing aren't captured.
 - `P/E (TTM) = MarketCap / TTM net profit` · `P/B = MarketCap / Equity` · `Earnings yield % =
   100 × TTM net / MarketCap`.
 - `EV/EBITDA = (MarketCap + NetDebt) / TTM EBITDA`; **mid-cycle** variant uses the average historical
@@ -559,8 +563,13 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 
 - **COGS ≈** materials + stock purchases + Δinventories; **EBITDA =** PBT + interest + D&A;
   **SG&A ≈** employee + other expenses (used in Beneish). These are noted at every use.
-- **Share count** for market cap comes from the latest annual filing → a bonus/split since then makes
-  the current P/E/P/B/mcap slightly stale (auto-detected & flagged).
+- **Share count** for market cap comes from the latest annual filing, brought forward through
+  splits / bonuses / consolidations / rights issues since (rights assume full subscription);
+  buybacks, QIPs and ESOP allotments since the filing aren't reflected.
+- **Prices** are adjusted for splits, bonuses, consolidations, rights and demergers
+  (`equity_eod_adj`; method in [TECHNICAL.md](TECHNICAL.md#corporate-action-adjustment-analysiscorporate_actionspy)).
+  Historical valuation (`valuation_history`) deliberately uses **raw** prices, because it pairs
+  each old price with that year's own share count.
 - **Balance-sheet & cash-flow history** starts FY2023 (older result XBRLs omit them); P&L runs ~6y.
 - **Consolidated vs standalone:** consolidated is the default when it exists (falls back to standalone
   if consolidated's XBRL history is ≥2y thinner).

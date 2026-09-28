@@ -21,7 +21,7 @@ def load_prices(con: duckdb.DuckDBPyConnection, symbol: str) -> pd.DataFrame:
     in one series per day, but if a date ever carries two rows we keep ``EQ`` (``QUALIFY``)."""
     df = con.execute(
         """SELECT trade_date, open, high, low, close, ttl_trd_qnty AS volume, deliv_per
-           FROM equity_eod
+           FROM equity_eod_adj
            WHERE symbol = ? AND series IN ('EQ', 'BE', 'BZ')
            QUALIFY row_number() OVER (
                PARTITION BY trade_date

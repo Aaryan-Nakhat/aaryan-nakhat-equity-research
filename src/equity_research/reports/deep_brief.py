@@ -1319,7 +1319,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      "against: a rich P/B on a mediocre ROE is a warning; a fair P/B on a high, "
                      "stable ROE is the sweet spot.")
         if snap.get("note") and not share_action:   # the §10 banner is the stronger, specific version
-            L.append(f"- ⚠ _{snap['note']}_")
+            L.append(f"- {'ℹ️' if snap.get('shares_adjusted_for') else '⚠'} _{snap['note']}_")
     # own-history percentile band on the lens's primary multiple (more intuitive than median)
     if not hist.empty:
         col = "pb" if lens == "financial" else "pe"

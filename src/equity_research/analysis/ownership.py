@@ -121,7 +121,7 @@ def _price_window(con: duckdb.DuckDBPyConnection, symbol: str, start, end) -> di
     """Price range (lo/hi/avg close) for ``symbol`` over ``(start, end]`` — the cost zone for a
     stake change that happened in that quarter. ``None`` if no EOD in the window."""
     r = con.execute(
-        "SELECT min(close), max(close), avg(close) FROM equity_eod "
+        "SELECT min(close), max(close), avg(close) FROM equity_eod_adj "
         "WHERE symbol = ? AND series IN ('EQ','BE','BZ') AND trade_date > ? AND trade_date <= ?",
         [symbol, start, end]).fetchone()
     if not r or r[0] is None:
@@ -131,7 +131,7 @@ def _price_window(con: duckdb.DuckDBPyConnection, symbol: str, start, end) -> di
 
 def current_price(con: duckdb.DuckDBPyConnection, symbol: str) -> float | None:
     r = con.execute(
-        "SELECT close FROM equity_eod WHERE symbol = ? AND series IN ('EQ','BE','BZ') "
+        "SELECT close FROM equity_eod_adj WHERE symbol = ? AND series IN ('EQ','BE','BZ') "
         "ORDER BY trade_date DESC LIMIT 1", [symbol]).fetchone()
     return float(r[0]) if r and r[0] is not None else None
 

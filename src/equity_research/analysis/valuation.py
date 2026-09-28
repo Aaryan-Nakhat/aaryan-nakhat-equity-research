@@ -5,9 +5,10 @@ Joins annual financials (`financials`, period_type='Y') with prices
 (that year's `EquityShareCapital` / face value) × the period's price, which makes
 P/E and P/B bonus/split-invariant and comparable across time.
 
-Caveat on the *current* snapshot: shares come from the latest annual filing, so a
-corporate action since then (bonus/split/buyback) makes it stale — surfaced in
-the output; pass ``shares_override`` to correct it.
+The *current* snapshot takes shares from the latest annual filing and brings them forward
+through every split, bonus, consolidation and rights issue on record since that FY-end
+(``price_adjustments``). Buybacks, QIPs and ESOP allotments since then aren't captured — noted in
+the output; pass ``shares_override`` to set the count explicitly.
 """
 
 from __future__ import annotations
@@ -84,23 +85,33 @@ def snapshot(con: duckdb.DuckDBPyConnection, symbol: str,
     if a.empty or px is None:
         return {}
     latest = a.loc[a.index[-1]]
+    fy_end = a.index[-1].date()
     sh = shares_override or shares_outstanding(latest)
     if sh is None:
         return {"note": "shares outstanding unavailable"}
     price_date, price = px
+    adjusted_for: list[str] = []
+    adjusted_ex: list[date] = []
+    if shares_override is None:
+        from equity_research.analysis import corporate_actions
+        mult, adjusted_for, adjusted_ex = corporate_actions.share_multiplier_since(
+            con, symbol, fy_end, price_date)
+        sh *= mult
     mcap = sh * price
     t = ttm(con, symbol, consolidated)
     ttm_net = (t.get("ttm_net_profit_cr") or np.nan) * CR
     eq = latest.get("Equity")
-    note = ("Share count used for market cap is taken from the latest annual filing "
-            "(FY-end %s). If the company has since done a bonus issue or stock split, the "
-            "count — and therefore the P/E, P/B and market cap here — may be slightly off "
-            "until the next annual filing is ingested." % a.index[-1].year)
+    note = (f"Share count is from the FY{fy_end.year} annual filing"
+            + (f", brought up to date for {'; '.join(adjusted_for)}" if adjusted_for
+               else ", with no split, bonus or rights issue on record since")
+            + ". Buybacks, QIPs and ESOP allotments after that filing aren't reflected.")
     return {
         "price": price,
         "price_date": price_date,
         "shares_cr": sh / CR,
-        "shares_fy_end": a.index[-1].date(),   # FY-end the share count is taken from
+        "shares_fy_end": fy_end,               # FY-end the filed share count is from
+        "shares_adjusted_for": adjusted_for,   # actions since then applied to the count
+        "shares_adjusted_ex": adjusted_ex,     # … and their ex-dates
         "market_cap_cr": mcap / CR,
         "pe_ttm": mcap / ttm_net if ttm_net == ttm_net and ttm_net else np.nan,
         "pb": mcap / eq if eq and eq == eq else np.nan,

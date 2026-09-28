@@ -71,7 +71,7 @@ def _series(af: pd.DataFrame, el: str) -> pd.Series:
 def _beta(con: duckdb.DuckDBPyConnection, symbol: str, lookback: int = 500) -> float | None:
     """Beta vs Nifty 50 from ~2y of daily returns (cov/var). None if insufficient."""
     px = con.execute(
-        """SELECT trade_date, close FROM equity_eod
+        """SELECT trade_date, close FROM equity_eod_adj      -- no fake split-day returns
            WHERE symbol = ? AND series = 'EQ' ORDER BY trade_date DESC LIMIT ?""",
         [symbol, lookback]).df()
     idx = con.execute(
@@ -184,11 +184,12 @@ def dcf_inputs(con: duckdb.DuckDBPyConnection, symbol: str,
     cash_latest = float(cash.iloc[-1]) if len(cash.dropna()) else 0.0
     inp.net_debt = debt_latest - cash_latest
 
-    inp.shares = shares_override or valuation.shares_outstanding(af.loc[af.index[-1]])
+    snap = valuation.snapshot(con, symbol, consolidated, shares_override=shares_override)
+    # the snapshot's count: filed shares brought forward through later splits / bonuses / rights
+    inp.shares = shares_override or ((snap.get("shares_cr") or 0) * CR) or None
     if inp.shares in (None, 0):
         inp.missing.append("shares outstanding")
 
-    snap = valuation.snapshot(con, symbol, consolidated, shares_override=shares_override)
     inp.price = snap.get("price")
     mcap = (snap.get("market_cap_cr") or np.nan) * CR
 

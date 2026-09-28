@@ -100,6 +100,11 @@ def build(*, assume_yes: bool = False, out=print) -> bool:
         t = time.monotonic()
         got = _prices(con, PRICE_DAYS)
         print(f"\r {3}/5 {'Daily prices, ~13 months':<26}✓ {got} new trading days ({_clock(t)})")
+        from equity_research.analysis import corporate_actions
+        try:                                  # splits / bonuses / demergers → continuous prices
+            corporate_actions.refresh(con)
+        except Exception:  # noqa: BLE001 — charts still work, just unadjusted across an action
+            pass
 
         _step(4, 5, "Index history")
         stats = ing.backfill_index_history(con, years=PRICE_DAYS / 365, progress_every=0)

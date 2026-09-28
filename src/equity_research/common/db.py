@@ -247,6 +247,58 @@ _SCHEMA = [
         PRIMARY KEY (symbol, filed_date)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS price_adjustments (
+        symbol    VARCHAR,
+        ex_date   DATE,        -- first session at the new share count
+        factor    DOUBLE,      -- multiply prices BEFORE ex_date by this (0.2 for a 1:5 split,
+                               -- 0.5 for a 1:1 bonus); NULL = recorded but not applied
+        share_mult DOUBLE,     -- shares after ÷ shares before (5 for a 1:5 split, 2 for 1:1 rights
+                               -- if fully taken up, 1 for a demerger); NULL = unknown
+        kind      VARCHAR,     -- split | bonus | consolidation | rights | demerger | unexplained
+        source    VARCHAR,     -- nse (the exchange's corporate-action record) | price-gap (detected)
+        detail    VARCHAR,     -- the NSE subject, or the observed opening gap
+        PRIMARY KEY (symbol, ex_date)
+    )
+    """,
+    # equity_eod with every split / bonus / consolidation applied, so a price series is continuous
+    # across the action: prices before an ex-date are scaled by the product of the factors of every
+    # later action, volumes by its inverse. prev_close belongs to the session before its row, so it
+    # takes the factor of the segment ending ON the row's date. Actions dated after the last session
+    # on file (announced, not yet effective) are ignored. Readers that pair an old price with that
+    # date's own share count / EPS (valuation history) keep using the raw equity_eod.
+    """
+    CREATE OR REPLACE VIEW equity_eod_adj AS
+    WITH a AS (
+        SELECT symbol, ex_date, factor FROM price_adjustments
+        WHERE factor IS NOT NULL AND factor > 0
+          AND ex_date <= (SELECT max(trade_date) FROM equity_eod)
+    ), seg AS (
+        SELECT symbol,
+               lag(ex_date) OVER (PARTITION BY symbol ORDER BY ex_date) AS lo,
+               ex_date AS hi,
+               exp(sum(ln(factor)) OVER (PARTITION BY symbol ORDER BY ex_date DESC
+                                         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS cf
+        FROM a
+    )
+    SELECT e.trade_date, e.symbol, e.series,
+           e.prev_close * coalesce(sp.cf, 1) AS prev_close,
+           e.open * coalesce(s.cf, 1) AS open,
+           e.high * coalesce(s.cf, 1) AS high,
+           e.low * coalesce(s.cf, 1) AS low,
+           e.last * coalesce(s.cf, 1) AS last,
+           e.close * coalesce(s.cf, 1) AS close,
+           e.avg_price * coalesce(s.cf, 1) AS avg_price,
+           CAST(round(e.ttl_trd_qnty / coalesce(s.cf, 1)) AS BIGINT) AS ttl_trd_qnty,
+           e.turnover_lacs, e.no_of_trades,
+           CAST(round(e.deliv_qty / coalesce(s.cf, 1)) AS BIGINT) AS deliv_qty,
+           e.deliv_per
+    FROM equity_eod e
+    LEFT JOIN seg s ON s.symbol = e.symbol AND e.trade_date < s.hi
+                   AND (s.lo IS NULL OR e.trade_date >= s.lo)
+    LEFT JOIN seg sp ON sp.symbol = e.symbol AND e.trade_date <= sp.hi
+                    AND (sp.lo IS NULL OR e.trade_date > sp.lo)
+    """,
 ]
 
 

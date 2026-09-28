@@ -74,7 +74,7 @@ def scan(con: duckdb.DuckDBPyConnection, *, limit: int = 20,
         WITH ranked AS (
             SELECT symbol, trade_date, close, turnover_lacs,
                    row_number() OVER (PARTITION BY symbol ORDER BY trade_date DESC) AS rn
-            FROM equity_eod
+            FROM equity_eod_adj          -- split/bonus-adjusted, so 3/6/12-month returns are real
             WHERE series IN ('EQ', 'BE', 'BZ')
               AND symbol IN (SELECT symbol FROM equity_master)
         ),

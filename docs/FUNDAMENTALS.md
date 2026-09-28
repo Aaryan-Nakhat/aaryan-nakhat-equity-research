@@ -253,10 +253,12 @@ bonus/split-invariant and comparable across time.
 Report: `uv run python scripts/valuation_report.py RELIANCE [--shares <crore>]`
 → e.g. RELIANCE current P/E 49.5 flagged *above* its 2-yr history (35.7–47.8).
 
-**Bonus/split caveat (important):** current shares come from the latest annual
-filing, so a corporate action since then makes the live snapshot stale (RELIANCE
-1:1 bonus Oct-2024 → pass `--shares 1353.2`). The output surfaces this; history
-rows are each internally consistent (contemporaneous shares) and unaffected.
+**Share count after a bonus/split:** current shares come from the latest annual filing and are
+then brought forward through every split, bonus, consolidation and rights issue on record since
+that FY-end (`price_adjustments`, see [TECHNICAL.md](TECHNICAL.md)) — so e.g. LIC's 1:1 bonus of
+May-2026 no longer halves its P/E. The snapshot's note names the actions applied; `--shares`
+still overrides. History rows are each internally consistent (contemporaneous shares, raw prices)
+and unaffected.
 
 ## Valuation vs sector (`analysis/sector.py`)
 

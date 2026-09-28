@@ -72,8 +72,10 @@ Left `false`, `ambitionbox.fetch_company` returns `disabled` and the deep report
 With it left `false`, NSE `/api` calls raise `NseScrapingDisabled` and the
 affected features degrade gracefully (empty result) rather than scraping. The
 plain-HTTP NSE **archive files** (bhavcopy, index closes, participant OI, the
-symbol-change list used to map renamed tickers) are the preferred, lighter path and
-are used wherever a file equivalent exists.
+symbol-change list used to map renamed tickers, the equity and SME lists for face values,
+the ETF list) are the preferred, lighter path and are used wherever a file equivalent exists.
+Split / bonus / rights / demerger records come from NSE's corporate-action feed (browser tier)
+when enabled; without it, split-shaped price gaps are detected from the bhavcopy alone.
 
 ## Disclaimer
 
