@@ -118,6 +118,12 @@ WEEKLY_PUSH_WEEKDAY = env_weekday("WEEKLY_PUSH_DAY", "Sat")   # which weekday we
 # If the machine was asleep/off at the weekly slot, send the missed weekly pushes on the next wake
 # within this many hours of it (48 → by Monday 18:00). 0 = only on the push day itself.
 WEEKLY_CATCHUP_HOURS = env_int("WEEKLY_CATCHUP_HOURS", 48)
+
+# ── Web UI (`eqr serve`, or hosted by the email bot) ──
+WEB_UI_ENABLED = env_bool("WEB_UI_ENABLED", True)      # the email bot also serves the UI
+WEB_HOST = env_str("WEB_HOST", "127.0.0.1")            # localhost only unless WEB_PASSWORD is set
+WEB_PORT = env_int("WEB_PORT", 8765)
+WEB_MAX_JOBS = env_int("WEB_MAX_JOBS", 2)              # reports built in parallel (each ~5 min + LLM cost)
 HEARTBEAT_SECONDS = env_int("HEARTBEAT_SECONDS", 300)     # IMAP IDLE wait + scheduler heartbeat
 MENU_TTL_HOURS = env_int("MENU_TTL_HOURS", 24)            # how long a numbered "which one?" menu lasts
 RECONNECT_BACKOFF_S = env_int("RECONNECT_BACKOFF_S", 15)  # backoff after an IMAP session error

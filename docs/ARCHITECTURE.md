@@ -78,6 +78,18 @@ scheduled pushes to the real inbox untouched. A numbered pick is an in-thread re
 thread-scoped menus work identically; local channels only reword email phrasing for display
 (`bot.local.localize`).
 
+**One process owns the database.** DuckDB is single-writer across processes, so the server process
+hosts everything: `bot/app.main` starts the web server (`web/server.py`, FastAPI + uvicorn, in a
+background thread; `WEB_UI_ENABLED`) next to the IMAP loop, and `eqr serve` does the same (web-only
+if email isn't configured). Commands from the web UI or a forwarded `eqr` run on the **job runner**
+(`web/jobs.py`: a small thread pool, `WEB_MAX_JOBS`) through one `LocalSession`; each job keeps an
+event log (notes, saved reports with file paths + URLs, the menu that opened, done / error) that
+clients follow over Server-Sent Events (`GET /api/jobs/{id}/events`). The CLI probes
+`/api/health` and, if a server answers, submits there and prints the streamed events — so it never
+opens the database while the bot runs. Replies are routed to a job by conversation root; the web
+and CLI share one local sender, so a menu opened in one can be picked in the other. Saved reports
+are indexed in `data/outputs/history.jsonl` and served from `/files/…` (confined to the outputs folder).
+
 ## Flow A — Pull: you ask for a stock
 
 ```
@@ -319,7 +331,7 @@ SERVE   on-demand `results` (bot.app._send_results) and the WEEKLY Sat ≥18:00 
 | **Report** | stock brief (+ quant + charts) → LLM → format/PDF; **fund report**; **sector report**; **pre-market digest**; **Tailwind brief**; **Pickaxe brief**; **Concalls brief**; **Results Radar brief**; shared markdown-table helper | `reports/{brief,deep_brief,fund_brief,sector_brief,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief,resolve,synthesize,charts,pdf,email,inbox,pipeline,glossary,md}.py` |
 | **Config** | single source of truth for every tunable knob — timezone, schedule, feature toggles, cache TTLs, timeouts, market-cap bands, analytical thresholds; read from env with defaults = original behaviour | `config.py`, `.env.example` |
 | **LLM** | synthesis + filing/guidance extraction + concall-tone read + name resolution | the configured LLM (any provider, via .env) |
-| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, urgent Tailwind break-ins (pre-market/midday/evening on trading days), ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu. The same commands run from the terminal via the `eqr` CLI (local channel, no SMTP) | `bot/app.py` (command router + email bot; launched by `bot/app.py` (launched by `scripts/email_bot.py`)), `bot/local.py` (local channel), `cli.py` (`eqr`), `common/env.py` (`.env` loader), `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
+| **Deliver** | bot(s) + pushes: pre-market (08:30), midday (12:30), full (18:00), weekly (Sat 18:00) screener-movements + sector-rotation + Tailwind + Concalls + Results Radar, monthly (1st Sat 18:00) Pickaxe, urgent Tailwind break-ins (pre-market/midday/evening on trading days), ~hourly background Concalls + Results ingest; **mailbox housekeeping**. Commands: `fund:`/`ipo:`/`screen: value·volume·beaters·institutions·margins·deleverage·quality·holdco·investors·smallcap·technical·policy`/`hotlist`/`concalls`/`results`/`sector: <name>·list·rotation`/`suppliers:`/`investor:`/`sell·raise·trim`/`booking`/`policy`/`tailwind`(+`--latest`)/`pickaxe`(+`--latest`)/`alert: <kw>·alerts·unalert:`/`levels:`/`help`; opt-in upside-drivers menu. The same commands run from the terminal via the `eqr` CLI (local channel, no SMTP) | `bot/app.py` (command router + email bot; launched by `bot/app.py` (launched by `scripts/email_bot.py`)), `bot/local.py` (local channel), `cli.py` (`eqr`), `web/{server,jobs}.py` (web UI + job API), `common/env.py` (`.env` loader), `reports/{inbox,premarket,tailwind_brief,pickaxe_brief,call_radar_brief,results_brief}.py`, `scan.py`, `screen_digest.py`, `mail_cleanup.py`, `watchlist.py`, `run_email_bot.ps1` |
 
 ## Configuration (`config.py`)
 

@@ -325,11 +325,14 @@ Bootstrap the local data store, then run a report or the bot:
 uv run python scripts/populate_watchlist.py               # seed the watchlist
 uv run python scripts/backfill_eod.py                     # ingest market EOD history
 uv run eqr reliance                                       # a deep report in the terminal
-uv run eqr bot                                            # the always-on email bot (or run_email_bot.ps1)
+uv run eqr serve                                          # web UI at http://localhost:8765 (+ the email bot if configured)
+uv run eqr bot                                            # the always-on email bot — it also serves the web UI
 ```
 
-DuckDB allows one writing process at a time, so the CLI can briefly find the database busy while
-the email bot is mid-task; it says so and you can retry.
+**One process owns the database.** DuckDB allows one writing process at a time, so the server
+(`eqr serve`, or the email bot) runs everything — the web UI, the email loop and CLI jobs — and a
+`eqr` command sent while it's running is forwarded to it (`--direct` forces a local run). The web
+server binds to localhost only (`WEB_HOST` / `WEB_PORT`; `WEB_UI_ENABLED=false` turns it off).
 
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.

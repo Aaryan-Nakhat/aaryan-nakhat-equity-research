@@ -163,6 +163,7 @@ def test_cli_help_prints_and_saves(temp_db, no_smtp, monkeypatch, capsys):
 
     monkeypatch.setattr(cli, "load_env", lambda *a, **k: 0)
     monkeypatch.setattr(cli, "_setup_logging", lambda: None)
+    monkeypatch.setattr(cli, "_server_base", lambda: None)       # never forward to a live server
     monkeypatch.setattr(cli, "_STATE_FILE", temp_db / "cli_state.json")
     monkeypatch.setenv("EQR_OUTPUT_DIR", str(temp_db / "out"))
 
@@ -179,6 +180,7 @@ def test_cli_pick_without_history_explains(temp_db, monkeypatch, capsys):
 
     monkeypatch.setattr(cli, "load_env", lambda *a, **k: 0)
     monkeypatch.setattr(cli, "_setup_logging", lambda: None)
+    monkeypatch.setattr(cli, "_server_base", lambda: None)       # never forward to a live server
     monkeypatch.setattr(cli, "_STATE_FILE", temp_db / "missing.json")
     assert cli.main(["pick", "1"]) == 1
     assert "run a command first" in capsys.readouterr().err

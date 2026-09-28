@@ -12,11 +12,14 @@ reply the bot expects, so thread-scoped menus resolve exactly as they do in Gmai
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from equity_research.reports import email as emailer
 from equity_research.reports.inbox import EmailRequest
@@ -60,7 +63,55 @@ def localize(text: str) -> str:
     return text
 
 
-def _new_id() -> str:
+SAVE_MIN_CHARS = 800         # replies shorter than this (acks, short notes) are shown, not saved
+
+
+def output_root() -> Path:
+    """Where local channels save reports: ``EQR_OUTPUT_DIR`` or ``<repo>/data/outputs``."""
+    from equity_research.common.env import REPO_ROOT
+    return Path(os.environ.get("EQR_OUTPUT_DIR") or REPO_ROOT / "data" / "outputs")
+
+
+@dataclass
+class Saved:
+    html: Path                   # the rendered report
+    md: Path
+    attachments: list[Path] = field(default_factory=list)
+
+
+def is_substantial(d: emailer.Delivery, body: str) -> bool:
+    """A report worth saving (has attachments or is long), vs a short status note."""
+    return bool(d.attachments) or len(body) >= SAVE_MIN_CHARS
+
+
+def save_delivery(d: emailer.Delivery, body: str) -> Saved:
+    """Write a reply to ``<output_root>/<date>/<HHMMSS>_<slug>.{md,html}`` plus its attachments
+    (PDFs) as ``…__<name>``. ``body`` is the (localized) markdown. Shared by the CLI and web UI."""
+    from equity_research.reports.pdf import render_html
+
+    now = datetime.now()
+    folder = output_root() / now.strftime("%Y-%m-%d")
+    folder.mkdir(parents=True, exist_ok=True)
+    title = re.sub(r"^\s*re:\s*", "", d.subject, flags=re.I).strip() or "report"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48] or "report"
+    stem = f"{now:%H%M%S}_{slug}"
+    md_path, html_path = folder / f"{stem}.md", folder / f"{stem}.html"
+    n = 1
+    while html_path.exists():            # two replies in the same second (web runs jobs in parallel)
+        n += 1
+        md_path, html_path = folder / f"{stem}-{n}.md", folder / f"{stem}-{n}.html"
+    md_path.write_text(body, encoding="utf-8")
+    html_path.write_text(render_html(body, title), encoding="utf-8")
+    atts = []
+    for name, data in d.attachments:
+        ap = folder / f"{html_path.stem}__{name}"
+        ap.write_bytes(data)
+        atts.append(ap)
+    return Saved(html=html_path, md=md_path, attachments=atts)
+
+
+def new_root() -> str:
+    """A fresh conversation / message id (an email Message-ID lookalike)."""
     return f"<{uuid.uuid4().hex}@eqr.local>"
 
 
@@ -121,10 +172,11 @@ class LocalSession:
         if self.on_delivery is not None:
             self.on_delivery(root, d)
 
-    def ask(self, text: str, *, wait_background: bool = True) -> Result:
-        """A fresh command — exactly what you'd put in an email's Subject line."""
+    def ask(self, text: str, *, wait_background: bool = True, root: str | None = None) -> Result:
+        """A fresh command — exactly what you'd put in an email's Subject line. ``root`` pre-assigns
+        the conversation id (the web server needs it to route replies before the run starts)."""
         subject = " ".join(text.split())
-        mid = _new_id()
+        mid = root or new_root()
         req = EmailRequest(uid=0, sender=self.sender, subject=subject, body="",
                            message_id=mid, references="", in_reply_to="")
         return self._run(req, root=mid, subject=subject, wait_background=wait_background)
@@ -134,7 +186,7 @@ class LocalSession:
         s = subject.strip()
         re_subject = s if s.lower().startswith("re:") else f"Re: {s}"
         req = EmailRequest(uid=0, sender=self.sender, subject=re_subject, body=str(n),
-                           message_id=_new_id(), references=root, in_reply_to=root)
+                           message_id=new_root(), references=root, in_reply_to=root)
         return self._run(req, root=root, subject=subject, wait_background=wait_background)
 
     def _run(self, req: EmailRequest, *, root: str, subject: str, wait_background: bool) -> Result:

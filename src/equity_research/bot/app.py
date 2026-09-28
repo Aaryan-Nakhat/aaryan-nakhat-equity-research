@@ -2744,16 +2744,30 @@ def maybe_mail_housekeeping() -> None:
 
 
 # ----------------- main loop -----------------
-def main() -> None:
+_EMAIL_KEYS = ("IMAP_USER", "IMAP_PASS", "SMTP_USER", "SMTP_PASS")
+
+
+def email_configured() -> bool:
+    """Is the email channel set up (allowlist + IMAP/SMTP credentials)?"""
+    return bool(ALLOWED) and all(os.environ.get(k) for k in _EMAIL_KEYS)
+
+
+def main(web_ui: bool | None = None) -> None:
+    """The always-on bot. It also hosts the web UI (``WEB_UI_ENABLED``, or ``web_ui=True`` from
+    ``eqr serve``) in a background thread, so the bot, the UI and CLI jobs share one process —
+    and one DuckDB writer."""
     setup_logging()
     if not ALLOWED:
         log.error("EMAIL_ALLOWED_SENDERS is empty — refusing to start (no auth allowlist)")
         sys.exit(1)
-    for key in ("IMAP_USER", "IMAP_PASS", "SMTP_USER", "SMTP_PASS"):
+    for key in _EMAIL_KEYS:
         if not os.environ.get(key):
             log.error("missing required env var %s — refusing to start", key)
             sys.exit(1)
 
+    if config.WEB_UI_ENABLED if web_ui is None else web_ui:
+        from equity_research.web import server as web_server
+        web_server.start_background()
     log.info("email bot starting — allowlist=%s, scan>=%02d:00 IST", sorted(ALLOWED), SCAN_HOUR)
     while True:  # reconnect loop
         inbox = Inbox()
