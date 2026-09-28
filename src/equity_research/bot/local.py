@@ -102,7 +102,7 @@ def save_delivery(d: emailer.Delivery, body: str) -> Saved:
         n += 1
         md_path, html_path = folder / f"{stem}-{n}.md", folder / f"{stem}-{n}.html"
     md_path.write_text(body, encoding="utf-8")
-    html_path.write_text(render_html(body, title), encoding="utf-8")
+    html_path.write_text(render_html(body, title, d.images), encoding="utf-8")
     atts = []
     for name, data in d.attachments:
         ap = folder / f"{html_path.stem}__{name}"

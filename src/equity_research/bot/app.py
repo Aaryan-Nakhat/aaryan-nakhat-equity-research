@@ -221,11 +221,11 @@ def _ack(symbol: str, req: EmailRequest, resolved_name: str | None = None) -> No
         log.exception("ack send failed for %s", symbol)
 
 
-def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
+def _pdf_with_charts(symbol: str, report_md: str) -> tuple[bytes | None, list]:
     """Full report PDF with the fundamental charts embedded — best-effort with a
     HARD timeout. The PDF (Playwright Chromium) can hang on a busy box; the full
     report is already in the email body, so on timeout/failure we return None and
-    deliver body-only rather than blocking the whole send forever."""
+    deliver body-only rather than blocking the whole send forever. Returns (pdf, chart images)."""
     con = connect()
     try:
         images = charts.report_charts(con, symbol)
@@ -236,12 +236,13 @@ def _pdf_with_charts(symbol: str, report_md: str) -> bytes | None:
         con.close()
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, symbol, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
+        pdf = ex.submit(report_to_pdf, report_md, symbol, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
     except Exception:  # noqa: BLE001 — timeout or render failure
         log.exception("report PDF generation failed/timed out for %s — sending body-only", symbol)
-        return None
+        pdf = None
     finally:
         ex.shutdown(wait=False)            # don't block on a hung render thread
+    return pdf, images
 
 
 class _MenuItem:
@@ -289,7 +290,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     if ack:                                     # fresh queries pre-ack at pickup instead
         _ack(symbol, req, resolved_name)
     report_md = generate_report(symbol, deep=True, consolidated=consolidated)  # full report — body + PDF
-    pdf = _pdf_with_charts(symbol, report_md)
+    pdf, images = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
     body = f"{head}\n\n{report_md}"
@@ -306,6 +307,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
         attachments=attachments,
         in_reply_to=req.message_id,
         references=req.references or req.message_id,
+        images=images,
     )
     log.info("sent report for %s to %s", symbol, req.sender)
     _send_followup_menu(symbol, req, resolved_name)      # separate "want a deeper cut?" prompt
@@ -734,7 +736,7 @@ def _send_levels(query: str, req: EmailRequest) -> None:
     emailer.send_report(
         _re_subject(req.subject), body, to=req.sender,
         html=emailer.body_html(body, symbol), attachments=attachments,
-        in_reply_to=req.message_id, references=req.references or req.message_id,
+        in_reply_to=req.message_id, references=req.references or req.message_id, images=images,
     )
     log.info("sent levels for %s to %s", symbol, req.sender)
 
@@ -1112,7 +1114,8 @@ def _pickaxe_worker(*, req: EmailRequest | None, to: str, subject: str,
         if req is not None:
             _set_pending(req, "pickaxe", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
             emailer.send_report(subject, body, to=to, html=emailer.body_html(body, "Pickaxe"),
-                                attachments=attachments, in_reply_to=req.message_id,
+                                attachments=attachments, images=rep.get("images") or [],
+                                in_reply_to=req.message_id,
                                 references=req.references or req.message_id)
         else:
             emailer.send_report(subject, body, to=to, html=emailer.body_html(body, "Pickaxe"),
@@ -2044,9 +2047,9 @@ def _fund_query(subject: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def _fund_pdf(con, scheme_code: int, report_md: str, name: str) -> bytes | None:
+def _fund_pdf(con, scheme_code: int, report_md: str, name: str) -> tuple[bytes | None, list]:
     """Charted fund-report PDF (NAV growth + rolling-returns), best-effort with a
-    HARD timeout — the report is already in the body, so never block the send."""
+    HARD timeout — the report is already in the body, so never block the send. Returns (pdf, charts)."""
     try:
         images = charts.fund_charts(con, scheme_code)
     except Exception:  # noqa: BLE001
@@ -2054,12 +2057,13 @@ def _fund_pdf(con, scheme_code: int, report_md: str, name: str) -> bytes | None:
         images = []
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(report_to_pdf, report_md, name, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
+        pdf = ex.submit(report_to_pdf, report_md, name, images).result(timeout=config.PDF_RENDER_TIMEOUT_S)
     except Exception:  # noqa: BLE001
         log.exception("fund PDF failed/timed out for scheme %s — body-only", scheme_code)
-        return None
+        pdf = None
     finally:
         ex.shutdown(wait=False)
+    return pdf, images
 
 
 def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
@@ -2075,7 +2079,7 @@ def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
         thesis = fund_thesis(md, name)              # qualitative read + verdict (best-effort)
         if thesis:
             md = f"{md}\n\n{'=' * 60}\n## Analysis\n\n{thesis}"
-        pdf = _fund_pdf(con, scheme_code, md, name)  # PDF carries the thesis too
+        pdf, images = _fund_pdf(con, scheme_code, md, name)  # PDF carries the thesis too
     finally:
         con.close()
     body = md
@@ -2086,7 +2090,7 @@ def _send_fund_report(scheme_code: int, req: EmailRequest, name: str) -> None:
     else:
         body += "\n\n_(The charted PDF couldn't be generated this time — the full report is above.)_"
     emailer.send_report(_re_subject(req.subject), body, to=req.sender,
-                        html=emailer.body_html(body), attachments=attachments,
+                        html=emailer.body_html(body), attachments=attachments, images=images,
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent fund report (scheme %s) to %s", scheme_code, req.sender)
 

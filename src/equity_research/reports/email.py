@@ -43,6 +43,7 @@ class Delivery:
     attachments: list[tuple[str, bytes]] = field(default_factory=list)
     in_reply_to: str | None = None
     references: str | None = None
+    images: list[tuple[str, bytes]] = field(default_factory=list)   # (caption, png) charts
 
 
 _local_sinks: dict[str, Callable[[Delivery], None]] = {}
@@ -83,18 +84,23 @@ def send_report(subject: str, body: str, *, to: str | None = None,
                 html: str | None = None,
                 attachments: list[tuple[str, bytes]] | None = None,
                 in_reply_to: str | None = None,
-                references: str | None = None) -> None:
+                references: str | None = None,
+                images: list[tuple[str, bytes]] | None = None) -> None:
     """Send a plain-text (+ optional HTML) email via SMTP STARTTLS.
 
     ``attachments`` is a list of ``(filename, data)`` PDF blobs. ``in_reply_to`` /
     ``references`` (a Message-ID) thread the reply under the original request. A recipient with
     a registered local sink (CLI / web UI) gets the delivery handed over instead — no SMTP.
+    ``images`` are the report's charts as ``(caption, png)``: a local sink shows them in the saved
+    HTML; email leaves them out (they're already in the attached PDF, and mail clients block
+    inline data images).
     """
     sink = _local_sink_for(to)
     if sink is not None:
         sink(Delivery(subject=subject, body=body, to=to or "", html=html,
                       attachments=list(attachments or []),
-                      in_reply_to=in_reply_to, references=references))
+                      in_reply_to=in_reply_to, references=references,
+                      images=list(images or [])))
         return
     host = _cfg("SMTP_HOST", required=True)
     port = int(_cfg("SMTP_PORT", "587"))

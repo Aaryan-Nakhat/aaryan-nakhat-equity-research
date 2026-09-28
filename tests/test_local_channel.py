@@ -40,6 +40,18 @@ def test_local_sink_receives_delivery_instead_of_smtp(no_smtp):
     assert (d.subject, d.body, d.references, d.attachments) == ("Re: infy", "hello", "<r>",
                                                                  [("a.pdf", b"%PDF")])
 
+def test_saved_report_embeds_its_charts(tmp_path, monkeypatch):
+    """The PDF's charts also show in the saved HTML the web UI and `eqr --open` display."""
+    from equity_research.bot import local
+
+    monkeypatch.setenv("EQR_OUTPUT_DIR", str(tmp_path))
+    d = emailer.Delivery(subject="Re: infy", body="# INFY", to="me@eqr.local",
+                         images=[("Price & volume", b"PNG-fake")])
+    saved = local.save_delivery(d, d.body)
+    html = saved.html.read_text(encoding="utf-8")
+    assert "Price &amp; volume" in html or "Price & volume" in html
+    assert "data:image/png;base64," in html
+
 
 def test_unregistered_address_still_goes_over_smtp(monkeypatch):
     sent = []
