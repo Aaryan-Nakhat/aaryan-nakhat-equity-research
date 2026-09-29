@@ -169,6 +169,8 @@ plausible NSE listing. Pushed weekly, plus same-day alerts when a fresh shock la
 not the crowded producer but the supplier to it (the feed, vaccine, packaging or equipment maker), each with its
 price, P/E vs sector, support/resistance and a revenue-share projection read from its filings, with sources.
 
+![Pickaxe](docs/samples/pickaxe.png)
+
 
 **🏛️ `policy`** — the latest government press releases (PIB), often at the cabinet-approval or draft stage, mapped
 to the sectors and listed companies they help.

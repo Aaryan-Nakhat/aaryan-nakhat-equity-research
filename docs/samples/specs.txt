@@ -41,3 +41,4 @@ ipo=*ipo-ongoing.html
 fund=*fund-parag-parikh-flexi-cap.html
 tailwind=*tailwind.html
 fund-chart=*fund-parag-parikh-flexi-cap.html@NAV
+pickaxe=*pickaxe.html
