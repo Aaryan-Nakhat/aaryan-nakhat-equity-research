@@ -31,6 +31,19 @@
   management-says vs numbers-show read of every earnings call.
 - **Yours** — runs on your machine, any LLM provider (or none), MIT-licensed.
 
+**Compared with the typical open-source AI stock analyst:**
+
+| | Typical open-source AI analyst | This project |
+|---|---|---|
+| **Where the numbers come from** | The LLM reads a price / news API and writes figures into its answer | Computed in Python from exchange filings; the LLM never supplies a figure |
+| **Indian market depth** | A `.NS` ticker on a global price API | NSE / BSE XBRL financials, SEBI shareholding (every >1% holder), insider trades, pledges, concall transcripts, corporate actions |
+| **Forensic checks** | Rarely | Altman Z, Beneish M, Piotroski F, accruals, Benford — tested against hand-worked values |
+| **Banks and insurers** | The same template as a manufacturer | Their own reports: NIM, NPAs, CET1 · combined ratio, persistency, solvency |
+| **Finding ideas** | You bring the ticker | 12 screens, a hotlist, Tailwind, Pickaxe, earnings-call and results radars, a policy radar |
+| **Splits, bonuses, rights, demergers** | Left to a global data vendor | Adjusted from NSE's own corporate-action records, including rights (ex-rights price) and demergers |
+| **Without an LLM key** | Nothing to show | Every report still builds with every number |
+| **How you use it** | A script or a terminal | A web UI, a terminal command and email, plus scheduled digests |
+
 ## 🔬 The deep report
 
 Ask for any listed company in plain words (`adani power`, `hdfc` → pick from a list, `INFY`). A few minutes later:
