@@ -91,6 +91,7 @@ top-down, one sectoral index at a time.
 | `concalls` *(or `calls`)* | **🎙️ Concalls** — the most notable recent earnings calls market-wide: **Management Tone** (from the transcript) vs the quarter's **Execution** (from our numbers), ranked by how far the two diverge (upbeat talk on soft numbers = caution; quiet talk on strong numbers = under-radar). Reply a number → deep report. *(Also pushed weekly.)* |
 | `results` *(or `movers`)* | **📈 Results Radar** — companies that **just reported**, ranked by how strong the quarter was (YoY growth + whether it's **accelerating** + margin inflection, from the numbers). No analyst consensus → growth-vs-own-history, not beat-vs-street. Reply a number → deep report. *(Also pushed weekly.)* |
 | `alert: <keyword>` *(· `alerts` · `unalert: <keyword>`)* | **🔔 Announcements** — watch every company's exchange filings for a phrase (e.g. `alert: order win`, `alert: QIP`); get an email within ~20 min of any match (8am-11pm IST). Forward-looking; `alerts` lists them, `unalert:` removes. |
+| `scorecard` *(or `track record`)* | **📊 Track record** — every deep-report verdict and idea-engine pick, logged as it went out and scored vs the Nifty 500 from the next open (hit rate with a 95% interval, excess return, best & worst — misses included). Also emailed weekly. How it's scored: [TRACK_RECORD.md](TRACK_RECORD.md). |
 
 ## 📈 Levels · 🟢 IPOs · 💵 funds · ❓ help
 

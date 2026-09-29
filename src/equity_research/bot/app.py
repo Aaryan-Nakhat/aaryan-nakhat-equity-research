@@ -38,11 +38,12 @@ from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
                                       sector_analysis, sell_advisor, smallcap, supply_chain,
-                                      technical, technical_screen)
+                                      technical, technical_screen, track_record)
 from equity_research import mail_cleanup
 from equity_research.common.db import DEFAULT_DB_PATH, connect
 from equity_research.reports import call_radar_brief
 from equity_research.reports import results_brief
+from equity_research.reports import scorecard_brief
 from equity_research.reports import charts
 from equity_research.reports import deep_brief
 from equity_research.reports import glossary
@@ -122,6 +123,29 @@ def _set_pending(req: EmailRequest, query: str, cands: list) -> None:
                               "cands": [[c.symbol, c.name] for c in cands]})
         con.execute("INSERT OR REPLACE INTO alert_state(symbol, key, value, updated_at) "
                     "VALUES ('__email__', ?, ?, now())", [_pending_key(req), payload])
+        _track_basket(con, query, [c.symbol for c in cands], ref=req.subject)
+    finally:
+        con.close()
+
+
+def _track_basket(con, source: str, symbols: list[str], *, ref: str = "") -> None:
+    """Log an idea engine's list to the track record (a no-op for menus that aren't ideas —
+    name matches, your own holdings, IPO / fund pickers — and when the track record is off)."""
+    if source not in track_record.IDEA_SOURCES or not track_record.enabled():
+        return
+    try:
+        track_record.log_basket(con, source, symbols, ref=ref)
+    except Exception:  # noqa: BLE001 — the record must never cost the reply
+        log.exception("track record: couldn't log the %s list", source)
+
+
+def _track_push(source: str, rep: dict | None, subject: str) -> None:
+    """Log the picks of a scheduled push (no reply thread, so no _set_pending) to the track record."""
+    if not rep or not rep.get("picks") or not track_record.enabled():
+        return
+    con = connect()
+    try:
+        _track_basket(con, source, [p["symbol"] for p in rep["picks"]], ref=subject)
     finally:
         con.close()
 
@@ -283,6 +307,32 @@ def _send_followup_menu(symbol: str, req: EmailRequest, name: str | None = None,
     log.info("sent deeper-cut menu for %s to %s", symbol, req.sender)
 
 
+def _report_memory(symbol: str) -> str | None:
+    """'Last time we said…' for the top of a deep report (REPORT_MEMORY_ENABLED), or None."""
+    con = connect()
+    try:
+        return track_record.memory_line(con, symbol)
+    except Exception:  # noqa: BLE001
+        log.exception("track record: memory line failed for %s", symbol)
+        return None
+    finally:
+        con.close()
+
+
+def _track_verdict(symbol: str, report_md: str, subject: str) -> None:
+    """Log a deep report's closing verdict (an unreadable one is logged as REVIEW, never scored)."""
+    if not track_record.enabled():
+        return
+    con = connect()
+    try:
+        label, stance = track_record.parse_verdict(report_md)
+        track_record.log_call(con, "deep_report", symbol, stance, label, ref=subject)
+    except Exception:  # noqa: BLE001
+        log.exception("track record: couldn't log the verdict for %s", symbol)
+    finally:
+        con.close()
+
+
 def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = None,
                  consolidated: bool | None = None, *, ack: bool = True) -> None:
     log.info("generating report for %s (req from %s, basis=%s)", symbol, req.sender,
@@ -293,7 +343,8 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
     pdf, images = _pdf_with_charts(symbol, report_md)
     today = datetime.now(IST).date().isoformat()
     head = f"Report for **{symbol}**" + (f" — {resolved_name}" if resolved_name else "")
-    body = f"{head}\n\n{report_md}"
+    memory = _report_memory(symbol)               # rendered for the reader; the LLM never saw it
+    body = f"{head}\n\n" + (f"{memory}\n\n" if memory else "") + report_md
     attachments = [("Metrics_and_ratings_guide.pdf", glossary.guide_pdf())]
     if pdf:
         attachments.insert(0, (f"{symbol}_{today}.pdf", pdf))
@@ -310,6 +361,7 @@ def _send_report(symbol: str, req: EmailRequest, resolved_name: str | None = Non
         images=images,
     )
     log.info("sent report for %s to %s", symbol, req.sender)
+    _track_verdict(symbol, report_md, req.subject)
     _send_followup_menu(symbol, req, resolved_name)      # separate "want a deeper cut?" prompt
 
 
@@ -641,6 +693,49 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _scorecard_query(subject: str) -> bool:
+    """True for a 📊 track-record request ('scorecard', 'track record', 'track', 'hit rate')."""
+    return bool(re.match(r"^\s*(?:re:\s*)?(?:score\s*card|track(?:\s*record)?|hit\s*rates?|"
+                         r"how\s+did\s+we\s+do)\s*[:\-]?\s*$", subject, flags=re.I))
+
+
+def _send_scorecard(req: EmailRequest) -> None:
+    con = connect()
+    try:
+        md = scorecard_brief.build_scorecard(con)
+    finally:
+        con.close()
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender, html=emailer.body_html(md, "Scorecard"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent scorecard to %s", req.sender)
+
+
+def maybe_scorecard() -> None:
+    """Weekly 📊 Scorecard push (Saturday ≥18:00 IST, with the other weekly pushes) — only once
+    there's at least one call logged, so a fresh install doesn't mail an empty table."""
+    if not track_record.enabled() or not scan.weekly_due("last_scorecard_week"):
+        return
+    to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+    if not to:
+        return
+    con = connect()
+    try:
+        if not con.execute("SELECT count(*) FROM calls").fetchone()[0]:
+            scan.mark_weekly("last_scorecard_week", con)
+            return
+        md = scorecard_brief.build_scorecard(con)
+    except Exception:  # noqa: BLE001
+        log.exception("scorecard build failed")
+        return
+    finally:
+        con.close()
+    today = datetime.now(IST).date().isoformat()
+    emailer.send_report(f"📊 Scorecard — {today}{schedule.catch_up_note(schedule.open_slot())}", md, to=to,
+                        html=emailer.body_html(md, "Scorecard"))
+    scan.mark_weekly("last_scorecard_week")
+    log.info("weekly scorecard sent to %s", to)
+
+
 def _results_query(subject: str) -> bool:
     """True for a 📈 Results Radar request ('results', 'results radar', 'movers', 'reported')."""
     return bool(re.match(r"^\s*(?:re:\s*)?(?:results?(?:\s*radar)?|movers?|reported|"
@@ -814,6 +909,10 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "Companies that **just reported**, ranked by how strong the quarter was — YoY growth + whether "
          "it's **accelerating** + margin inflection (from the numbers; no analyst consensus, so it's "
          "growth-vs-own-history). Reply a number → deep report."],
+        ["`scorecard` (or `track record`)",
+         "📊 **How this tool's own calls did** — every deep-report verdict and idea-engine pick, logged as "
+         "it went out and scored vs the Nifty 500 (hit rate with confidence interval, excess return, "
+         "best and worst), including the misses. Also emailed weekly."],
     ]),
     ("🔔 Announcements — get pinged on any filing", "Standing keyword alerts, pushed within ~20 min "
                                                     "(8am-11pm IST).", [
@@ -1119,7 +1218,8 @@ def _pickaxe_worker(*, req: EmailRequest | None, to: str, subject: str,
                                 references=req.references or req.message_id)
         else:
             emailer.send_report(subject, body, to=to, html=emailer.body_html(body, "Pickaxe"),
-                                attachments=attachments)
+                                attachments=attachments, images=rep.get("images") or [])
+            _track_push("pickaxe", rep, subject)
         if weekly:
             scan.mark_pickaxe()
         log.info("sent Pickaxe (%d themes, %d picks, pdf=%s, cache=%s) to %s",
@@ -2254,6 +2354,11 @@ def handle_request(req: EmailRequest) -> None:
         _send_hotlist(req)
         return
 
+    # 1e-nov) 📊 Scorecard — the track record of every call ('scorecard', 'track record')
+    if _scorecard_query(req.subject):
+        _send_scorecard(req)
+        return
+
     # 1e-non) 🎙️ Concalls — notable earnings calls (tone vs delivery) ('calls', 'concall')
     if _calls_query(req.subject):
         _send_call_radar(req)
@@ -2520,6 +2625,7 @@ def maybe_tailwind() -> None:
                         html=emailer.body_html(rep["markdown"], "Tailwind"))
     scan.mark_tailwind()                                    # advance week-marker ONLY after send
     scan.add_tailwind_seen(rep.get("keys", []))            # so the mid-week urgent alert won't repeat these
+    _track_push("tailwind", rep, "weekly Tailwind")
     log.info("weekly Tailwind push sent to %s (%d catalysts)", to, rep["n_catalysts"])
 
 
@@ -2573,6 +2679,7 @@ def maybe_tailwind_urgent() -> None:
     emailer.send_report(f"💨 Fresh supply shock — {today} ({slot})", rep["markdown"], to=to,
                         html=emailer.body_html(rep["markdown"], "Fresh supply shock"))
     scan.add_tailwind_seen(rep.get("keys", []))            # don't re-alert this shock the rest of the week
+    _track_push("tailwind", rep, f"urgent Tailwind ({slot})")
     log.info("urgent Tailwind break-in sent to %s (%s slot, %d catalysts)", to, slot, rep["n_catalysts"])
 
 
@@ -2660,6 +2767,7 @@ def maybe_call_radar() -> None:
     emailer.send_report(f"🎙️ Concalls — {today}{schedule.catch_up_note(schedule.open_slot())}", rep["markdown"] + note, to=to,
                         html=emailer.body_html(rep["markdown"] + note, "Concalls"))
     scan.mark_call_radar()                                       # advance week-marker ONLY after send
+    _track_push("calls", rep, "weekly Concalls")
     log.info("weekly Concalls push sent (%d calls) to %s", len(rep["picks"]), to)
 
 
@@ -2720,6 +2828,7 @@ def maybe_results() -> None:
     emailer.send_report(f"📈 Results Radar — {today}{schedule.catch_up_note(schedule.open_slot())}", rep["markdown"] + note, to=to,
                         html=emailer.body_html(rep["markdown"] + note, "Results Radar"))
     scan.mark_results_radar()                                  # advance week-marker ONLY after send
+    _track_push("results", rep, "weekly Results Radar")
     log.info("weekly Results Radar push sent (%d names) to %s", len(rep["picks"]), to)
 
 
@@ -2844,6 +2953,8 @@ def main(web_ui: bool | None = None) -> None:
                     maybe_results()          # weekly results-radar push
                 if config.ENABLE_KEYWORD_ALERTS:
                     maybe_alert_scan()   # keyword filing-alert sweep (background)
+                if config.ENABLE_SCORECARD_PUSH:
+                    maybe_scorecard()        # weekly track-record email
                 if config.ENABLE_MAIL_HOUSEKEEPING:
                     maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout

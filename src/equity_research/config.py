@@ -158,6 +158,16 @@ ENABLE_CONCALLS = env_bool("ENABLE_CONCALLS", True)
 ENABLE_RESULTS_RADAR = env_bool("ENABLE_RESULTS_RADAR", True)
 ENABLE_KEYWORD_ALERTS = env_bool("ENABLE_KEYWORD_ALERTS", True)
 ENABLE_MAIL_HOUSEKEEPING = env_bool("ENABLE_MAIL_HOUSEKEEPING", True)
+ENABLE_SCORECARD_PUSH = env_bool("ENABLE_SCORECARD_PUSH", True)   # weekly track-record email
+
+# ── Track record (analysis/track_record.py) ──
+# Log every call (deep-report verdicts + idea-engine picks) and score it vs the Nifty 500; off → nothing
+# is logged and `scorecard` explains how to turn it on.
+TRACK_RECORD_ENABLED = env_bool("TRACK_RECORD_ENABLED", True)
+# The "last time we said…" line at the top of a deep report (shown to you, never to the LLM).
+REPORT_MEMORY_ENABLED = env_bool("REPORT_MEMORY_ENABLED", True)
+# Below this many matured calls a hit rate is shown as too few to read.
+TRACK_MIN_SAMPLE = env_int("TRACK_MIN_SAMPLE", 30)
 
 # ── Cache / dedup TTLs ──
 TAILWIND_SEEN_TTL_DAYS = env_int("TAILWIND_SEEN_TTL_DAYS", 14)

@@ -15,7 +15,8 @@
 
 **[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
 **[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
-**[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[How it thinks](#-how-it-thinks)** ·
+**[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[Track record](#-it-keeps-score-of-itself)** ·
+**[How it thinks](#-how-it-thinks)** ·
 **[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
@@ -243,6 +244,16 @@ a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking ri
 markets, FII positioning), midday and evening watchlist digests, and weekly screen, sector, Tailwind, concall and
 results pushes.
 
+## 📊 It keeps score of itself
+
+Every call — each deep-report verdict and every name an idea engine lists — is logged the moment it goes
+out and later scored against the Nifty 500 from the next session's open, on split-adjusted prices: hit
+rate with a confidence interval, excess return, best and worst, misses included. Ask **`scorecard`** any time
+(it's also emailed weekly), and a report on a company you've asked about before opens with what the tool
+said last time and how that played out. The model never sees those outcomes — they're for you, not for
+it to "learn" from ([why](docs/TRACK_RECORD.md#what-the-llm-sees-nothing-from-here)). The record stays in
+your local database; it's never published.
+
 ## 🧠 How it thinks
 
 <p align="center"><img src="docs/media/tailwind-agents.png" alt="Tailwind: four agents turning a Philippine ube export ban into a verified Indian small-cap" width="880"></p>
@@ -390,6 +401,7 @@ watchlist digest over email. Docs:
 
 - [`docs/COMMANDS.md`](docs/COMMANDS.md) — every command, with details.
 - [`docs/HOW_IT_THINKS.md`](docs/HOW_IT_THINKS.md) — the agent pipelines and request flow as diagrams, plus a real case.
+- [`docs/TRACK_RECORD.md`](docs/TRACK_RECORD.md) — how every call is logged and scored, and why the model never sees the results.
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — **every metric traced source → transform → formula → model** (the "how are you getting this?" reference).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — end-to-end diagram + component map.
 - [`docs/PLAN.md`](docs/PLAN.md) — vision, scope, phase status.

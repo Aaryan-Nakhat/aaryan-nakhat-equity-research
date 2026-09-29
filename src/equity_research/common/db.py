@@ -261,6 +261,21 @@ _SCHEMA = [
         PRIMARY KEY (symbol, ex_date)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS calls (
+        call_id     VARCHAR,     -- hash of (source, symbol, call date): one call per engine/name/day
+        made_at     TIMESTAMP,   -- when the call went out (UTC) — the only clock scoring trusts
+        source      VARCHAR,     -- deep_report · tailwind · pickaxe · hotlist · screen:value · calls · …
+        symbol      VARCHAR,
+        stance      VARCHAR,     -- long · avoid · hold · review (verdict unreadable) · unknown
+        label       VARCHAR,     -- the call as made: BUY / ACCUMULATE / HOLD / REDUCE / AVOID / PICK
+        rank        INTEGER,     -- position in an engine's list (1 = top); NULL for a single verdict
+        context     VARCHAR,     -- one line of why (theme, catalyst, screen) — for the reader only
+        provenance  VARCHAR,     -- live (logged as it went out) · recovered (backfilled from a sent report)
+        ref         VARCHAR,     -- where it came from (email subject, saved report path)
+        PRIMARY KEY (call_id)
+    )
+    """,
     # equity_eod with every split / bonus / consolidation applied, so a price series is continuous
     # across the action: prices before an ex-date are scaled by the product of the factors of every
     # later action, volumes by its inverse. prev_close belongs to the session before its row, so it
