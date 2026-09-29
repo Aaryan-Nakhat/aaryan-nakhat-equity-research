@@ -9,6 +9,7 @@
 ![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
 ![Delivery](https://img.shields.io/badge/UI-web%20·%20CLI%20·%20email-0088CC)
 ![License](https://img.shields.io/badge/license-MIT-informational)
+[![CI](https://github.com/Aaryan-Nakhat/aaryan-nakhat-equity-research/actions/workflows/ci.yml/badge.svg)](https://github.com/Aaryan-Nakhat/aaryan-nakhat-equity-research/actions/workflows/ci.yml)
 
 <p align="center"><img src="docs/media/demo.gif" alt="Typing “adani”, picking Adani Power from the matches, and touring the finished deep report: filings-based overview, forensics, ownership changes, smart-money cost, employee sentiment, reverse-DCF, verdict, trading levels and charts" width="900"></p>
 
@@ -453,6 +454,12 @@ instance on a VPS can't be used by strangers to run reports on your LLM key.
 
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.
+
+**Tests.** `uv sync --extra dev && uv run pytest` — ~140 tests, no network, no `.env`, no data needed
+(every fetch is mocked, every database is a throw-away). They include the forensic scores, valuation and
+smart-money cost zones checked against hand-worked numbers, split/bonus/rights/demerger price adjustment,
+bank and insurer taxonomies, name resolution and the web UI. [CI](.github/workflows/ci.yml) runs lint and the
+suite on Linux and Windows for every push.
 
 ## Data sources & terms
 

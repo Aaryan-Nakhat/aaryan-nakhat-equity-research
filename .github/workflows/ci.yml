@@ -1,0 +1,45 @@
+# Lint + the full test suite on every push and pull request. The tests need no network access,
+# no .env, no LLM key and no market data: every fetch is mocked and every database is a throw-away.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: ruff
+        run: uvx ruff@0.6.9 check .
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install (Python 3.12 + locked dependencies)
+        run: |
+          uv python install 3.12
+          uv sync --extra dev --locked
+      - name: pytest
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run pytest -q
