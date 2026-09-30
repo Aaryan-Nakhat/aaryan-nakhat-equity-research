@@ -243,7 +243,9 @@ without the LLM.
 ![Levels](docs/samples/levels.png)
 
 **🔔 `alert: order win`** — watch every company's exchange filings for a phrase and get an email within ~20 minutes of
-a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking risk and which to trim first.
+a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking risk and which to trim first — and
+**`raise 50000`** (or `take out 2 lakh`) says exactly what to sell for that amount: a least-tax plan vs a
+weakest-holdings-first plan, with shares, money in hand and the estimated capital-gains tax.
 **📬 Arrives by itself** (with email set up): a pre-market brief at 08:30 (GIFT Nifty implied open, overnight
 markets, FII positioning), midday and evening watchlist digests, and weekly screen, sector, Tailwind, concall and
 results pushes.

@@ -190,3 +190,7 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .tag.ok { background: var(--ok-soft); color: var(--ok); } .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .csv-err { margin: 6px 0 0; color: var(--bad); }
 @media (max-width: 720px) { .h-form { grid-template-columns: 1fr 1fr; } .h-form input[name=stock] { grid-column: 1 / -1; } }
+.h-raise { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 10px; align-items: center; background: var(--accent-soft); border-radius: var(--radius); padding: 10px 12px; }
+.h-raise input { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.h-raise small { grid-column: 1 / -1; }
+@media (max-width: 720px) { .h-raise { grid-template-columns: 1fr auto; } .h-raise span { grid-column: 1 / -1; } }

@@ -187,6 +187,14 @@ HOTLIST_TIMEOUT_S = env_int("HOTLIST_TIMEOUT_S", 420)
 POLICY_TIMEOUT_S = env_int("POLICY_TIMEOUT_S", 300)
 HTTP_TIMEOUT_S = env_int("HTTP_TIMEOUT_S", 30)
 
+# ── Capital-gains tax on listed shares (the `sell` / `raise ₹X` plan) — India, from 23-Jul-2024 ──
+# Change these when a Budget changes them. Surcharge isn't modelled.
+STCG_RATE = env_float("STCG_RATE", 0.20)                # held ≤ 12 months
+LTCG_RATE = env_float("LTCG_RATE", 0.125)               # held > 12 months, above the yearly exemption
+LTCG_EXEMPTION = env_float("LTCG_EXEMPTION", 125000)    # long-term gains tax-free per financial year (₹)
+TAX_CESS = env_float("TAX_CESS", 0.04)                  # health & education cess on the tax
+LT_WAIT_TIP_DAYS = env_int("LT_WAIT_TIP_DAYS", 60)      # flag a short-term lot that turns long-term this soon
+
 # ── Market-cap bands (₹ crore) ──
 SMALLCAP_MAX_CR = env_int("SMALLCAP_MAX_CR", 5_000)
 MIDCAP_MAX_CR = env_int("MIDCAP_MAX_CR", 25_000)

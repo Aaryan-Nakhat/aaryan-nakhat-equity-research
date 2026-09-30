@@ -937,6 +937,23 @@ def _help_query(subject: str) -> bool:
                          subject, flags=re.I))
 
 
+_AMOUNT_UNITS = {"k": 1e3, "thousand": 1e3, "l": 1e5, "lac": 1e5, "lacs": 1e5, "lakh": 1e5, "lakhs": 1e5,
+                 "cr": 1e7, "crore": 1e7, "crores": 1e7}
+
+
+def _raise_amount(subject: str) -> float | None:
+    """'raise 50000' · 'sell ₹1.5 lakh' · 'take out 2L' · 'I wanna take out 50k' · 'need 3 lakh' → the ₹
+    amount to raise from your holdings; None when it isn't such a request."""
+    s = re.sub(r"^\s*re:\s*", "", subject or "", flags=re.I).strip()
+    m = re.match(r"^(?:i\s+(?:want|wanna|need)\s+(?:to\s+)?)?(?:sell|raise|trim|take\s*out|withdraw|need|free\s*up)"
+                 r"\s*[:\-]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d+)?)\s*"
+                 r"(k|thousand|lacs?|lakhs?|l|crores?|cr)?\b", s, flags=re.I)
+    if not m:
+        return None
+    amt = float(m.group(1).replace(",", "")) * _AMOUNT_UNITS.get((m.group(2) or "").lower(), 1)
+    return amt if amt >= 1 else None
+
+
 def _sell_query(subject: str) -> bool:
     """True for a holdings sell-priority request — bare 'sell' / 'raise' / 'trim' (optionally
     with trailing text, e.g. 'sell: need cash'). Ranks YOUR holdings weakest-hand first."""
@@ -1050,7 +1067,12 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`booking`", "Where the tracked institutions on YOUR holdings sit on big gains → "
                       "profit-booking (selling) risk, ranked."],
         ["`sell` (or `raise` / `trim`)",
-         "Ranks your holdings weakest-hand-first — which to sell first if you need cash."],
+         "Ranks your holdings weakest-hand-first — which to sell first if you need cash; with quantities "
+         "(💼 My holdings) it also shows each one's value, profit / loss and short- / long-term."],
+        ["`raise 50000` (or `take out 2 lakh` · `sell ₹1.5L` · `need 50k`)",
+         "Exactly what to sell to raise that much: two plans — 🧾 least tax and 💪 weakest holdings first — "
+         "with shares, ≈ money in hand and the estimated capital-gains tax (FIFO, set-off, the yearly "
+         "₹1.25 lakh long-term exemption), plus 'wait N days and it turns long-term' tips."],
     ]),
     ("🔎 Idea screeners — find new names", "Each returns a numbered list; reply a number → deep report.", [
         ["`screen: value` (or just `screen`)",
@@ -2187,13 +2209,33 @@ def _send_sell_advisor(req: EmailRequest) -> None:
         _reply_text(req, "No holdings tagged yet — add stocks to your watchlist as 'holding' first, "
                          "then resend `sell`.")
         return
-    table = _md_table(
-        ["#", "Symbol", "Company", "Keep", "Verdict", "Why"],
-        [[i, r["symbol"], r["name"][:24],
-          (f"{r['keep_score']:.0f}" if r["keep_score"] is not None else "—"),
-          r["verdict"], r["why"]]
-         for i, r in enumerate(rows, 1)],
-        align="rlllll")
+    con = connect()
+    try:
+        book = sell_advisor.book_summary(con)
+    finally:
+        con.close()
+    if book:
+        def _pl(sym: str) -> list:
+            b = book.get(sym)
+            if not b:
+                return ["—", "—", "—"]
+            terms = " + ".join(sorted({"short": "<1 yr", "long": ">1 yr", "undated": "no date"}[t] for t in b["terms"]))
+            return [_inr(b["value"]), f"{_inr(b['pnl'])} ({b['pnl_pct']:+.0f}%)", terms]
+        table = _md_table(
+            ["#", "Symbol", "Company", "Keep", "Verdict", "Value", "Profit / loss", "Held", "Why"],
+            [[i, r["symbol"], r["name"][:24],
+              (f"{r['keep_score']:.0f}" if r["keep_score"] is not None else "—"), r["verdict"],
+              *_pl(r["symbol"]), r["why"]]
+             for i, r in enumerate(rows, 1)],
+            align="rllllrrll")
+    else:
+        table = _md_table(
+            ["#", "Symbol", "Company", "Keep", "Verdict", "Why"],
+            [[i, r["symbol"], r["name"][:24],
+              (f"{r['keep_score']:.0f}" if r["keep_score"] is not None else "—"),
+              r["verdict"], r["why"]]
+             for i, r in enumerate(rows, 1)],
+            align="rlllll")
     md = ("**💰 Which to sell first — your holdings, ranked**\n\n"
           "If you need cash, sell from the **top** (weakest hand) down. **Keep score 0-100** "
           "(higher = stronger hold): 35% valuation headroom (DCF upside + cheap-vs-own-history) · "
@@ -2201,8 +2243,11 @@ def _send_sell_advisor(req: EmailRequest) -> None:
           "each ranked **within your own book**. "
           "**Reply with a number for that holding's full deep report before you act.**\n\n"
           + table + "\n\n"
-          "_Merit only — this doesn't yet know your cost, P&L or tax (that's the next version). "
-          f"Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_"
+          + ("**Need a set amount?** Send `raise 50000` (or `take out 2 lakh`) — exactly what to sell, "
+             "with the tax.\n\n" if book else
+             "_Add quantities and buy prices in the web UI's **💼 My holdings** (or `holdings.csv`) to see "
+             "value, profit / loss and tax here — and to ask `raise 50000` for exactly what to sell._\n\n")
+          + f"_Decision support; the call is yours. (Reply within {PENDING_TTL_H}h.)_"
           + _SELL_LEGEND)
     cands = [_MenuItem(r["symbol"], r["name"]) for r in rows]
     _set_pending(req, "sell", cands)
@@ -2210,6 +2255,117 @@ def _send_sell_advisor(req: EmailRequest) -> None:
                         html=emailer.body_html(md, "Sell-priority — holdings"),
                         in_reply_to=req.message_id, references=req.references or req.message_id)
     log.info("sent sell advisor (%d holdings) to %s", len(rows), req.sender)
+
+
+def _inr(v: float) -> str:
+    """₹ in Indian grouping (12,34,567), a minus sign for losses."""
+    n = int(round(abs(v)))
+    s = str(n)
+    if len(s) > 3:
+        head, tail = s[:-3], s[-3:]
+        head = ",".join([head[max(0, i - 2):i] for i in range(len(head), 0, -2)][::-1])
+        s = f"{head},{tail}"
+    return ("−₹" if v < 0 else "₹") + s
+
+
+_TERM = {"short": "< 1 yr (short-term)", "long": "> 1 yr (long-term)", "unknown": "no date", "mixed": "mixed"}
+
+
+def _plan_md(title: str, plan: dict, *, keep_col: bool) -> str:
+    heads = ["#", "Stock", "Sell", "≈ You get", "Gain / loss", "Held"] + (["Keep"] if keep_col else [])
+    rows = []
+    for i, r in enumerate(plan["rows"], 1):
+        rows.append([i, f"**{r['symbol']}** {r['name'][:22]}",
+                     f"{r['shares']:,} of {r['held']:,}" + (" (all)" if r["shares"] == r["held"] else ""),
+                     _inr(r["proceeds"]), _inr(r["gain"]), _TERM[r["term"]]]
+                    + ([f"{r['keep']:.0f}" if r["keep"] is not None else "—"] if keep_col else []))
+    t = plan["tax"]
+    lines = [f"### {title}", _md_table(heads, rows, align="rllrrl" + ("r" if keep_col else ""))]
+    tax_bits = []
+    if t["st_gain"]:
+        tax_bits.append(f"short-term gain {_inr(t['st_gain'])}")
+    if t["lt_gain"]:
+        tax_bits.append(f"long-term gain {_inr(t['lt_gain'])}"
+                        + (f" ({_inr(t['exemption_used'])} of it tax-free)" if t["exemption_used"] else ""))
+    lines.append(f"**≈ {_inr(plan['proceeds'])} from the sale · tax ≈ {_inr(t['tax'])} · in hand ≈ "
+                 f"{_inr(plan['net'])}**" + (f"  \n_{' · '.join(tax_bits)}_" if tax_bits else ""))
+    if plan["has_unknown"]:
+        lines.append(f"_Includes shares with no buy date — {_inr(t['unknown_gain'])} of gain / loss whose tax "
+                     "isn't counted above (add the date in 💼 My holdings)._")
+    return "\n\n".join(lines)
+
+
+def _send_raise_plan(req: EmailRequest, amount: float) -> None:
+    """'raise ₹X' — what to sell: 🧾 least tax vs 💪 weakest first, with shares, money and tax."""
+    log.info("running raise plan for %s (req from %s)", amount, req.sender)
+    con = connect()
+    try:
+        has_lots = con.execute("SELECT count(*) FROM holding_lots").fetchone()[0] > 0
+    finally:
+        con.close()
+    if not has_lots:
+        _reply_text(req, f"💰 To plan how to raise **{_inr(amount)}** I need your quantities and buy prices — add "
+                         "them in the web UI's **💼 My holdings** (or `holdings.csv`; the buy date is optional, "
+                         "it adds the tax). Then resend.")
+        return
+    _reply_text(req, f"📩 Got it — working out what to sell to raise **{_inr(amount)}** (least tax vs weakest "
+                     "holdings first). ~1–2 min.")
+    con = connect()
+    try:
+        ranking = _screen_run(lambda: sell_advisor.sell_ranking(con)) or []
+        res = sell_advisor.raise_plan(con, amount, ranking)
+    finally:
+        con.close()
+    plans = res["plans"]
+    if not plans:
+        _reply_text(req, "None of your holdings with quantities has a recent price yet — try again after "
+                         "the evening data refresh.")
+        return
+    tax_p, merit_p = plans["tax"], plans["merit"]
+    parts = [f"# 💰 Raise {_inr(amount)} — what to sell",
+             f"Your holdings with quantities are worth **{_inr(res['book_value'])}** at the last close."]
+    if tax_p["short_by"] > 0:
+        parts.append(f"⚠️ That's more than they're worth — selling **everything** raises ≈ "
+                     f"{_inr(tax_p['proceeds'])}, {_inr(tax_p['short_by'])} short.")
+    if res["same"] or not ranking:
+        parts.append(_plan_md("🧾 The plan — least tax" + ("" if ranking else " (keep scores unavailable this "
+                                                                          "time)"), tax_p, keep_col=bool(ranking)))
+        if ranking:
+            parts.append("_Selling your weakest holdings first lands on the same sale — no trade-off here._")
+    else:
+        saving = merit_p["tax"]["tax"] - tax_p["tax"]["tax"]
+        parts.append(_plan_md("🧾 Plan 1 — least tax", tax_p, keep_col=True))
+        parts.append(_plan_md("💪 Plan 2 — sell your weakest holdings first (lowest keep score)", merit_p,
+                              keep_col=True))
+        if saving > 1:
+            parts.append(f"**The trade-off:** Plan 1 saves ≈ **{_inr(saving)}** in tax; Plan 2 lets go of the "
+                         "holdings you'd least regret selling on merit. Small saving → Plan 2 is usually the "
+                         "better hold-quality call; big saving → Plan 1.")
+        else:
+            parts.append("**The trade-off:** the tax is about the same either way, so Plan 2 (weakest first) "
+                         "costs you nothing extra.")
+    tips = {(t["symbol"], t["days"]): t for p in plans.values() for t in p["tips"]}.values()
+    if tips:
+        parts.append("### ⏳ Worth waiting?\n\n" + "\n".join(
+            f"- **{t['symbol']}** — some of these shares turn long-term in **{t['days']} days**; selling "
+            f"them then instead of now saves ≈ {_inr(t['save'])} in tax (more if the yearly ₹1.25 lakh "
+            "long-term exemption covers it)." for t in sorted(tips, key=lambda t: -t["save"])))
+    if res["no_qty"]:
+        parts.append("_Not included (no quantity yet): " + ", ".join(res["no_qty"]) + " — add them in "
+                     "💼 My holdings._")
+    parts.append(
+        "---\n_How this is worked out: prices are the **last close** (the real sale price will differ); shares "
+        "go **oldest first** (FIFO — how Indian demat sales are taxed); tax is an **estimate** at "
+        f"{config.STCG_RATE:.1%} short-term / {config.LTCG_RATE:.1%} long-term + {config.TAX_CESS:.0%} cess, "
+        f"with ₹{config.LTCG_EXEMPTION:,.0f} of long-term gain tax-free a year, losses set off, and **no other "
+        "gains assumed this financial year**. Brokerage, STT and surcharge are left out. Keep score = the "
+        "`sell` ranking's merit score (higher = stronger hold). Decision support, not tax advice — check with "
+        "your CA for large sales._")
+    md = "\n\n".join(parts)
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender,
+                        html=emailer.body_html(md, "Raise cash — what to sell"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent raise plan (%s) to %s", amount, req.sender)
 
 
 _INVESTOR_CAVEAT = ("_Tracks the SHP public/promoter tables — only holders **disclosed by "
@@ -2588,6 +2744,10 @@ def handle_request(req: EmailRequest) -> None:
 
     # 1g) holdings sell-priority ranking ('sell' / 'raise' / 'trim') — which to sell first if
     #     you need cash. Bare word, so it must sit before the free-text stock-name fallback.
+    amount = _raise_amount(req.subject)
+    if amount:
+        _send_raise_plan(req, amount)
+        return
     if _sell_query(req.subject):
         _send_sell_advisor(req)
         return

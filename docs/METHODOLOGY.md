@@ -583,6 +583,24 @@ with zero).
 - **Sweep:** once per trading day after the evening scan (background thread); the email lists only checks whose
   status changed and rules that newly triggered. It checks the person's own reasons — never a buy / sell call.
 
+## Part F4 — 💰 What to sell to raise ₹X (`analysis/sell_advisor.py` · `raise_plan`)
+
+- **Input:** your lots (💼 My holdings — qty, buy price, optional date), valued at the last close; a dated lot
+  is brought through splits / bonuses since the buy. Holdings without a quantity are listed, not used.
+- **FIFO:** Indian demat sales are taxed oldest-shares-first, so within a stock the shares sold are fixed —
+  dated lots oldest first, undated lots last (their age is unknown). The plan chooses *which stocks and how many*.
+- **🧾 Least tax (greedy):** repeatedly take the stock whose next FIFO shares cost the least tax per rupee
+  raised — long-term gains are free while the yearly exemption lasts, a loss counts as zero (booking it only
+  helps against a taxable gain), short-term (and undated, cautiously) gains cost the STCG rate — with the weaker
+  keep score breaking ties.
+- **💪 Weakest first:** stocks in `sell`-ranking order (lowest keep score first), FIFO within each.
+- **Tax estimate (computed, `tax_estimate`):** short-term losses set off against short-term gains, then long-term
+  gains; long-term losses against long-term gains only; the yearly long-term exemption; STCG / LTCG rates + cess
+  from `.env` (defaults 20 % / 12.5 % / ₹1.25 lakh / 4 %). Assumes no other gains this financial year; brokerage,
+  STT and surcharge left out; undated shares' gain / loss shown but not taxed. Whole shares, at the last close.
+- **⏳ Wait tip:** a short-term lot with a gain that turns long-term within 60 days → the saving from the rate
+  difference if sold then.
+
 ## Part G — Every place the LLM is used (exhaustive)
 
 The LLM (**the configured LLM**) is used **only** here — everything else is deterministic:

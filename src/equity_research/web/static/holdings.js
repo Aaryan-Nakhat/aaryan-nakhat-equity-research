@@ -171,4 +171,14 @@
     btn.disabled = false;
   });
   $("#hForm").date.max = new Date().toISOString().slice(0, 10);
+
+  // "Need cash?" → the same `raise <amount>` command, run as a job in the research feed
+  $("#hRaise").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const amt = e.target.amount.value.trim();
+    if (!amt) return;
+    $("#q").value = `raise ${amt}`;
+    e.target.reset();
+    $("#ask").requestSubmit();
+  });
 })();
