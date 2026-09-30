@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuse to commit personal data: your holdings file, the database, or .env.
+# Turn on once per clone:  git config core.hooksPath .githooks
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(holdings[^/]*\.csv|\.env)$|\.duckdb(\.wal)?$' | grep -v 'holdings\.example\.csv$')
+if [ -n "$bad" ]; then
+  echo "pre-commit: refusing to commit personal data:" >&2
+  echo "$bad" | sed 's/^/  /' >&2
+  echo "Unstage it (git restore --staged <file>). It belongs on your computer only." >&2
+  exit 1
+fi

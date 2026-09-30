@@ -16,6 +16,7 @@
       <span><b>Equity Research</b><small>Indian stocks · NSE / BSE</small></span>
     </a>
     <button class="btn-new" id="newBtn" type="button">＋ New question</button>
+    <button class="btn-new" id="holdingsBtn" type="button">💼 My holdings</button>
 
     <div class="nav-title">Quick runs</div>
     <div class="quick" id="quick">
@@ -63,6 +64,31 @@
     </section>
 
     <section class="feed" id="feed" aria-live="polite"></section>
+
+    <section class="holdings" id="holdings" hidden>
+      <div class="h-head">
+        <h1>💼 My holdings</h1>
+        <p class="muted small">Kept on this computer only — never uploaded or committed. Add each buy; the date is
+          optional (with it you also get short- / long-term, yearly return and the Nifty 500 over the same days).</p>
+      </div>
+      <div class="h-summary" id="hSummary"></div>
+      <form class="h-form" id="hForm" autocomplete="off">
+        <input name="stock" required placeholder="Stock (NSE symbol or name)" aria-label="Stock">
+        <input name="qty" required type="number" step="any" min="0" placeholder="Qty" aria-label="Quantity">
+        <input name="price" required type="number" step="any" min="0" placeholder="Buy price ₹" aria-label="Buy price">
+        <input name="date" type="date" aria-label="Buy date (optional)" title="Buy date (optional)">
+        <button class="btn-run" type="submit">Add</button>
+      </form>
+      <div class="flash" id="hFlash" hidden></div>
+      <div class="h-table-wrap">
+        <table class="h-table">
+          <thead><tr><th>Stock / lot</th><th class="n">Qty</th><th class="n">Avg / buy ₹</th><th class="n">Value</th>
+            <th class="n">Profit / loss</th><th>Details</th><th></th></tr></thead>
+          <tbody id="hRows"></tbody>
+        </table>
+      </div>
+      <p class="h-csv small muted" id="hCsv"></p>
+    </section>
   </main>
 </div>
 
@@ -78,5 +104,6 @@
 
 <script>window.EQR_COMMANDS = {{ commands_json | safe }};</script>
 <script src="/static/app.js"></script>
+<script src="/static/holdings.js"></script>
 </body>
 </html>

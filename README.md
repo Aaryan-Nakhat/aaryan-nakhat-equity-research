@@ -445,7 +445,8 @@ src/equity_research/
   analysis/    fundamental + technical analysis
   reports/     report generation + email delivery
   bot/         the command handler (app.py) + the local channel (local.py) shared by email and CLI
-  web/         the local web UI (FastAPI + plain JS, no build step)
+  web/         the local web UI (FastAPI + plain JS, no build step), incl. 💼 My holdings
+  holdings.py  your lots (qty / price / optional date) — web UI + holdings.csv, valued on the latest close
   cli.py       the `eqr` terminal command
   common/      config, storage, shared utilities
 scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py / make_samples.py /
@@ -506,6 +507,14 @@ instance on a VPS can't be used by strangers to run reports on your LLM key.
 
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.
+
+**Your holdings (quantity, buy price, optional date)** stay on your computer. Add them in the web UI's
+**💼 My holdings** page, or copy [`holdings.example.csv`](holdings.example.csv) to `holdings.csv`
+(gitignored; `HOLDINGS_CSV` moves it) — columns `symbol, qty, price, date`, and a broker's holdings export
+works as-is. One row per buy; the date is optional *per buy*: with it you also get short- / long-term
+(held over 12 months), the yearly return, split / bonus adjustment and the Nifty 500 over the same days;
+without it, profit / loss only. The file is re-read whenever it changes. To make sure it — or the
+database or `.env` — can never be committed, turn on the repo's guard once: `git config core.hooksPath .githooks`.
 
 **Tests.** `uv sync --extra dev && uv run pytest` — ~150 test cases, no network, no `.env`, no data needed
 (every fetch is mocked, every database is a throw-away). They include the forensic scores, valuation and

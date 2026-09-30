@@ -93,3 +93,20 @@ Validated on RELIANCE (2026-06-12, 373 trading days): close 1,293 below SMA20/50
   contiguous range for trustworthy early-period indicators.
 - Relative strength needs `index_close` populated for the same dates (the EOD
   backfill covers `equity_eod` only; index closes are backfilled separately).
+
+## Your holdings (`holdings.py`, `web/static/holdings.js`)
+
+- **Store:** `holding_lots` (one row per buy: symbol, qty, price, optional `buy_date`, `source` = `ui` | `csv`).
+  Adding a lot also marks the stock a *holding* in the watchlist. Local DuckDB only; nothing is sent anywhere.
+- **In:** the web UI (`GET/POST /api/holdings`, `PUT/DELETE /api/holdings/{id}`) or `holdings.csv` (headers
+  matched loosely — `symbol|instrument|stock`, `qty|quantity`, `price|avg cost|buy price`, `date|buy date`; dates
+  day-first). The file is re-imported when its mtime changes; its rows replace the last import, UI lots stay.
+  Lots from the file are read-only in the UI. Unmatched stocks / bad numbers are listed by file line.
+- **Valuation:** the latest close from `equity_eod_adj`. A dated lot is brought through every split / bonus /
+  consolidation / rights since its date (`corporate_actions.share_multiplier_since`: qty × m, price ÷ m) — so
+  enter a dated lot as you bought it. Term: long when held more than 365 days (else days left). Yearly return
+  = (close ÷ adjusted price)^(365 ÷ days) − 1, shown once held a year. Benchmark = Nifty 500 from the first close
+  on/after the buy date. Undated lots: profit / loss only.
+- **Never committed:** `holdings*.csv` (except the example) is gitignored; `.githooks/pre-commit`
+  (`git config core.hooksPath .githooks`) refuses a staged holdings file, `.duckdb` or `.env`; a test fails if
+  git ever tracks one.

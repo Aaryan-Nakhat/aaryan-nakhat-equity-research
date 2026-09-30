@@ -48,3 +48,8 @@ data/outputs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Your holdings (qty / price / date) — personal, never committed. holdings.example.csv is the template.
+holdings.csv
+holdings*.csv
+!holdings.example.csv

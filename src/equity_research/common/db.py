@@ -111,6 +111,19 @@ _SCHEMA = [
         list_type  VARCHAR DEFAULT 'holding'   -- 'holding' (owned) | 'tracking' (watching, not owned)
     )
     """,
+    # your buys — quantity, price, optional date (holdings.py); local only, never exported
+    """
+    CREATE TABLE IF NOT EXISTS holding_lots (
+        id         VARCHAR PRIMARY KEY,
+        symbol     VARCHAR,
+        name       VARCHAR,
+        qty        DOUBLE,
+        price      DOUBLE,
+        buy_date   DATE,          -- optional: with it, tax term + yearly return + split adjustment
+        source     VARCHAR,       -- 'ui' (typed in the web UI) | 'csv' (from holdings.csv)
+        added_at   TIMESTAMP
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS insider_trades (
         symbol           VARCHAR,

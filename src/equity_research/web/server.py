@@ -9,6 +9,10 @@ and the saved-report files.
     GET  /api/jobs/{id}/events       → Server-Sent Events: each event as it happens, then "end"
     GET  /api/history                → saved reports, newest first (survives restarts)
     GET  /files/{path}               → a saved report / PDF from the outputs folder
+    GET  /api/holdings               → your lots valued (re-reads holdings.csv if it changed)
+    POST /api/holdings               ← {"stock", "qty", "price", "date"?}  → the new lot
+    PUT  /api/holdings/{id}          ← {"qty", "price", "date"?}          (UI lots only)
+    DELETE /api/holdings/{id}                                             (UI lots only)
 
 Binds to localhost by default (``WEB_HOST`` / ``WEB_PORT``). Runs standalone (``serve``) or in a
 background thread of the email bot (``start_background``), so one process owns the database.
@@ -69,6 +73,13 @@ def command_catalog() -> list[dict]:
             out.append({"cmd": forms[0], "also": forms[1:],
                         "desc": re.sub(r"\*\*|__", "", desc).strip(), "section": title})
     return out
+
+
+class LotRequest(BaseModel):
+    stock: str | None = None
+    qty: float | str
+    price: float | str
+    date: str | None = None
 
 
 class JobRequest(BaseModel):
@@ -217,6 +228,42 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
         cmds = json.dumps(command_catalog(), ensure_ascii=False).replace("</", "<\\/")  # stay inside <script>
         return HTMLResponse(_templates().get_template("index.html").render(
             commands_json=cmds, auth=bool(password)))
+
+    def _holdings_call(fn):
+        from equity_research import holdings
+        from equity_research.common.db import connect
+
+        con = connect()
+        try:
+            return fn(holdings, con)
+        except KeyError:
+            raise HTTPException(404, "no such lot") from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        finally:
+            con.close()
+
+    @app.get("/api/holdings")
+    def holdings_view() -> JSONResponse:
+        def run(h, con):
+            sync = h.sync_csv(con)
+            return {**h.portfolio(con), "csv": sync}
+        return JSONResponse(json.loads(json.dumps(_holdings_call(run), default=str)))
+
+    @app.post("/api/holdings")
+    def holdings_add(req: LotRequest) -> JSONResponse:
+        lot = _holdings_call(lambda h, con: h.add_lot(con, req.stock or "", req.qty, req.price, req.date or None))
+        return JSONResponse(json.loads(json.dumps(lot, default=str)))
+
+    @app.put("/api/holdings/{lot_id}")
+    def holdings_edit(lot_id: str, req: LotRequest) -> dict:
+        _holdings_call(lambda h, con: h.update_lot(con, lot_id, req.qty, req.price, req.date or None))
+        return {"ok": True}
+
+    @app.delete("/api/holdings/{lot_id}")
+    def holdings_delete(lot_id: str) -> dict:
+        _holdings_call(lambda h, con: h.delete_lot(con, lot_id))
+        return {"ok": True}
 
     app.mount("/static", StaticFiles(directory=_WEB_DIR / "static"), name="static")
 

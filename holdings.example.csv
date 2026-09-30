@@ -1,0 +1,6 @@
+# Copy to holdings.csv (gitignored — stays on your computer) and put your own buys in.
+# One row per buy. date is optional: with it you also get short- / long-term, yearly return and the Nifty 500
+# over the same days. Symbol or company name both work. Your broker's holdings export works too.
+symbol,qty,price,date
+INFY,10,1450.00,2024-06-15
+ITC,25,410.50,
