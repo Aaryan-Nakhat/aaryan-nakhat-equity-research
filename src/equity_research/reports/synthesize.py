@@ -1273,8 +1273,10 @@ Return ONE JSON object:
     "kind": "order" | "results" | "guidance" | "capacity" | "deal" | "policy" | "management" |
             "price_target" | "rumour" | "macro" | "other",
     "companies": [{"name": "company as written", "ticker": "NSE symbol only if you are sure, else ''"}],
-    "amount_cr": number in ₹ crore if the claim states a money amount (convert lakh/crore; USD at ~₹84) else null,
-    "figure": "any other stated figure, e.g. 'profit up 40% YoY', else ''"}
+    "amount_cr": the ₹ crore value of a NEW event the claim is about — an order won, a deal, a capex or
+                 fund-raise (convert lakh/crore; USD at ~₹84) — else null. Standing totals (an order book,
+                 revenue, a market size, a target price) are NOT amounts: put them in "figure",
+    "figure": "any other stated figure, e.g. 'profit up 40% YoY', 'order book ₹73,882 cr', else ''"}
  ],
  "also_affected": [{"name": "listed Indian company", "ticker": "", "why": "one line"}],
  "hype_phrases": ["exact promotional phrases from the text, e.g. 'multibagger', 'sure shot', 'will double'"]

@@ -7,7 +7,7 @@ Pipeline (the LLM reads and judges text; every number is computed here):
    amount, the post's direction and its promotional phrases.
 3. **Resolve** every named company to a real NSE symbol (ticker + name consistency, then the normal
    name resolver); anything that doesn't resolve is listed, not guessed.
-4. **Evidence** per company: its exchange filings from the last ~60 days (numbered F1…, links kept)
+4. **Evidence** per company: its exchange filings from the last ~90 days (numbered F1…, links kept)
    and figures computed from its reported financials (numbered C1…).
 5. **Judge** each claim against that evidence only (``synthesize.reality_verify``) — confirmed / partly /
    contradicted / not found / unverifiable; a verdict citing evidence that doesn't exist is dropped.
@@ -45,7 +45,7 @@ PLEDGE_PCT = 25.0             # % of the promoter's holding pledged
 MATERIAL_REV_PCT = 5.0        # a stated amount this share of annual revenue is material
 MATERIAL_MCAP_PCT = 2.0       # …or this share of market cap
 PRICED_IN_PCT = 10.0          # moved this much vs the market since the news → largely priced in
-FILING_WINDOW_DAYS = 60
+FILING_WINDOW_DAYS = 90
 MAX_FILING_PDFS = 4           # filings read in full (the one-line listing omits amounts)
 # which filings could settle which kind of claim (matched against the filing's subject)
 _KIND_WORDS = {"order": ("order", "contract", "bagging", "award", "letter of"),

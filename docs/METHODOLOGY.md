@@ -542,7 +542,7 @@ with zero).
   companies. It adds nothing that isn't in the text.
 - **Resolve:** each company → NSE symbol by ticker-and-name consistency (`supply_chain._verify`), else the
   normal resolver only when it returns a single match; ambiguous or unknown names are listed, not guessed.
-- **Evidence (computed / fetched):** per company, filings from the last 60 days (`F1…`, with links) and computed
+- **Evidence (computed / fetched):** per company, filings from the last 90 days (`F1…`, with links) and computed
   facts (`C1…`): market cap, trailing-12-month revenue (else the last full year), the latest quarter's revenue
   and profit YoY. Up to 4 filing PDFs whose subject matches a claim's kind are attached for the model to read.
 - **Model — 🤖 LLM (`synthesize.reality_verify`, JSON):** each claim → confirmed / partly / contradicted
