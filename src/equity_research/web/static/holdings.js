@@ -82,6 +82,30 @@
     return tr;
   }
 
+  function missRow(m) {
+    const tr = document.createElement("tr");
+    tr.className = "miss";
+    tr.innerHTML = `
+      <td><b>${esc(m.name)}</b> <small class="muted">${esc(m.symbol)}</small></td>
+      <td class="n"><input type="number" step="any" min="0" placeholder="Qty" aria-label="Quantity"></td>
+      <td class="n"><input type="number" step="any" min="0" placeholder="₹ paid" aria-label="Buy price"></td>
+      <td colspan="3"><input type="date" max="${new Date().toISOString().slice(0, 10)}" aria-label="Buy date (optional)"
+        title="Buy date (optional)"></td>
+      <td class="acts"><button type="button" class="save">Save</button></td>`;
+    const [q, p, d] = tr.querySelectorAll("input");
+    const save = async () => {
+      if (!q.value || !p.value) { flash(`Enter the quantity and the price you paid for ${m.name}.`); return; }
+      try {
+        await call("POST", "/api/holdings", { stock: m.symbol, qty: q.value, price: p.value, date: d.value || null });
+        flash(`Saved ${m.name}`, true);
+        load();
+      } catch (err) { flash(err.message); }
+    };
+    $(".save", tr).addEventListener("click", save);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+    return tr;
+  }
+
   function edit(tr, l) {
     tr.innerHTML = `
       <td class="indent"><input type="date" value="${esc(l.buy_date || "")}" max="${new Date().toISOString().slice(0, 10)}"></td>
@@ -121,7 +145,16 @@
       <div><small>Stocks · lots</small><b>${t.n_stocks} · ${t.n_lots}</b></div>` : "";
     const body = $("#hRows");
     body.innerHTML = "";
-    if (!data.stocks.length) {
+    const miss = data.missing || [];
+    if (miss.length) {
+      const head = document.createElement("tr");
+      head.className = "miss-head";
+      head.innerHTML = `<td colspan="7">📝 <b>${miss.length} in your watchlist without numbers yet</b> — type how many
+        you hold and the price you paid (the date is optional; with it you also get tax and yearly return).</td>`;
+      body.append(head);
+      for (const m of miss) body.append(missRow(m));
+    }
+    if (!data.stocks.length && !miss.length) {
       body.innerHTML = `<tr><td colspan="7" class="muted blank">No holdings yet — add a buy above, or put a
         <code>holdings.csv</code> in the project folder.</td></tr>`;
     }
@@ -129,7 +162,7 @@
       const tr = document.createElement("tr");
       tr.className = "stock";
       tr.innerHTML = `
-        <td><b>${esc(s.symbol)}</b> <small class="muted">${esc(s.name)}</small></td>
+        <td><b>${esc(s.name)}</b> <small class="muted">${esc(s.symbol)}</small></td>
         <td class="n">${num(s.qty, 4)}</td>
         <td class="n">${inr(s.avg_price, 2)}</td>
         <td class="n">${s.priced ? inr(s.value) : "<span class='muted'>no price</span>"}</td>
@@ -155,15 +188,61 @@
     catch (err) { flash(`Couldn't load holdings: ${err.message}`); }
   }
 
-  $("#hForm").addEventListener("submit", async (e) => {
+  // company-name autocomplete: type any part of the name, pick from the list
+  const form = $("#hForm"), box = $("#hSuggest");
+  let picked = null, hits = [], active = -1, seq = 0;
+  const hideBox = () => { box.hidden = true; active = -1; };
+  function pickHit(i) {
+    picked = hits[i];
+    form.stock.value = picked.name;
+    hideBox();
+    form.qty.focus();
+  }
+  form.stock.addEventListener("input", async () => {
+    picked = null;
+    const v = form.stock.value.trim();
+    if (v.length < 2) return hideBox();
+    const mine = ++seq;
+    let res = [];
+    try { res = await call("GET", `/api/stocks?q=${encodeURIComponent(v)}`); } catch { return; }
+    if (mine !== seq) return;                    // a newer keystroke already asked
+    hits = res;
+    if (!hits.length) {
+      box.innerHTML = `<li class="muted">No company matches “${esc(v)}”</li>`;
+      box.hidden = false;
+      return;
+    }
+    box.innerHTML = hits.map((h, i) => `<li role="option" data-i="${i}"><b>${esc(h.name)}</b><span>${esc(h.symbol)}</span></li>`).join("");
+    box.hidden = false;
+    active = -1;
+  });
+  form.stock.addEventListener("keydown", (e) => {
+    if (box.hidden || !hits.length) return;
+    const lis = [...box.children];
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length;
+      lis.forEach((li, k) => li.setAttribute("aria-selected", String(k === active)));
+    } else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pickHit(active); }
+    else if (e.key === "Escape") hideBox();
+  });
+  box.addEventListener("mousedown", (e) => {
+    const li = e.target.closest("li[data-i]");
+    if (li) { e.preventDefault(); pickHit(Number(li.dataset.i)); }
+  });
+  form.stock.addEventListener("blur", () => setTimeout(hideBox, 150));
+
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target;
-    const btn = $("button", f);
+    const btn = $("button[type=submit]", f);
+    if (!picked && hits.length === 1) picked = hits[0];
     btn.disabled = true;
     try {
-      const lot = await call("POST", "/api/holdings", { stock: f.stock.value, qty: f.qty.value, price: f.price.value,
-        date: f.date.value || null });
-      flash(`Added ${lot.symbol} — ${num(lot.qty, 4)} @ ${inr(lot.price, 2)}`, true);
+      const lot = await call("POST", "/api/holdings", { stock: picked ? picked.symbol : f.stock.value, qty: f.qty.value,
+        price: f.price.value, date: f.date.value || null });
+      flash(`Added ${lot.name} — ${num(lot.qty, 4)} @ ${inr(lot.price, 2)}`, true);
+      picked = null; hits = [];
       f.reset();
       f.stock.focus();
       load();

@@ -511,7 +511,8 @@ The DuckDB file and all scrapes under `data/` are built locally and gitignored �
 own data store.
 
 **Your holdings (quantity, buy price, optional date)** stay on your computer. Add them in the web UI's
-**💼 My holdings** page, or copy [`holdings.example.csv`](holdings.example.csv) to `holdings.csv`
+**💼 My holdings** page — the stocks already in your watchlist are listed there by company name, so you just
+type how many you hold and what you paid; a new one is found by typing any part of its name — or copy [`holdings.example.csv`](holdings.example.csv) to `holdings.csv`
 (gitignored; `HOLDINGS_CSV` moves it) — columns `symbol, qty, price, date`, and a broker's holdings export
 works as-is. One row per buy; the date is optional *per buy*: with it you also get short- / long-term
 (held over 12 months), the yearly return, split / bonus adjustment and the Nifty 500 over the same days;

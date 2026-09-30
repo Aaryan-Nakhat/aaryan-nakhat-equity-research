@@ -10,6 +10,7 @@ and the saved-report files.
     GET  /api/history                → saved reports, newest first (survives restarts)
     GET  /files/{path}               → a saved report / PDF from the outputs folder
     GET  /api/holdings               → your lots valued (re-reads holdings.csv if it changed)
+    GET  /api/stocks?q=bharat ele    → company-name search for the add box
     POST /api/holdings               ← {"stock", "qty", "price", "date"?}  → the new lot
     PUT  /api/holdings/{id}          ← {"qty", "price", "date"?}          (UI lots only)
     DELETE /api/holdings/{id}                                             (UI lots only)
@@ -249,6 +250,10 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
             sync = h.sync_csv(con)
             return {**h.portfolio(con), "csv": sync}
         return JSONResponse(json.loads(json.dumps(_holdings_call(run), default=str)))
+
+    @app.get("/api/stocks")
+    def stocks_search(q: str = "") -> list[dict]:
+        return _holdings_call(lambda h, con: h.search(con, q))
 
     @app.post("/api/holdings")
     def holdings_add(req: LotRequest) -> JSONResponse:

@@ -81,7 +81,7 @@ def add_lot(con: duckdb.DuckDBPyConnection, stock: str, qty, price, buy_date=Non
     """Add one lot (validated). The stock also lands in the watchlist as a holding."""
     hit = _resolve(con, stock)
     if not hit:
-        raise ValueError(f"couldn't match {stock!r} to one NSE stock — use its NSE symbol")
+        raise ValueError(f"couldn't find {stock!r} — start typing the company name and pick it from the list")
     q, p = _num(qty), _num(price)
     if q <= 0 or p <= 0:
         raise ValueError("quantity and price must be above zero")
@@ -127,6 +127,34 @@ def lots(con: duckdb.DuckDBPyConnection) -> list[dict]:
     cols = ["id", "symbol", "name", "qty", "price", "buy_date", "source"]
     return [dict(zip(cols, r)) for r in con.execute(
         f"SELECT {', '.join(cols)} FROM holding_lots ORDER BY symbol, buy_date NULLS LAST, added_at").fetchall()]
+
+
+def missing(con: duckdb.DuckDBPyConnection) -> list[dict]:
+    """Stocks already in your watchlist as holdings but with no quantity yet — shown in the UI as rows to
+    fill in (qty, price, date)."""
+    rows = con.execute(
+        """SELECT w.symbol, coalesce(nullif(m.company_name, ''), nullif(w.company, ''), w.symbol) FROM watchlist w
+           LEFT JOIN equity_master m ON m.symbol = w.symbol
+           WHERE (w.list_type = 'holding' OR w.list_type IS NULL)
+             AND w.symbol NOT IN (SELECT symbol FROM holding_lots)
+           ORDER BY 2""").fetchall()
+    return [{"symbol": r[0], "name": r[1]} for r in rows]
+
+
+def search(con: duckdb.DuckDBPyConnection, q: str, limit: int = 8) -> list[dict]:
+    """Company-name search for the add box: 'bharat ele' → Bharat Electronics. Every word must appear in
+    the name (or the query is the symbol); names starting with the query rank first."""
+    words = [w for w in re.split(r"\s+", (q or "").strip().lower()) if w]
+    if not words:
+        return []
+    cond = " AND ".join(["lower(company_name) LIKE ?"] * len(words))
+    rows = con.execute(
+        f"""SELECT symbol, company_name FROM equity_master
+            WHERE ({cond}) OR upper(symbol) = ?
+            ORDER BY (upper(symbol) = ?) DESC, (lower(company_name) LIKE ?) DESC, length(company_name)
+            LIMIT ?""",
+        [f"%{w}%" for w in words] + [q.strip().upper(), q.strip().upper(), f"{q.strip().lower()}%", limit]).fetchall()
+    return [{"symbol": r[0], "name": r[1]} for r in rows]
 
 
 # ------------------------------------------------------------------ holdings.csv
@@ -261,6 +289,7 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
     for s in priced:
         s["weight_pct"] = 100 * s["value"] / value if value else None
     return {"stocks": sorted(stocks.values(), key=lambda s: -(s["value"] or 0)),
+            "missing": missing(con),
             "total": {"cost": cost, "value": value, "pnl": value - cost,
                       "pnl_pct": 100 * (value / cost - 1) if cost else None, "n_stocks": len(stocks),
                       "n_lots": len(vals), "unpriced": [s["symbol"] for s in stocks.values() if not s["priced"]]}}

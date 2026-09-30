@@ -73,7 +73,8 @@
       </div>
       <div class="h-summary" id="hSummary"></div>
       <form class="h-form" id="hForm" autocomplete="off">
-        <input name="stock" required placeholder="Stock (NSE symbol or name)" aria-label="Stock">
+        <div class="h-pick"><input name="stock" required placeholder="Company — start typing, e.g. bharat elec"
+          aria-label="Company"><ul class="suggest h-suggest" id="hSuggest" role="listbox" hidden></ul></div>
         <input name="qty" required type="number" step="any" min="0" placeholder="Qty" aria-label="Quantity">
         <input name="price" required type="number" step="any" min="0" placeholder="Buy price ₹" aria-label="Buy price">
         <input name="date" type="date" aria-label="Buy date (optional)" title="Buy date (optional)">

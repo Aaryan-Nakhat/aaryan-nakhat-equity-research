@@ -194,3 +194,12 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .h-raise input { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-width: 0; }
 .h-raise small { grid-column: 1 / -1; }
 @media (max-width: 720px) { .h-raise { grid-template-columns: 1fr auto; } .h-raise span { grid-column: 1 / -1; } }
+.h-pick { position: relative; min-width: 0; }
+.h-suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; list-style: none; margin: 0; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); max-height: 320px; overflow-y: auto; }
+.h-suggest li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.h-suggest li span { color: var(--faint); font-size: 12px; }
+.h-suggest li:hover, .h-suggest li[aria-selected="true"] { background: var(--accent-soft); }
+.h-table tr.miss-head td { background: var(--warn-soft); font-size: 13.5px; }
+.h-table tr.miss input { padding: 6px 8px; }
+.h-table tr.miss td.n input { max-width: 120px; }
+.h-table .acts button.save { border-color: var(--accent); color: var(--accent); font-weight: 600; }

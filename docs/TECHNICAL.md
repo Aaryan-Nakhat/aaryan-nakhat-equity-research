@@ -98,7 +98,9 @@ Validated on RELIANCE (2026-06-12, 373 trading days): close 1,293 below SMA20/50
 
 - **Store:** `holding_lots` (one row per buy: symbol, qty, price, optional `buy_date`, `source` = `ui` | `csv`).
   Adding a lot also marks the stock a *holding* in the watchlist. Local DuckDB only; nothing is sent anywhere.
-- **In:** the web UI (`GET/POST /api/holdings`, `PUT/DELETE /api/holdings/{id}`) or `holdings.csv` (headers
+- **In:** the web UI (`GET/POST /api/holdings`, `PUT/DELETE /api/holdings/{id}`; watchlist holdings with no
+  lot yet come back as `missing` rows to fill in; `GET /api/stocks?q=` is the company-name search — every word
+  must appear in the name, or the query is the symbol) or `holdings.csv` (headers
   matched loosely — `symbol|instrument|stock`, `qty|quantity`, `price|avg cost|buy price`, `date|buy date`; dates
   day-first). The file is re-imported when its mtime changes; its rows replace the last import, UI lots stay.
   Lots from the file are read-only in the UI. Unmatched stocks / bad numbers are listed by file line.

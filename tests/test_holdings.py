@@ -141,3 +141,20 @@ def test_no_personal_data_is_tracked_in_git():
     bad = [f for f in r.stdout.splitlines()
            if re.search(r"(^|/)(holdings[^/]*\.csv|\.env)$|\.duckdb(\.wal)?$", f) and not f.endswith("holdings.example.csv")]
     assert bad == []
+
+
+def test_search_by_company_name(con):
+    con.execute("INSERT INTO equity_master (symbol, company_name) VALUES ('BEL', 'Bharat Electronics Limited'), "
+                "('BHEL', 'Bharat Heavy Electricals Limited')")
+    assert [r["symbol"] for r in h.search(con, "bharat elec")] == ["BEL", "BHEL"]
+    assert [r["symbol"] for r in h.search(con, "heavy")] == ["BHEL"]
+    assert h.search(con, "bel")[0]["symbol"] == "BEL"                  # the exact symbol wins
+    assert h.search(con, "  ") == []
+
+
+def test_watchlist_holdings_without_numbers_are_listed_to_fill(con):
+    con.execute("INSERT INTO watchlist (symbol, company, list_type) VALUES ('ACME', 'Acme', 'holding'), "
+                "('BETA', 'Beta', 'holding'), ('GAMMA', 'Gamma', 'tracking')")
+    assert [m["name"] for m in h.missing(con)] == ["Acme Ltd", "Beta Ltd"]
+    h.add_lot(con, "ACME", 1, 100)
+    assert [m["symbol"] for m in h.portfolio(con)["missing"]] == ["BETA"]
