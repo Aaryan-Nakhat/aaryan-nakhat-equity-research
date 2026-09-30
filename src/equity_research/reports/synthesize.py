@@ -1362,66 +1362,6 @@ def reality_verify(claims: list[dict], evidence: dict[str, str], *,
     return out
 
 
-# ─────────────────────────── 📋 Corporate-Action Desk — the specifics of one action ───────────────────────────
-_CA_FIELDS = {
-    "buyback": {"method": '"tender" or "open market"', "offer_price": "₹ per share (number)",
-                "size_cr": "total buyback size in ₹ crore (number)", "record_date": "dd-Mon-yyyy",
-                "open_date": "tender window opens, dd-Mon-yyyy", "close_date": "tender window closes, dd-Mon-yyyy",
-                "small_shareholder_entitlement": "e.g. '3 shares for every 25 held' (small-shareholder category)",
-                "general_entitlement": "e.g. '1 for every 110 held' (general category)"},
-    "rights": {"issue_price": "₹ per share (number)", "face_value": "₹ (number)", "record_date": "dd-Mon-yyyy",
-               "open_date": "issue opens, dd-Mon-yyyy", "close_date": "issue closes, dd-Mon-yyyy",
-               "renunciation_last_date": "last day to trade / renounce the rights entitlements, dd-Mon-yyyy",
-               "payment_terms": "e.g. '50% on application, rest in calls'"},
-    "demerger": {"new_company": "name of the resulting company", "ratio": "e.g. '1 share of NewCo for every 1 held'",
-                 "record_date": "dd-Mon-yyyy", "listing_date": "when the new shares list, dd-Mon-yyyy",
-                 "cost_split": "how the original cost is apportioned, e.g. 'Parent 62.3% · NewCo 37.7%'"},
-}
-
-_CA_DETAILS_SYS = """You read an Indian listed company's stock-exchange filings about ONE corporate action and pull out
-its specifics. The filings are numbered F1, F2, ... (some are attached as PDFs named F1.pdf, ...). Use ONLY them —
-never what you remember. Return ONE JSON object:
-{"values": {<field>: <value>, ...}, "cite": {<field>: "F#", ...}, "note": "one plain sentence on anything a
-shareholder must know that the fields miss, else ''"}
-Include a field ONLY if a filing states it, and cite that filing. Leave out anything not stated; never estimate.
-Numbers as plain numbers (no ₹, no commas). Dates as dd-Mon-yyyy. Do not give tax treatment or advice."""
-
-
-def ca_details(kind: str, company: str, subject: str, evidence: dict[str, str], *,
-               files: list[tuple[str, bytes]] | None = None, model: str = MODEL) -> dict:
-    """📋 Corporate-Action Desk — a buyback / rights / demerger's specifics from its filings. Returns the
-    fields stated (each backed by a filing that exists) plus ``cite`` {field: F#} and ``note``. Never raises."""
-    fields = _CA_FIELDS.get(kind)
-    if not fields or not evidence:
-        return {}
-    want = "\n".join(f"- {k}: {v}" for k, v in fields.items())
-    ev = "\n".join(f"{k}: {v}" for k, v in evidence.items())
-    try:
-        raw = llm.generate(_CA_DETAILS_SYS, f"COMPANY: {company}\nACTION ({kind}): {subject}\n\nFIELDS:\n{want}\n\n"
-                           f"FILINGS:\n{ev}", json=True, files=files or None, model_name=model)
-        m = re.search(r"\{.*\}", raw or "", re.S)
-        data = json.loads(m.group(0)) if m else {}
-    except Exception:  # noqa: BLE001
-        return {}
-    vals, cite = data.get("values") or {}, data.get("cite") or {}
-    out, cites = {}, {}
-    for k in fields:
-        v, c = vals.get(k), str(cite.get(k) or "").strip().upper()
-        if v in (None, "", []) or c not in evidence:
-            continue                                  # unstated, or no real filing behind it → left out
-        if k in ("offer_price", "size_cr", "issue_price", "face_value"):
-            try:
-                v = float(str(v).replace(",", "").replace("₹", "").strip())
-            except ValueError:
-                continue
-        out[k], cites[k] = v, c
-    if out:
-        out["cite"] = cites
-    if str(data.get("note") or "").strip():
-        out["note"] = str(data["note"]).strip()
-    return out
-
-
 # ─────────────────────────── 🛡️ Thesis Guard — your reasons for owning a stock ───────────────────────────
 _THESIS_PARSE_SYS = """Someone wrote why they own (or plan to own) an Indian listed stock, and maybe their price
 rules. Turn it into CHECKS a program can re-run every evening. Return ONE JSON object:
