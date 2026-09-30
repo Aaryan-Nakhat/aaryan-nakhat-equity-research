@@ -160,6 +160,7 @@ ENABLE_KEYWORD_ALERTS = env_bool("ENABLE_KEYWORD_ALERTS", True)
 ENABLE_MAIL_HOUSEKEEPING = env_bool("ENABLE_MAIL_HOUSEKEEPING", True)
 ENABLE_SCORECARD_PUSH = env_bool("ENABLE_SCORECARD_PUSH", True)   # weekly track-record email
 ENABLE_THESIS_GUARD = env_bool("ENABLE_THESIS_GUARD", True)       # evening re-check of your theses
+ENABLE_CA_DESK = env_bool("ENABLE_CA_DESK", True)                 # daily email on new corporate actions
 
 # ── Track record (analysis/track_record.py) ──
 # Log every call (deep-report verdicts + idea-engine picks) and score it vs the Nifty 500; off → nothing

@@ -34,7 +34,7 @@ import duckdb
 
 from equity_research import scan
 from equity_research import screen_digest
-from equity_research.analysis import (accumulation, booking_risk, call_radar,
+from equity_research.analysis import (accumulation, booking_risk, ca_desk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
                                       sector_analysis, sell_advisor, smallcap, supply_chain,
@@ -42,6 +42,7 @@ from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       track_record)
 from equity_research import mail_cleanup
 from equity_research.common.db import DEFAULT_DB_PATH, connect
+from equity_research.reports import ca_brief
 from equity_research.reports import call_radar_brief
 from equity_research.reports import reality_brief
 from equity_research.reports import thesis_brief
@@ -696,6 +697,92 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _ca_query(subject: str) -> tuple[str, str] | None:
+    """📋 Corporate-Action Desk → ('all', '') or ('one', company)."""
+    s = re.sub(r"^\s*re:\s*", "", subject or "", flags=re.I).strip()
+    if re.fullmatch(r"(?:my\s+)?(?:corporate[\s-]+)?actions?(?:\s+desk)?|ca\s+desk", s, flags=re.I):
+        return ("all", "")
+    m = re.match(r"^(?:corporate[\s-]+)?actions?\s*:\s*(.+)$", s, flags=re.I)
+    return ("one", m.group(1).strip()) if m else None
+
+
+def _send_ca_desk(req: EmailRequest, scope: str, company: str) -> None:
+    con = connect()
+    try:
+        if scope == "one":
+            hit = reality_check._resolve(con, company)
+            if not hit:
+                md_ = (f"📋 Couldn't pin **{company}** to one NSE listing — send it again with the exact name or "
+                       "NSE symbol (e.g. `actions: BEL`).")
+            else:
+                acts = ca_desk.actions_for(con, hit[0], hit[1])
+                if llm.configured():
+                    for a in acts:
+                        ca_desk.enrich(con, a, ca_desk.ca._face_values(con) if a.kind == "rights" else None)
+                md_ = ca_brief.render(acts, n_holdings=1).replace("your holdings", f"{hit[1]} ({hit[0]})", 1)
+        else:
+            held = ca_desk.holdings(con)
+            if not held:
+                md_ = ("📋 No holdings yet — add what you own to the watchlist (or write a `thesis:`), and the "
+                       "desk will watch them for buybacks, rights issues, demergers and more.")
+            else:
+                md_ = ca_brief.render(ca_desk.desk(con, with_details=llm.configured()), n_holdings=len(held))
+    finally:
+        con.close()
+    emailer.send_report(_re_subject(req.subject), md_, to=req.sender,
+                        html=emailer.body_html(md_, "Corporate-Action Desk"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent corporate-action desk (%s %s) to %s", scope, company, req.sender)
+
+
+_ca_lock = threading.Lock()
+
+
+def _ca_sweep_worker() -> None:
+    """Once a trading day: email any new corporate action on your holdings (and a reminder near a deadline)."""
+    if not _ca_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        new = ca_desk.fresh(con, ca_desk.desk(con, with_details=False))
+        for a in new:
+            if a.kind in ("buyback", "rights", "demerger") and llm.configured():
+                try:
+                    ca_desk.enrich(con, a, ca_desk.ca._face_values(con) if a.kind == "rights" else None)
+                except Exception:  # noqa: BLE001
+                    log.exception("ca desk: enrich failed for %s", a.symbol)
+        scan._set_meta(con, "last_ca_sweep", datetime.now(IST).date().isoformat())
+        to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+        if new and to:
+            md_ = ca_brief.render_new(new)
+            need = sum(a.needs_action for a in new)
+            emailer.send_report(f"📋 Corporate actions — {need} need a decision" if need else
+                                f"📋 Corporate actions — {len(new)} on your holdings", md_, to=to,
+                                html=emailer.body_html(md_, "Corporate-Action Desk"))
+        log.info("corporate-action desk sweep: %d new", len(new))
+    except Exception:  # noqa: BLE001
+        log.exception("corporate-action desk sweep failed")
+    finally:
+        con.close()
+        _ca_lock.release()
+
+
+def maybe_ca_sweep() -> None:
+    """Heartbeat hook: once per trading day, after the evening scan hour, in a background thread."""
+    now = datetime.now(IST)
+    if now.hour < SCAN_HOUR or _ca_lock.locked():
+        return
+    con = connect()
+    try:
+        done = scan._meta(con, "last_ca_sweep") == now.date().isoformat()
+        has = bool(ca_desk.holdings(con))
+    finally:
+        con.close()
+    if done or not has or not scan.market_open_today():
+        return
+    threading.Thread(target=_ca_sweep_worker, name="ca-sweep", daemon=True).start()
+
+
 def _thesis_query(subject: str) -> tuple[str, str, str] | None:
     """🛡️ Thesis Guard → (action, company, text): ('list','',''), ('remove', co, ''), ('show', co, ''),
     or ('set', co, reasons). `thesis: BEL — reasons…` (the company ends at —, -, |, : or 'because')."""
@@ -1150,6 +1237,14 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "🟢 intact · 🟡 weakening · 🔴 broken; rules show 🔔 when triggered."],
         ["`thesis: <company>` · `theses` · `unthesis: <company>`",
          "The full check for one · all of them · stop tracking one."],
+    ]),
+    ("📋 Corporate-Action Desk — something's happening to a stock you own", "Emails you when one comes up.", [
+        ["`actions` (or `corporate actions`)",
+         "Buybacks, rights issues, demergers, bonuses, splits and dividends on your holdings (watchlist holdings + "
+         "thesis stocks), last 45 / next 90 days — and whether you need to act: the buyback price vs today and "
+         "the tender window; what each right is worth and what ignoring it costs; how a demerger splits your "
+         "cost. Figures from the company's filings, cited."],
+        ["`actions: <company>`", "The same for any one company, held or not."],
     ]),
     ("🏛️ Government policy radar", "", [
         ["`policy` (or `schemes`)",
@@ -2547,6 +2642,12 @@ def handle_request(req: EmailRequest) -> None:
         _send_hotlist(req)
         return
 
+    # 1e-nov-c) 📋 Corporate-Action Desk ('actions', 'actions: X')
+    cq = _ca_query(req.subject)
+    if cq:
+        _send_ca_desk(req, *cq)
+        return
+
     # 1e-nov-t) 🛡️ Thesis Guard — why you own it, re-checked ('thesis: X — reasons', 'theses', 'unthesis: X')
     tq = _thesis_query(req.subject)
     if tq:
@@ -3162,6 +3263,8 @@ def main(web_ui: bool | None = None) -> None:
                     maybe_scorecard()        # weekly track-record email
                 if config.ENABLE_THESIS_GUARD:
                     maybe_thesis_sweep()     # evening re-check of your theses (background)
+                if config.ENABLE_CA_DESK:
+                    maybe_ca_sweep()         # new corporate actions on your holdings (background)
                 if config.ENABLE_MAIL_HOUSEKEEPING:
                     maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout

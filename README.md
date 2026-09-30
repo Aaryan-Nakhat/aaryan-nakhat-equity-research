@@ -16,7 +16,7 @@
 **[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
 **[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
 **[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[Track record](#-it-keeps-score-of-itself)** ·
-**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[Thesis Guard](#%EF%B8%8F-you-bought-it-for-a-reason-is-it-still-true)** · **[How it thinks](#-how-it-thinks)** ·
+**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[Thesis Guard](#%EF%B8%8F-you-bought-it-for-a-reason-is-it-still-true)** · **[Corporate-Action Desk](#-buyback-rights-issue-demerger-on-a-stock-you-own-do-you-need-to-act)** · **[How it thinks](#-how-it-thinks)** ·
 **[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
@@ -268,6 +268,16 @@ judged from the company's recent filings and concall notes with the filing cited
 plan. Every evening it's all re-checked, and you get an email **only when something changes** — a reason
 slipping from 🟢 intact to 🟡 weakening or 🔴 broken, or a rule triggering. It answers the question forums
 won't ("should I still hold this?") with your own reasons, not a tip.
+
+## 📋 Buyback, rights issue, demerger on a stock you own? Do you need to act?
+
+`actions` — every buyback, rights issue, demerger, bonus, split and dividend on the stocks you hold, and a plain
+answer to "do I need to do anything?". A **buyback**: the offer price vs today's price, the tender window, the
+small-shareholder entitlement. A **rights issue**: what each right is worth, the last day to sell or renounce
+it, and what **ignoring it costs you** (the dilution to the ex-rights price — the one choice that loses money).
+A **demerger**: the new company, the ratio, the listing date and how your cost is split, so the parent's
+"−38% loss" in your broker app doesn't panic you. Every date and price is read from the company's own filings
+and cited. A new action on a holding gets emailed to you, with a reminder near the deadline.
 
 ## 📊 It keeps score of itself
 

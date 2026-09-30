@@ -583,6 +583,26 @@ with zero).
 - **Sweep:** once per trading day after the evening scan (background thread); the email lists only checks whose
   status changed and rules that newly triggered. It checks the person's own reasons — never a buy / sell call.
 
+## Part F4 — 📋 Corporate-Action Desk (`analysis/ca_desk.py`, `reports/ca_brief.py`)
+
+- **Holdings:** the watchlist's `holding` rows plus every stock with an active thesis.
+- **Actions (computed):** NSE's per-symbol corporate-action record, ex-dates from 45 days back to 90 ahead,
+  classified buyback · rights · demerger · bonus · split · dividend (preference / CCPS / warrant / debenture
+  subjects ignored). Buybacks and rights **need a decision**; the rest are automatic.
+- **Specifics — 🤖 LLM (`synthesize.ca_details`, JSON):** for buybacks, rights and demergers only, the company's
+  last 90 days of filings matching the action (`F#`, up to 3 PDFs attached) → offer / issue price, size, record /
+  open / close / renunciation / listing dates, entitlement ratios, new company, cost split. A value is kept only if
+  it cites a filing that exists; nothing is estimated.
+- **Maths (computed):** buyback premium = offer ÷ last close − 1. Rights: issue price = face value + the premium in
+  NSE's subject (or the filed price); value per right = close − issue; theoretical ex-rights price
+  TERP = (b × close + a × issue) ÷ (a + b) for a-for-b; cost of ignoring = 1 − TERP ÷ close. Bonus / split: the
+  share multiplier from the subject (as in the price-adjustment engine).
+- **Closed:** a buyback / rights whose filed closing date has passed — or, with no date read, whose record date
+  is > 30 days back — moves to "nothing left to do".
+- **Push:** once per trading day after the evening scan; emails only actions never sent before, plus one reminder
+  when a decision-needed action is ≤ 3 days from its ex-date. It never says whether to tender or apply, and
+  asserts no tax treatment.
+
 ## Part G — Every place the LLM is used (exhaustive)
 
 The LLM (**the configured LLM**) is used **only** here — everything else is deterministic:
@@ -605,6 +625,7 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 | Pickaxe Analyst | `synthesize.pickaxe_analyst` | demand signals (Trends + news) | durable demand themes + source index (JSON) |
 | Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ web search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
 | Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ web search) | revenue-share now→next-FY + growth, with sources (JSON) |
+| Corporate-Action Desk | `synthesize.ca_details` | one buyback / rights / demerger's filings | its dates, prices, ratios, cost split — each cited |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (exact/renamed symbol or name match in `equity_master`; group names → list; else LLM + search, validated against the master via NSE's symbol-change list) |
 
