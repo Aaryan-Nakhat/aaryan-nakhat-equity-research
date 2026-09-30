@@ -57,6 +57,13 @@ def _templates():
                        autoescape=select_autoescape(["html"]))
 
 
+def _static_version() -> str:
+    """Changes whenever a static file changes, so browsers fetch the new CSS / JS after an update
+    instead of a cached copy (``/static/app.js?v=…``)."""
+    files = (_WEB_DIR / "static").glob("*")
+    return str(max((f.stat().st_mtime_ns for f in files if f.is_file()), default=0))
+
+
 @lru_cache(maxsize=1)
 def command_catalog() -> list[dict]:
     """Every command, from the same help table the bot emails (so the UI can't drift from the real
@@ -228,7 +235,7 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
     def index() -> HTMLResponse:
         cmds = json.dumps(command_catalog(), ensure_ascii=False).replace("</", "<\\/")  # stay inside <script>
         return HTMLResponse(_templates().get_template("index.html").render(
-            commands_json=cmds, auth=bool(password)))
+            commands_json=cmds, auth=bool(password), v=_static_version()))
 
     def _holdings_call(fn):
         from equity_research import holdings
