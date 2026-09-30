@@ -193,7 +193,7 @@ news-portal / social-media rumor** — that would break the primary-only rule.
 
 | Data | Access | Notes |
 |---|---|---|
-| **Google Trends** (rising demand) | 🟡 | **No official API.** Plain-HTTP `pytrends` is 429-blocked instantly, so `scrapers/trends.py` uses the **Camoufox browser tier**: it loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata` XHRs the page fires** — `relatedsearches` → rising **"buy"** queries by consumer category (India, 3-mo), `multiline` → 12-mo interest-over-time (for the theme charts). Reaches data the direct API refuses, but Google **rate-limits by IP** → best-effort, circuit-breaker; when throttled, news + the LLM carry the pipeline. See [`SCRAPING.md`](SCRAPING.md). |
+| **Google Trends** (rising demand) | 🟡 | **No official API.** Plain-HTTP `pytrends` is 429-blocked instantly, so `scrapers/trends.py` uses the **stealth Chromium browser tier**: it loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata` XHRs the page fires** — `relatedsearches` → rising **"buy"** queries by consumer category (India, 3-mo), `multiline` → 12-mo interest-over-time (for the theme charts). Reaches data the direct API refuses, but Google **rate-limits by IP** → best-effort, circuit-breaker; when throttled, news + the LLM carry the pipeline. See [`SCRAPING.md`](SCRAPING.md). |
 | **Google News RSS** (demand-surge news) | 🟢 | `news.google.com/rss/search?q=<query>+when:<N>d` (via `social.py::google_news`) — demand-surge / sales-jump / price-hike / fastest-growing-category queries for India. The reliable leg that carries Pickaxe when Trends is throttled. |
 | **Reddit** (consumer chatter) | 🟡→🔴 | `social.py::reddit_search` — "everyone's buying", rising-price consumer chatter; same best-effort circuit-breaker as in Tailwind. |
 
@@ -205,7 +205,7 @@ news-portal / social-media rumor** — that would break the primary-only rule.
 
 | Data | Access | Notes |
 |---|---|---|
-| **AmbitionBox** (India's #1 employer-review site) | 🟡 | Company page's embedded `__NEXT_DATA__` JSON via the **browser tier** (Camoufox): overall rating, 7 sub-ratings, 1-5★ distribution, review count, **industry average** (peer benchmark), CEO. Far deeper Indian-listed coverage than Glassdoor. Entity resolution (name→right company) is guarded against namesakes. |
+| **AmbitionBox** (India's #1 employer-review site) | 🟡 | Company page's embedded `__NEXT_DATA__` JSON via the **browser tier** (stealth Chromium): overall rating, 7 sub-ratings, 1-5★ distribution, review count, **industry average** (peer benchmark), CEO. Far deeper Indian-listed coverage than Glassdoor. Entity resolution (name→right company) is guarded against namesakes. |
 | **Glassdoor** (secondary, later) | 🔴 | Thinner Indian coverage + Cloudflare/login walls; planned as a secondary cross-check only. |
 
 ## Practical takeaways for the scraping plan

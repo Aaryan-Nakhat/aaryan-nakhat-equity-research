@@ -40,6 +40,8 @@ data/outputs/
 *.parquet
 *.csv
 *.pdf
+# ...except the README's sample reports
+!docs/samples/*.pdf
 
 # OS / editor
 .DS_Store

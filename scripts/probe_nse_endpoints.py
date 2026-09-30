@@ -1,4 +1,4 @@
-"""Map which NSE /api/ endpoints are reachable via the Camoufox in-page XHR,
+"""Map which NSE /api/ endpoints are reachable via the stealth Chromium in-page XHR,
 and which derivatives data is available as a plain-HTTP archive file.
 
     uv run python scripts/probe_nse_endpoints.py
@@ -42,7 +42,7 @@ _BATCH = """async ({paths, retries, delay}) => {
 
 
 def probe_apis() -> None:
-    print("== NSE /api/ endpoints (Camoufox in-page XHR, warm=homepage) ==")
+    print("== NSE /api/ endpoints (stealth Chromium in-page XHR, warm=homepage) ==")
     captured: dict = {}
 
     def action(page):

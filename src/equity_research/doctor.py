@@ -50,9 +50,31 @@ def _email() -> Check:
                  "set IMAP_/SMTP_ credentials + EMAIL_ALLOWED_SENDERS in .env to email commands")
 
 
+def _stealth_chromium_ready() -> bool | None:
+    """Is the Chromium build the NSE browser tier (scrapling's StealthyFetcher → patchright) drives
+    installed? None when that can't be determined."""
+    import json
+    from importlib.util import find_spec
+
+    spec = find_spec("patchright")
+    if spec is None or not spec.origin:
+        return None
+    meta = Path(spec.origin).parent / "driver" / "package" / "browsers.json"
+    try:
+        revs = {b["revision"] for b in json.loads(meta.read_text())["browsers"] if b["name"] == "chromium"}
+    except (OSError, ValueError, KeyError):
+        return None
+    base = _playwright_browsers_dir()
+    return any((base / f"chromium-{r}").is_dir() for r in revs)
+
+
 def _nse() -> Check:
     on = os.environ.get("NSE_SCRAPING_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
     if on:
+        if _stealth_chromium_ready() is False:
+            return Check("fail", "NSE data", "enabled, but the browser NSE's /api needs isn't installed — "
+                         "financial statements and filings will fail to download",
+                         "uv run playwright install chromium   (Linux: add --with-deps)")
         return Check("ok", "NSE data", "enabled — financial statements, filings, ownership can be fetched")
     return Check("warn", "NSE data", "off — prices work, but financial statements / filings / "
                  "ownership can't be downloaded, so deep reports stay thin",

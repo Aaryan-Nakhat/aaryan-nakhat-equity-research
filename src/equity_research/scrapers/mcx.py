@@ -2,7 +2,7 @@
 
 MCX's market-watch data sits behind Akamai AND its JSON endpoint is gated on the
 ``X-Requested-With: XMLHttpRequest`` header (an ASP.NET AJAX check), so a plain GET
-404s. We fetch it **in-page via Camoufox** — warm the market-watch page, then run
+404s. We fetch it **in-page via stealth Chromium** — warm the market-watch page, then run
 the same ``fetch`` the page's own ``marketWatch.js`` makes — exactly the NSE pattern.
 
 We return the **near-month future** (``InstrumentName == 'FUTCOM'``, soonest expiry)

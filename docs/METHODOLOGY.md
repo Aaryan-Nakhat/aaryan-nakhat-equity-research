@@ -18,7 +18,7 @@
 ### A.1 Data sources & how they're scraped
 Scraping uses `scrapling`, in two tiers:
 - **Plain HTTP (`Fetcher`)** — archive files & JSON that aren't bot-walled.
-- **Browser tier (Camoufox / `StealthyFetcher`)** — NSE's `/api/*` sits behind Akamai Bot
+- **Browser tier (stealth Chromium / `StealthyFetcher`)** — NSE's `/api/*` sits behind Akamai Bot
   Manager; we warm a real browser session and run the request as an in-page `fetch()` XHR so
   it carries the anti-bot clearance.
 
@@ -224,7 +224,7 @@ with zero).
 - **🏢 Inside view — employee & management sentiment** (`analysis/employer_sentiment.py`,
   `scrapers/ambitionbox.py`) — a culture/governance read from **AmbitionBox** employee reviews (India's
   largest employer-review site). **Source:** the company page's embedded `__NEXT_DATA__` JSON via the
-  **browser tier** (Camoufox) — overall rating, 7 category sub-ratings, a 1-5★ distribution (→ %positive
+  **browser tier** (stealth Chromium) — overall rating, 7 category sub-ratings, a 1-5★ distribution (→ %positive
   / %detractor), review count, the **industry average**, and CEO. **Entity resolution** (a stock's name →
   the right AmbitionBox company, not a namesake) is the hard part: verified slug overrides (from
   `.env` `EMPLOYER_SLUG_OVERRIDES`, so the repo carries no specific tickers) → direct
@@ -495,7 +495,7 @@ with zero).
   the **demand-side mirror of Tailwind**, on the gold-rush *"sell the pickaxes, don't dig for gold"* principle
   (when demand for a product booms, the less-cyclical winner is often the one who *supplies* the boom — the
   feed/vaccine/ingredient/equipment maker — not the crowded end-product). A **six-stage pipeline**. **① Scout:**
-  **Google Trends** rising **"buy"** queries by consumer category — pulled via the **Camoufox browser tier**
+  **Google Trends** rising **"buy"** queries by consumer category — pulled via the **stealth Chromium browser tier**
   (`scrapers/trends.py` loads the real *explore* page and **intercepts the `widgetdata` XHRs it fires**, since
   plain-HTTP pytrends is 429-blocked; best-effort + circuit-breaker) — merged with demand-surge / price-hike
   Google News (+ Reddit). **② Demand Analyst — 🤖 LLM (`synthesize.pickaxe_analyst`, JSON):** raw signals →
@@ -602,7 +602,7 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
   confidently known, never fabricated). "No clean listed beneficiary" is a valid, un-forced answer.
 - **Pickaxe is a demand-signal idea generator, not primary data** — like Tailwind it reads *signals*
   (Google Trends + news), not filed facts. **Google Trends has no official API**: it's scraped via the
-  Camoufox browser tier and Google **rate-limits by IP**, so it's best-effort — when throttled the demand
+  stealth Chromium browser tier and Google **rate-limits by IP**, so it's best-effort — when throttled the demand
   read falls back to news/LLM (qualitative, no hard % change). Each name's **exact quant** (price / P/E-vs-
   sector / support-resistance) *is* deterministic from ingested data, but the **revenue-share (now → next
   FY) and growth projection** are **LLM/grounded estimates read from the company's own filings/concalls**,

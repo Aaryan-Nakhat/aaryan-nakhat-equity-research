@@ -1,4 +1,4 @@
-"""NSE browser-tier probe — does Camoufox (StealthyFetcher) beat Akamai?
+"""NSE browser-tier probe — does stealth Chromium (StealthyFetcher) beat Akamai?
 
 NSE's /api/ is 403 to any plain HTTP client (Akamai Bot Manager needs JS cookies).
 This tests the browser tier. Run:
@@ -23,9 +23,9 @@ def _report(label: str, r) -> None:
 
 
 def main() -> int:
-    print("NSE browser-tier probe (Camoufox / StealthyFetcher)\n")
+    print("NSE browser-tier probe (stealth Chromium / StealthyFetcher)\n")
 
-    # 1. Load the real quote page — proves Camoufox launches + solves Akamai.
+    # 1. Load the real quote page — proves stealth Chromium launches + solves Akamai.
     try:
         page = StealthyFetcher.fetch(PAGE, headless=True, network_idle=True)
         _report("get-quotes page (browser)", page)

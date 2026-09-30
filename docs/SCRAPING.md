@@ -3,6 +3,10 @@
 Empirical results from probing primary sources with `scrapling 0.4.9`. These
 **supersede the initial reasoning** in [`DATA_SOURCES.md`](DATA_SOURCES.md).
 
+> **Engine note (2026-10):** these probes ran on Camoufox (a patched Firefox). Since scrapling 0.4.1x the
+> stealth tier (`StealthyFetcher`) drives a patched **Chromium** (patchright) instead — the same Chromium build
+> `uv run playwright install chromium` installs, so no separate browser download is needed; `eqr doctor` checks it.
+
 Probe scripts: [`scripts/probe_sources.py`](../scripts/probe_sources.py) (HTTP
 tier), [`scripts/probe_nse_browser.py`](../scripts/probe_nse_browser.py) (NSE
 browser tier). Re-run anytime: `uv run python scripts/probe_sources.py`.
@@ -14,7 +18,7 @@ Date of probe: 2026-06-13 (last NSE trade date observed: 12-Jun-2026).
 | Tier | Class | Cost | Beats |
 |---|---|---|---|
 | Plain HTTP | `Fetcher` / `FetcherSession` | cheap, fast | header/cookie gating, TLS fingerprint (curl_cffi `impersonate`) |
-| Stealth browser | `StealthyFetcher` / `StealthySession` (Camoufox) | slow, heavy | JS challenges (Akamai `_abck`), real DOM |
+| Stealth browser | `StealthyFetcher` / `StealthySession` (stealth Chromium) | slow, heavy | JS challenges (Akamai `_abck`), real DOM |
 
 Install browsers once: `uv run scrapling install`.
 
@@ -48,7 +52,7 @@ Install browsers once: `uv run scrapling install`.
 ### ⚠️ NSE APIs (`www.nseindia.com/api/...`) — browser tier, partial
 - Plain HTTP (even with homepage→get-quotes cookie priming + Chrome TLS
   impersonation): **`403`**. Akamai Bot Manager needs JS-validated cookies.
-- Stealth browser (Camoufox), page loads fine (`200`, ~500 KB). Direct
+- Stealth browser (stealth Chromium), page loads fine (`200`, ~500 KB). Direct
   top-level navigation to an `/api/` URL still `403` (`sec-fetch-mode: navigate`
   is rejected for XHR-only paths).
 - **In-page `fetch()`** via `page_action` (real same-origin XHR):
@@ -56,7 +60,7 @@ Install browsers once: `uv run scrapling install`.
   - `/api/quote-equity?symbol=…` → **`403` static "Access Denied"** (path-specific
     Akamai WAF rule) — fails regardless of headers/retries, even though
     `marketStatus` passes with the *same* cookies. ❌ (hard-blocked right now)
-- **Verdict:** NSE `/api/` is reachable via Camoufox **in-page fetch** for many
+- **Verdict:** NSE `/api/` is reachable via stealth Chromium **in-page fetch** for many
   endpoints, but `quote-equity` is currently WAF-blocked. **Not a problem** — we
   get bhavcopy+delivery from the archive host and live quotes from BSE, so we
   don't depend on `quote-equity`.
@@ -68,7 +72,7 @@ Install browsers once: `uv run scrapling install`.
   nearest-expiry `NIFTY FUTIDX` row is the active GIFT Nifty. → `scrapers/nseix.py`.
 - **Nifty-50 spot prev close + India VIX** — `www.nseindia.com/api/allIndices`: this *specific* endpoint
   answers `200` JSON over plain HTTP (it isn't on the `quote-equity` WAF rule); `nse_api.live_indices`
-  (Camoufox) is the fallback if it 403s on a given morning. → `scrapers/markets_global.py::nifty_reference`.
+  (stealth Chromium) is the fallback if it 403s on a given morning. → `scrapers/markets_global.py::nifty_reference`.
 - **Overnight US/Asia indices** — Yahoo `query1.finance.yahoo.com/v8/finance/chart/{sym}`: unauthenticated
   `200` JSON (S&P/Nasdaq/Dow, Nikkei/Hang Seng). NB: Yahoo `v7/finance/quote` returns `401`, and Stooq CSV
   `404`s — use the `v8/chart` meta (`regularMarketPrice` + `chartPreviousClose`).
@@ -87,7 +91,7 @@ Install browsers once: `uv run scrapling install`.
    the page (`page_action` hook) so `sec-fetch-mode: cors` + validated `_abck`
    are sent.
 3. **`scrapling[fetchers]` extra is required** for the HTTP `Fetcher`
-   (`curl_cffi`) and the browser engines (Playwright/Camoufox). Base install
+   (`curl_cffi`) and the browser engines (Playwright/stealth Chromium). Base install
    only gives the parser.
 4. **Akamai `_abck` validation is async** — page HTML loads before XHRs are
    authorized; budget a warm-up. (Doesn't rescue `quote-equity`, but matters
@@ -100,19 +104,19 @@ Install browsers once: `uv run scrapling install`.
 | Live quote / company fundamentals / filings | **BSE** (`api.bseindia.com`) | plain HTTP |
 | EOD bhavcopy + **delivery %** | **NSE archives** (`nsearchives…`) | plain HTTP |
 | Index closes | NSE archives | plain HTTP |
-| NSE `/api/` endpoints (FII derivs, OI, etc.) | NSE (in-page `fetch` via Camoufox) | browser |
+| NSE `/api/` endpoints (FII derivs, OI, etc.) | NSE (in-page `fetch` via stealth Chromium) | browser |
 | Market status | NSE `/api/marketStatus` | browser (in-page) |
 | GIFT Nifty (implied Nifty open) | **NSE IX** (`nseix.com/api/derivatives-watch`) | plain HTTP |
 | Overnight US/Asia indices | **Yahoo** (`query1…/v8/finance/chart`) | plain HTTP |
 | Market news headlines | **Moneycontrol RSS** | plain HTTP |
 
 **Principle:** prefer the **archive-file + BSE plain-HTTP** paths (fast, robust);
-reserve the **Camoufox browser tier** only for NSE `/api/` endpoints that have no
+reserve the **stealth Chromium browser tier** only for NSE `/api/` endpoints that have no
 file equivalent. Treat `quote-equity` as unavailable for now.
 
 ## NSE `/api/` endpoint map (probed 2026-06-13)
 
-Via Camoufox in-page XHR, warm = homepage. Probe:
+Via stealth Chromium in-page XHR, warm = homepage. Probe:
 [`scripts/probe_nse_endpoints.py`](../scripts/probe_nse_endpoints.py).
 
 | Endpoint | Result | Wrapped as |
@@ -142,7 +146,7 @@ Via Camoufox in-page XHR, warm = homepage. Probe:
 
 - **MCX commodities** (gold / silver / crude) — `scrapers/mcx.py`. Live futures at
   `https://www.mcxindia.com/market-data/market-watch/GetMarketWatch?culture=en`. Two gotchas:
-  it's behind **Akamai** (so fetch **in-page via Camoufox**, NSE-style) **and** the endpoint
+  it's behind **Akamai** (so fetch **in-page via stealth Chromium**, NSE-style) **and** the endpoint
   is gated on an **`X-Requested-With: XMLHttpRequest`** header (an ASP.NET AJAX check) — a
   plain GET 404s. The payload carries 2,600+ rows; keep `InstrumentName == "FUTCOM"` (futures,
   not the `OPTFUT` option rows) and take the soonest expiry per `Symbol`.
@@ -175,7 +179,7 @@ verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
   process-lifetime circuit-breaker (`_reddit_dead`) skips it after the first block. **Twitter/X**
   (`social.py::twitter_search`) via nitter mirrors is similarly best-effort (mirrors mostly down).
 - **AmbitionBox** (`scrapers/ambitionbox.py`) — employee-review sentiment for the deep report's 🏢
-  inside view. A Next.js site behind bot protection → the **browser tier** (Camoufox) loads the company
+  inside view. A Next.js site behind bot protection → the **browser tier** (stealth Chromium) loads the company
   page and reads the structured ratings straight out of the embedded **`__NEXT_DATA__`** JSON (overall +
   7 sub-ratings + 1-5★ distribution + review count + industry average + CEO). Entity resolution (stock
   name → right company) is the hard part: verified slug overrides (`.env` `EMPLOYER_SLUG_OVERRIDES`,
@@ -186,7 +190,7 @@ verification. See [`DATA_SOURCES.md`](DATA_SOURCES.md) §10.
 - **Google Trends** (`scrapers/trends.py`) — feeds the ⛏️ Pickaxe demand radar (rising **"buy"**
   queries by consumer category + interest-over-time). Google Trends has **no official API** and
   plain-HTTP `pytrends` is **429-blocked instantly**, so this uses the **browser tier**, NSE-style:
-  Camoufox loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata`
+  stealth Chromium loads the real `trends.google.com/trends/explore` page and **intercepts the `widgetdata`
   XHR responses the page fires itself** (`relatedsearches` → rising queries, `multiline` →
   interest-over-time) — real tokens/cookies/timing, which reaches data the direct API 429s on. Google
   still **rate-limits by IP**, so it's **best-effort** with a per-process circuit-breaker

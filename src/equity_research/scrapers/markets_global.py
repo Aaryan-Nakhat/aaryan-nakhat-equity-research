@@ -10,7 +10,7 @@ pre-market email degrades gracefully rather than not sending:
   summarises into an overnight-drivers read.
 * ``nifty_reference()`` — Nifty-50 spot **previous close** (the baseline for the
   implied-gap calc) and India VIX, from NSE's ``allIndices`` feed (plain HTTP, with a
-  Camoufox fallback if Akamai blocks the plain GET that morning).
+  stealth Chromium fallback if Akamai blocks the plain GET that morning).
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ def _extract_ref(data) -> dict | None:
 
 def nifty_reference() -> dict | None:
     """Nifty-50 previous close (implied-gap baseline) + India VIX. Tries plain HTTP
-    first; falls back to the Camoufox ``allIndices`` fetch if Akamai blocks the GET.
+    first; falls back to the stealth Chromium ``allIndices`` fetch if Akamai blocks the GET.
     ``None`` if both fail."""
     try:
         ref = _extract_ref(fetch_json(_ALLIDX, headers=_NSE_HEADERS, timeout=15))

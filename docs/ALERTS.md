@@ -220,7 +220,7 @@ instead of being silently consumed. (Seeding callers — `/watch`, `populate_wat
 ## Cost / limits
 
 - Price + fundamental + accruals detection is DB-only (fast, all symbols, seconds).
-- Announcements + promoter-pledge each use **one** Camoufox session for the whole
+- Announcements + promoter-pledge each use **one** stealth Chromium session for the whole
   watchlist (batched in-page XHR per symbol); bulk/block deals are one more single
   market-wide fetch — these browser calls are the slow part of the scan.
 - The **email digest is lines-only (no PDFs)** → sends in seconds even on heavy

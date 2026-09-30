@@ -16,7 +16,7 @@ For the same system as Mermaid diagrams (request flow, the Tailwind / Pickaxe ag
 ```
                        PRIMARY SOURCES (government / exchange only)
    ┌──────────────────────────────────────────────────────────────────────────────────┐
-   │ NSE archives (plain HTTP)     NSE /api/* (Akamai → Camoufox)            MCX · FBIL   │
+   │ NSE archives (plain HTTP)     NSE /api/* (Akamai → stealth Chromium)            MCX · FBIL   │
    │ • bhavcopy + delivery%        • corporate-announcements · corp-actions  • gold/silver│
    │ • index closes                • corporates-pit (insider) · fii/dii        /crude(MCX)│
    │ • F&O / participant OI         • NextApi live quote · pledge · holidays  • USD/INR    │
@@ -262,7 +262,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
         │
         ▼  pickaxe.run_pickaxe() — the DEMAND-SIDE mirror of Tailwind, a FOUR-TIER agent pipeline:
               ① SCOUT   pickaxe._scout_signals — Google Trends rising "buy" queries by consumer
-                        category (scrapers/trends.py — the BROWSER TIER: Camoufox loads the real
+                        category (scrapers/trends.py — the BROWSER TIER: stealth Chromium loads the real
                         explore page and INTERCEPTS the widgetdata XHRs it fires, like nse_api;
                         BEST-EFFORT + circuit-broken, Google rate-limits by IP → LLM path carries it),
                         MERGED with demand-surge / price-hike Google News (+ Reddit) via scrapers/social.py

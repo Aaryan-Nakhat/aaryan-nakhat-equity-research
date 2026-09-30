@@ -2,7 +2,7 @@
 
 ``www.nseindia.com/api/*`` sits behind Akamai Bot Manager: plain HTTP gets 403
 even with primed cookies. The working pattern (validated in ``docs/SCRAPING.md``)
-is to load a real page in Camoufox — which solves the JS challenge — then run
+is to load a real page in stealth Chromium — which solves the JS challenge — then run
 ``fetch()`` **inside the page** (a same-origin XHR carrying the validated
 ``_abck`` cookie) via scrapling's ``page_action`` hook.
 
@@ -98,7 +98,7 @@ def fetch_api(
     retry_delay_ms: int = 1500,
     headless: bool = True,
 ) -> Any:
-    """Fetch an NSE ``/api/`` endpoint via Camoufox in-page XHR.
+    """Fetch an NSE ``/api/`` endpoint via stealth Chromium in-page XHR.
 
     ``path`` is the API path (e.g. ``"/api/marketStatus"``). ``warm_url`` is the
     page loaded first to solve the bot challenge — some endpoints need a matching
@@ -172,7 +172,7 @@ def large_deals() -> dict[str, list[dict]]:
 
 
 def fetch_api_multi(paths: dict[str, str], *, retries: int = 3, delay_ms: int = 1200) -> dict[str, Any]:
-    """Fetch several market-wide ``/api/`` paths in ONE Camoufox session.
+    """Fetch several market-wide ``/api/`` paths in ONE stealth Chromium session.
 
     ``paths`` maps a key -> API path; returns {key: parsed-json-or-None}. Warming
     the browser is the slow part, so batching avoids one launch per endpoint.
@@ -255,7 +255,7 @@ _BATCH_ANN = """async ({paths, retries, delay}) => {
 
 
 def corporate_announcements_batch(symbols: list[str]) -> dict[str, Any]:
-    """Fetch many symbols' announcements in ONE Camoufox session (warm page once,
+    """Fetch many symbols' announcements in ONE stealth Chromium session (warm page once,
     then in-page XHR per symbol). Returns {symbol: parsed-json-or-None}."""
     paths = {s: f"/api/corporate-announcements?index=equities&symbol={q(s)}" for s in symbols}
     captured: dict[str, Any] = {}
@@ -337,7 +337,7 @@ def promoter_pledge(symbol: str) -> dict | None:
 
 
 def promoter_pledge_batch(symbols: list[str]) -> dict[str, dict | None]:
-    """Pledge snapshot for many symbols in ONE Camoufox session (warm once)."""
+    """Pledge snapshot for many symbols in ONE stealth Chromium session (warm once)."""
     paths = {s: f"/api/corporate-pledgedata?index=equities&symbol={q(s)}" for s in symbols}
     captured: dict[str, Any] = {}
 
@@ -396,7 +396,7 @@ def insider_trades(symbol: str) -> list[dict]:
 
 
 def insider_trades_batch(symbols: list[str]) -> dict[str, list[dict]]:
-    """Insider/promoter trade disclosures for many symbols in ONE Camoufox session
+    """Insider/promoter trade disclosures for many symbols in ONE stealth Chromium session
     (warm the page once, then in-page XHR per symbol). {symbol: [rows]}."""
     paths = {s: f"/api/corporates-pit?index=equities&symbol={q(s)}" for s in symbols}
     captured: dict[str, Any] = {}
@@ -494,7 +494,7 @@ def live_quote(symbol: str) -> dict:
 
 
 def live_quotes_batch(symbols: list[str]) -> dict[str, dict]:
-    """Live quotes for many symbols in ONE Camoufox session (warm once, in-page XHR
+    """Live quotes for many symbols in ONE stealth Chromium session (warm once, in-page XHR
     per symbol). {symbol: parsed-quote-or-{}}."""
     paths = {s: _QUOTE + q(s) for s in symbols}
     captured: dict[str, Any] = {}
@@ -532,7 +532,7 @@ def _parse_sec_info(data: Any) -> dict:
 
 
 def sec_info_batch(symbols: list[str]) -> dict[str, dict]:
-    """NSE granular classification for many symbols in ONE Camoufox session.
+    """NSE granular classification for many symbols in ONE stealth Chromium session.
     {symbol: {basic_industry, industry, sector, macro}} ({} for a symbol that failed).
     Static data (industries rarely change) — a one-time/occasional backfill, not per-report."""
     paths = {s: _QUOTE + q(s) for s in symbols}

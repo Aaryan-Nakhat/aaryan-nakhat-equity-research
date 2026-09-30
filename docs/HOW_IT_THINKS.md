@@ -26,8 +26,10 @@ flowchart LR
     W --> O["Report + PDF<br/>web UI · terminal · email"]
 ```
 
-- **The model never supplies a number.** The brief it reads is already computed; it explains, it doesn't
-  calculate. With no LLM configured at all, the report still builds with every number — only the prose is missing.
+- **The model doesn't supply the analysis numbers.** The brief it reads is already computed; it explains, it doesn't
+  calculate. With no LLM configured at all, the report still builds with every number — only the prose is missing. The few forward
+  estimates it does make — an Upside Driver's ₹ impact, a Pickaxe revenue-share projection — are labelled as
+  estimates, with their sources.
 - **Ambiguity is shown, not guessed.** "hdfc" is four listed companies, so you get a list. An early version
   guessed HDFC Bank; that was the first bug a real user hit.
 - **The shape follows the business.** A bank has no EBITDA and an insurer has no working capital, so they get

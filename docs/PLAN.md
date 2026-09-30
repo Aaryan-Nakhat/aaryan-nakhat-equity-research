@@ -58,7 +58,7 @@ Prove `scrapling` can reliably pull before building on top.
 - ✅ **BSE** quotes/fundamentals: plain HTTP (`Fetcher`).
 - ✅ **NSE bhavcopy + delivery %**: plain HTTP via `nsearchives.nseindia.com`
   (archive files dodge the WAF entirely — easier than expected).
-- ⚠️ **NSE `/api/`**: browser tier (Camoufox in-page `fetch`); works for
+- ⚠️ **NSE `/api/`**: browser tier (stealth Chromium in-page `fetch`); works for
   `marketStatus` etc., but `quote-equity` is currently WAF-blocked. Not a
   blocker — BSE + archives cover our needs.
 
@@ -68,7 +68,7 @@ Prove `scrapling` can reliably pull before building on top.
   `fetch_participant_oi`, `fetch_fo_bhavcopy` (all plain HTTP).
 - `nse_api` — `fetch_api` + wrappers `fii_dii_activity`,
   `corporate_announcements`, `corporate_actions`, `option_chain_equity`
-  (Camoufox in-page XHR). NSE endpoint map in [`SCRAPING.md`](SCRAPING.md).
+  (stealth Chromium in-page XHR). NSE endpoint map in [`SCRAPING.md`](SCRAPING.md).
 - Shared `common.http` helpers (work around the `.text`-empty gotcha).
 
 **Storage built** (`common/db.py` + `ingest.py` + `scripts/ingest_eod.py`):
@@ -359,7 +359,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `bot.a
   `bot.app._send_pickaxe` + on-demand **`pickaxe`**/`demand`; pushed monthly (1st Sat ≥18:00) via
   `scan.pickaxe_due`/`mark_pickaxe`, `bot.app.maybe_pickaxe`). The **demand-side mirror of Tailwind** on
   the **gold-rush "sell the pickaxes"** principle: a **four-tier agent pipeline** — ① Scout (Google Trends
-  rising "buy" queries by consumer category via `scrapers/trends.py` — the **browser tier** (Camoufox
+  rising "buy" queries by consumer category via `scrapers/trends.py` — the **browser tier** (stealth Chromium
   loads the real explore page and **intercepts the widgetdata XHRs it fires**, like `nse_api`),
   **best-effort + circuit-breaker**, merged with demand-surge Google News + Reddit) → ② Demand Analyst (LLM
   triage → genuine **durable** demand themes, not fads; source-index-gated + co-trending confirmation) → ③
@@ -380,7 +380,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `bot.a
   → glass-bottle/crown-cap/keg makers (not the brewery); premium-smartphone surge → packaging/EMS; EV
   demand → charging/powertrain/battery-chemicals; housing premiumisation → tiles/sanitaryware/glass.
   **Honest caveat:** Google Trends has **no official API**. pytrends (plain HTTP) 429s immediately, so we
-  use the **browser tier** instead — Camoufox reaches it (proven: it pulls real interest-over-time +
+  use the **browser tier** instead — stealth Chromium reaches it (proven: it pulls real interest-over-time +
   rising "buy" queries with % change that pytrends never got past the bot wall for). But Google
   **rate-limits by IP**, so a burst of sweeps trips the circuit-breaker and Trends degrades to `[]`; then
   the **LLM/Search legs carry the pipeline** — a qualitative demand read, no hard % change. One weekly,
@@ -390,7 +390,7 @@ digest** at 12:30 IST (`scan.run_intraday_scan`/`format_intraday_digest`, `bot.a
 - **🏢 Inside view — employee & management sentiment — ✅ shipped** (`scrapers/ambitionbox.py`,
   `analysis/employer_sentiment.py`, wired into `deep_brief.build_deep_brief` after the smart-money block).
   A new deep-report section scoring **employee morale + management quality** from **AmbitionBox** reviews
-  (India's #1 employer-review site). Browser tier (Camoufox) → the page's embedded `__NEXT_DATA__` JSON
+  (India's #1 employer-review site). Browser tier (stealth Chromium) → the page's embedded `__NEXT_DATA__` JSON
   (overall + 7 sub-ratings + 1-5★ distribution + review count + **industry average** + CEO). **Scale:**
   two banded scores **A→E**, each **45% absolute / 55% peer-relative** (leans on the gap vs the company's
   own industry, per the user); **Employee Sentiment** (overall + %detractor) + **Management Quality**

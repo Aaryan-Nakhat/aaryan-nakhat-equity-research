@@ -787,7 +787,7 @@ Four **independent, best-effort** inputs (any can fail without sinking the email
   (GIFT City), the market's best lead indicator for the domestic open. Plain-HTTP JSON
   (`nseix.com/api/derivatives-watch`, **no browser needed**); we take the nearest-expiry NIFTY FUTIDX.
 - **Nifty-50 spot prev close + India VIX** (`scrapers/markets_global.py::nifty_reference`) — from NSE
-  `allIndices` (plain HTTP, Camoufox fallback if Akamai blocks). Prev close is the **implied-gap baseline**.
+  `allIndices` (plain HTTP, stealth Chromium fallback if Akamai blocks). Prev close is the **implied-gap baseline**.
 - **Overnight US/Asia indices** (`markets_global.overnight_indices`) — S&P/Nasdaq/Dow + Nikkei/Hang Seng
   from Yahoo's unauthenticated `v8/finance/chart` endpoint.
 - **Headlines** (`markets_global.market_headlines`) — Moneycontrol markets RSS (the feed emits malformed
@@ -943,7 +943,7 @@ A **four-tier agent pipeline**, each tier one job, chained (same skeleton as Tai
 1. **① Scout** (`pickaxe._scout_signals`) — **Google Trends** rising **"buy"** queries by consumer
    category (`scrapers/trends.py`) **merged with** demand-surge / price-hike **Google News** (+ Reddit, both
    via `scrapers/social.py`). Google Trends has **no official API** and plain-HTTP pytrends 429s instantly,
-   so trends.py uses the project's **browser tier** (scrapling `StealthyFetcher` / Camoufox) exactly like
+   so trends.py uses the project's **browser tier** (scrapling `StealthyFetcher` / stealth Chromium) exactly like
    `nse_api`: it loads the real *explore* page for a query and **intercepts the `widgetdata` XHR responses
    the page fires itself** to render its charts (real tokens/cookies/timing) — which reaches data pytrends
    never got past the bot wall for (proven: interest-over-time + rising "buy" queries with % change).

@@ -4,7 +4,7 @@
 #   docker compose run --rm eqr eqr demo --yes --no-serve   # first run: fetch a starter set
 #
 # Data (the DuckDB file, saved reports, logs) lives in the /data volume. Config comes from .env.
-# The heavy NSE browser tier (Camoufox) is NOT in the image by default — build with
+# The heavy NSE browser tier (stealth Chromium) is NOT in the image by default — build with
 # `--build-arg WITH_NSE_BROWSER=true` if you'll enable NSE_SCRAPING_ENABLED.
 FROM python:3.12-slim
 

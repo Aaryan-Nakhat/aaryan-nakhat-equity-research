@@ -416,7 +416,7 @@ def _text_pdf(report_md: str, title: str) -> bytes | None:
 
 # ----------------- IPO (pre-listing) -----------------
 def _ipo_list_safe(fn, *, timeout: int = config.PDF_RENDER_TIMEOUT_S):
-    """Run a browser-tier IPO list fetch under a HARD timeout so a wedged Camoufox session
+    """Run a browser-tier IPO list fetch under a HARD timeout so a wedged stealth Chromium session
     can never freeze the request loop. Returns ``None`` (== fetch failure, so the caller
     replies 'try again') on timeout or error; the healthy fetch takes ~60-90s."""
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)

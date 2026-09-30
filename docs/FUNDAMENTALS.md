@@ -18,7 +18,7 @@ Probed + validated 2026-06-13 (probe:
 
 Two steps (`scrapers/nse_financials.py`):
 
-1. **Catalog** (browser tier — Camoufox):
+1. **Catalog** (browser tier — stealth Chromium):
    `/api/corporates-financial-results?index=equities&symbol=<S>&period=Quarterly`
    → list of every result filing with `consolidated`/`audited`/`financialYear`/
    `fromDate`/`toDate` and a direct **`xbrl`** URL. (130 filings for RELIANCE.)

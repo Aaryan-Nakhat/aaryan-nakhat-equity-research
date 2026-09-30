@@ -161,7 +161,7 @@ Screeners that *find* ideas, not just analyse named ones.
   then **deep-enriched**: exact **price / P/E-vs-sector / P/B / support-resistance** from our own engines, and
   a **filing/concall-grounded revenue-share (now → next FY) + growth projection with sources**, plus a
   **Google-Trends interest chart** per theme in an attached PDF. Because that's heavy it runs as a **background
-  job** (~10-15 min) — acked instantly, the full report lands when ready. Google Trends via the Camoufox
+  job** (~10-15 min) — acked instantly, the full report lands when ready. Google Trends via the stealth Chromium
   browser tier is best-effort (no official API); when throttled the demand read is news/LLM-driven. Cached
   24h; `--latest` forces fresh.
 - **🔥 `hotlist`** — the **multi-signal confluence** screen: it runs every discovery engine (momentum ·

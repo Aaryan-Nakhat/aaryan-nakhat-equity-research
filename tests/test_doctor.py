@@ -21,3 +21,14 @@ def test_fresh_machine(tmp_path, monkeypatch, capsys):
     for fix in ("copy .env.example", "set LLM_MODEL", "NSE_SCRAPING_ENABLED=true", "eqr demo",
                 "eqr serve"):
         assert fix in out, fix
+
+
+def test_nse_enabled_without_its_browser_fails_loudly(monkeypatch):
+    from equity_research import doctor
+
+    monkeypatch.setenv("NSE_SCRAPING_ENABLED", "true")
+    monkeypatch.setattr(doctor, "_stealth_chromium_ready", lambda: False)
+    c = doctor._nse()
+    assert c.status == "fail" and "playwright install chromium" in c.fix
+    monkeypatch.setattr(doctor, "_stealth_chromium_ready", lambda: True)
+    assert doctor._nse().status == "ok"

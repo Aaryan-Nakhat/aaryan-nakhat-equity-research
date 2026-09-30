@@ -2,7 +2,7 @@
 
 AmbitionBox (Naukri / InfoEdge) is India's largest employer-review site, with far deeper coverage of
 Indian listed companies than Glassdoor. Its pages are a Next.js app behind bot protection, so — like
-``nse_api`` and ``trends`` — this uses the **browser tier** (Camoufox / ``StealthyFetcher``): it loads
+``nse_api`` and ``trends`` — this uses the **browser tier** (stealth Chromium / ``StealthyFetcher``): it loads
 the real company page and reads the structured ratings straight out of the embedded ``__NEXT_DATA__``
 JSON (overall rating, 7 category sub-ratings, a 1-5★ distribution, review count, the **industry
 average** for peer benchmarking, and the CEO name).

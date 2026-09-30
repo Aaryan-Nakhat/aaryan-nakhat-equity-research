@@ -1,10 +1,10 @@
 # 📈 aaryan-nakhat-equity-research
 
 > **Type a company name. Get the report an analyst would write** — for Indian stocks (NSE / BSE), self-hosted,
-> from primary sources only. Ask in a **local web UI**, your **terminal** or by **email**.
+> built on the exchanges' own filings. Ask in a **local web UI**, your **terminal** or by **email**.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![Data](https://img.shields.io/badge/data-primary%20%2F%20official%20only-2E7D32)
+![Data](https://img.shields.io/badge/numbers-from%20exchange%20filings-2E7D32)
 ![LLM](https://img.shields.io/badge/LLM-provider--agnostic%20(BYO)-6E56CF)
 ![Store](https://img.shields.io/badge/store-DuckDB-FFF000?logo=duckdb&logoColor=black)
 ![Delivery](https://img.shields.io/badge/UI-web%20·%20CLI%20·%20email-0088CC)
@@ -21,10 +21,14 @@
 
 ## Why it's different
 
-- **Every number is computed, not generated.** Financials come straight from exchange XBRL filings; ratios,
-  forensics, valuation and technicals are deterministic Python. The LLM reads filings and writes the argument —
-  it never supplies a figure. With no LLM configured at all, every report still builds with every number.
-- **Primary sources only** — NSE / BSE, SEBI, RBI, AMFI, PIB, company filings. No blogs, aggregators or data vendors.
+- **The analysis is computed, not generated.** Financials come straight from exchange XBRL filings; ratios,
+  forensics, valuation, ownership and technicals are deterministic Python, and with no LLM configured every report
+  still builds with all of those numbers. The LLM reads the filings and writes the argument. Where it does estimate
+  something — an Upside Driver's ₹ impact, a Pickaxe revenue-share projection, a Tailwind company's market share —
+  the report labels it as an estimate, with its source, to verify.
+- **Official data for the numbers** — NSE / BSE, SEBI, RBI, AMFI, PIB and company filings. News, Google Trends and
+  employee reviews feed only the idea engines and the inside view, and are shown as such
+  ([every source and its terms](SOURCES.md)).
 - **Shaped to the business** — a bank is read on NIM, NPAs and capital; an insurer on combined ratio, persistency
   and solvency; everyone else on the industrial statements. Not one template with "n/a" everywhere.
 - **It finds ideas, not just analyses them** — 12 screeners, a hotlist of names several screens agree on, agent
@@ -36,7 +40,7 @@
 
 | | Typical open-source AI analyst | This project |
 |---|---|---|
-| **Where the numbers come from** | The LLM reads a price / news API and writes figures into its answer | Computed in Python from exchange filings; the LLM never supplies a figure |
+| **Where the numbers come from** | The LLM reads a price / news API and writes figures into its answer | Computed in Python from exchange filings; the few LLM estimates are labelled as such |
 | **Indian market depth** | A `.NS` ticker on a global price API | NSE / BSE XBRL financials, SEBI shareholding (every >1% holder), insider trades, pledges, concall transcripts, corporate actions |
 | **Forensic checks** | Rarely | Altman Z, Beneish M, Piotroski F, accruals, Benford — tested against hand-worked values |
 | **Banks and insurers** | The same template as a manufacturer | Their own reports: NIM, NPAs, CET1 · combined ratio, persistency, solvency |
@@ -326,7 +330,7 @@ Primary data → DuckDB → deterministic analysis + signals → an LLM writes t
 **Full detail per area in [`docs/`](docs/)** ([`METHODOLOGY.md`](docs/METHODOLOGY.md) traces every metric
 source → formula → model).
 
-### 📥 Data — primary / official only (`scrapers/`)
+### 📥 Data (`scrapers/`) — every source and its terms in [SOURCES.md](SOURCES.md)
 
 - **Market** — prices, **delivery %**, F&O + participant OI, index closes (with PE/PB per index) from
   NSE archives (plain HTTP); **live intraday quotes** via NSE NextApi.
@@ -335,7 +339,9 @@ source → formula → model).
   XBRL), **insider / promoter (SEBI PIT)** trades, promoter pledge.
 - **Macro & funds** — **USD/INR** (FBIL) · near-month **gold / silver / crude** futures (MCX) ·
   **mutual-fund NAVs** (AMFI, ~14.5k schemes) · **PIB** government-policy releases.
-- Anti-bot `/api/*` solved with `scrapling` (Camoufox browser tier); everything else is plain HTTP.
+- Most data is plain-HTTP archive files. NSE's `/api/*` endpoints only answer a real browser session, so they're
+  read through a headless Chromium (`scrapling`) — **off by default**, opt-in via `NSE_SCRAPING_ENABLED`
+  after reading NSE's terms.
 
 ### 🧮 Analysis — deterministic Python (`analysis/`)
 
@@ -431,7 +437,7 @@ tests/         tests
 ## Stack
 
 - Python 3.12, `uv`
-- `scrapling` (scraping, incl. Camoufox browser tier for NSE's anti-bot `/api/`)
+- `scrapling` (scraping, incl. stealth Chromium browser tier for NSE's anti-bot `/api/`)
 - DuckDB (analytics) · pandas
 - the LLM (configured via .env — any provider) — symbol resolution + report synthesis
   Playwright Chromium + `markdown` (HTML → PDF) · SMTP email
@@ -480,7 +486,7 @@ instance on a VPS can't be used by strangers to run reports on your LLM key.
 The DuckDB file and all scrapes under `data/` are built locally and gitignored — bring your
 own data store.
 
-**Tests.** `uv sync --extra dev && uv run pytest` — ~140 tests, no network, no `.env`, no data needed
+**Tests.** `uv sync --extra dev && uv run pytest` — ~150 test cases, no network, no `.env`, no data needed
 (every fetch is mocked, every database is a throw-away). They include the forensic scores, valuation and
 smart-money cost zones checked against hand-worked numbers, split/bonus/rights/demerger price adjustment,
 bank and insurer taxonomies, name resolution and the web UI. [CI](.github/workflows/ci.yml) runs lint and the
@@ -497,7 +503,7 @@ hosted service that scrapes exchanges for others, and don't redistribute fetched
 
 ## Disclaimer
 
-Personal research tooling, **not investment advice**. It reads only primary/official sources
+Personal research tooling, **not investment advice**. It builds its numbers from official filings
 and can still be wrong; verify anything before you act on it. No warranty — see the license.
 Every emailed report and PDF carries the same disclaimer (`REPORT_DISCLAIMER`).
 

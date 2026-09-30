@@ -4,7 +4,7 @@ The demand-side analogue of the Tailwind Scout's news feed: what are Indians *se
 more of, and which product terms are *spiking*. There is **no official Google Trends API**, and a
 plain-HTTP client (pytrends) gets **HTTP 429**'d by Google's bot wall almost immediately — the same
 wall NSE's WAF throws. So this uses the project's **browser tier** (scrapling ``StealthyFetcher`` /
-Camoufox), exactly like ``scrapers/nse_api.py``: load the real Trends *explore* page for a query in
+stealth Chromium), exactly like ``scrapers/nse_api.py``: load the real Trends *explore* page for a query in
 a stealth browser (which clears the bot challenge and carries real cookies/fingerprint) and
 **intercept the ``widgetdata`` XHR responses the page fires itself** to render its charts. Those
 carry perfect tokens/timing, so they succeed where our own direct API calls 429.
