@@ -50,7 +50,7 @@ IDEA_SOURCES = ("tailwind", "pickaxe", "hotlist", "calls", "results", "screen:va
                 "screen:beaters", "screen:institutions", "screen:margins", "screen:deleverage",
                 "screen:quality", "screen:holdco", "screen:investors", "screen:smallcap",
                 "screen:technical", "screen:policy")
-SOURCE_NAMES = {"deep_report": "Deep-report verdicts", "tailwind": "💨 Tailwind", "pickaxe": "⛏️ Pickaxe",
+SOURCE_NAMES = {"deep_report": "Deep-report verdicts", "tip": "🔍 Tips you checked", "tailwind": "💨 Tailwind", "pickaxe": "⛏️ Pickaxe",
                 "hotlist": "🔥 Hotlist", "calls": "🎙️ Concalls", "results": "📈 Results Radar",
                 "screen:value": "Value", "screen:volume": "Volume breakouts",
                 "screen:beaters": "Market beaters", "screen:institutions": "Institutional buying",

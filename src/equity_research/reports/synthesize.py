@@ -1256,3 +1256,105 @@ def premarket_brief(context: str, *, model: str = MODEL) -> str | None:
         return llm.generate(_PREMARKET_SYS, context, model_name=model) or None
     except Exception:  # noqa: BLE001 — narrative is best-effort; numbers still ship
         return None
+
+
+# ─────────────────────────── 🔍 Reality Check — a post someone wants verified ───────────────────────────
+_REALITY_EXTRACT_SYS = """You read a social-media post, a forum post or a news article that someone saw about
+Indian stocks, and list what it CLAIMS so each claim can be checked against exchange filings and the
+company's reported numbers. You do not judge the claims here and you add nothing that isn't in the text.
+
+Return ONE JSON object:
+{
+ "summary": "one neutral sentence: what the post says",
+ "direction": "bullish" | "bearish" | "neutral" | "mixed"   (what it wants the reader to do),
+ "post_date": "YYYY-MM-DD" if the text states or clearly implies when it was written, else "",
+ "claims": [
+   {"text": "the claim in a short neutral paraphrase",
+    "kind": "order" | "results" | "guidance" | "capacity" | "deal" | "policy" | "management" |
+            "price_target" | "rumour" | "macro" | "other",
+    "companies": [{"name": "company as written", "ticker": "NSE symbol only if you are sure, else ''"}],
+    "amount_cr": number in ₹ crore if the claim states a money amount (convert lakh/crore; USD at ~₹84) else null,
+    "figure": "any other stated figure, e.g. 'profit up 40% YoY', else ''"}
+ ],
+ "also_affected": [{"name": "listed Indian company", "ticker": "", "why": "one line"}],
+ "hype_phrases": ["exact promotional phrases from the text, e.g. 'multibagger', 'sure shot', 'will double'"]
+}
+
+Rules: claims are specific and checkable statements (an order won, results, a capacity addition, a
+deal, a policy) — plus any price target or prediction, marked as such. At most 8 claims. `also_affected`
+is only for listed companies clearly and materially affected but not named (a supplier, a direct
+competitor, a customer) — at most 6, and [] when the link isn't clear. If the text makes no claim
+about stocks, return "claims": []."""
+
+_REALITY_VERIFY_SYS = """You check claims from a post against EVIDENCE about each company: its recent stock
+exchange filings (each numbered F1, F2, ...) and figures computed from its reported financials
+(numbered C1, C2, ...). Judge each claim ONLY from that evidence — never from what you remember.
+
+Return a JSON array, one object per claim, in the same order:
+[{"claim": <claim number>, "status": "confirmed" | "partly" | "contradicted" | "not_found" | "unverifiable",
+  "evidence": "F3" or "C1" (the single item that decides it; "" for not_found / unverifiable),
+  "note": "<= 30 words, with the actual figures, e.g. 'Filing says ₹312 cr, not ₹500 cr'"}]
+
+- confirmed: a filing (or a computed figure) says the same thing, including any stated number.
+- partly: the core event is on record (e.g. the company did disclose new orders) but a detail can't be
+  matched or differs modestly — a different client, an amount that isn't stated, a different date.
+  Say exactly what matches and what doesn't.
+- contradicted: the evidence says otherwise — including a headline figure that is materially wrong
+  (e.g. the post says profit +60%, the reported quarter shows +19%; an order "worth ₹2,000 cr" that the
+  filing puts at ₹500 cr). Off by more than about a third counts as materially wrong.
+- not_found: nothing in the evidence matches even the core event.
+- unverifiable: predictions, price targets, rumours of future events, or claims filings can't show.
+Some filings are attached as PDFs, each named after its number (e.g. "F3.pdf") — read them for the amounts
+and details the one-line listing leaves out. Cite evidence only by its number."""
+
+
+def reality_extract(text: str, *, model: str = MODEL) -> dict | None:
+    """🔍 Reality Check, step 1 — the post's claims as structured data (see ``_REALITY_EXTRACT_SYS``).
+    None on failure. Never raises."""
+    if not (text or "").strip():
+        return None
+    try:
+        raw = llm.generate(_REALITY_EXTRACT_SYS, f"POST:\n{text}", json=True, model_name=model)
+    except Exception:  # noqa: BLE001
+        return None
+    m = re.search(r"\{.*\}", raw or "", re.S)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    data["claims"] = [c for c in data.get("claims") or [] if isinstance(c, dict) and c.get("text")][:8]
+    data["also_affected"] = [a for a in data.get("also_affected") or [] if isinstance(a, dict) and a.get("name")][:6]
+    data["hype_phrases"] = [str(h) for h in data.get("hype_phrases") or [] if h][:10]
+    return data
+
+
+def reality_verify(claims: list[dict], evidence: dict[str, str], *,
+                   files: list[tuple[str, bytes]] | None = None, model: str = MODEL) -> list[dict]:
+    """🔍 Reality Check, step 2 — judge each claim from numbered evidence only. ``evidence`` maps an id
+    ("F1", "C2", …) to its text. Returns ``[{claim, status, evidence, note}]``; a status that needs
+    evidence but cites an id that doesn't exist is downgraded to not_found. Never raises."""
+    if not claims:
+        return []
+    listed = "\n".join(f"{i}. {c['text']}" for i, c in enumerate(claims, 1))
+    ev = "\n".join(f"{k}: {v}" for k, v in evidence.items()) or "(no evidence available)"
+    try:
+        raw = llm.generate(_REALITY_VERIFY_SYS, f"CLAIMS:\n{listed}\n\nEVIDENCE:\n{ev}", json=True,
+                           files=files or None, model_name=model)
+        m = re.search(r"\[.*\]", raw or "", re.S)
+        data = json.loads(m.group(0)) if m else []
+    except Exception:  # noqa: BLE001
+        data = []
+    out = []
+    for i in range(1, len(claims) + 1):
+        d = next((x for x in data if isinstance(x, dict) and str(x.get("claim")) == str(i)), {})
+        status = d.get("status") if d.get("status") in (
+            "confirmed", "partly", "contradicted", "not_found", "unverifiable") else "unverifiable"
+        cite = str(d.get("evidence") or "").strip().upper()
+        if status in ("confirmed", "partly", "contradicted") and cite not in evidence:
+            status, cite = "not_found", ""           # no real evidence behind it → not a confirmation
+        out.append({"claim": i, "status": status, "evidence": cite, "note": str(d.get("note") or "")})
+    return out

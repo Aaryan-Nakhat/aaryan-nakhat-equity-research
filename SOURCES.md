@@ -43,6 +43,7 @@ machine, from the public sources below when **you** run it.
 | **Google Trends** (`trends.google.com`) | Rising "buy" demand queries + interest-over-time (Pickaxe) | Browser intercept | No official API; automated access restricted — best-effort, rate-limited |
 | **AmbitionBox** (`ambitionbox.com`) | Employee reviews → employee/management sentiment (inside view) | Browser tier (**opt-in**) | Terms restrict automated access. **OFF by default** — see *Employer-reviews opt-in* below |
 | **Reddit / X mirrors** (`reddit.com`, nitter mirrors) | Best-effort social signal | Plain HTTP | Reddit restricts scraping; mirrors are unofficial. Off / degraded by default |
+| **Links you ask to reality-check** (news sites, `x.com` via `publish.twitter.com/oembed`, `reddit.com`) | The one post or article you asked about | Plain HTTP / X oEmbed / headless browser for Reddit | Fetched once, only on your request, for your own reading — the same as opening it in a browser; not stored or republished |
 | **XBRL** (`xbrl.org`) | Taxonomy / spec for parsing filings | Plain HTTP | Open standard |
 
 ## NSE opt-in (`NSE_SCRAPING_ENABLED`)

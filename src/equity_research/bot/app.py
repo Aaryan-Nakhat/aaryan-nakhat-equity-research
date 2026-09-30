@@ -38,10 +38,11 @@ from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
                                       sector_analysis, sell_advisor, smallcap, supply_chain,
-                                      technical, technical_screen, track_record)
+                                      reality_check, technical, technical_screen, track_record)
 from equity_research import mail_cleanup
 from equity_research.common.db import DEFAULT_DB_PATH, connect
 from equity_research.reports import call_radar_brief
+from equity_research.reports import reality_brief
 from equity_research.reports import results_brief
 from equity_research.reports import scorecard_brief
 from equity_research.reports import charts
@@ -693,6 +694,65 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _reality_query(req: EmailRequest) -> str | None:
+    """🔍 Reality Check → what to check (a link and/or text), or None. `reality check: <link>`,
+    `reality_check: …`, `reality: …`, `verify: …`, `tip: …`; with nothing after the colon, the email's
+    first body line is used (so a long link can go in the body)."""
+    m = re.match(r"^\s*(?:re:\s*)?(?:reality[\s_-]*check|reality|verify|tip)\s*[:\-]?\s*(.*)$",
+                 req.subject or "", flags=re.I | re.S)
+    if not m:
+        return None
+    arg = m.group(1).strip()
+    if not arg and not re.match(r"^\s*(?:re:\s*)?(?:reality[\s_-]*check|verify)\s*[:\-]?\s*$",
+                                req.subject or "", flags=re.I):
+        return None                                         # a bare 'tip' / 'reality' isn't a request
+    return arg or (req.body or "").strip() or None
+
+
+def _send_reality_check(req: EmailRequest, raw: str) -> None:
+    if _needs_llm(req, "Reality Check"):
+        return
+    _reply_text(req, "🔍 Got it — reading it, pulling each claim out and checking it against the "
+                     "company's exchange filings and reported numbers (~1–3 min). The verdict lands here.")
+    con = connect()
+    try:
+        res = _screen_run(lambda: reality_check.run(con, raw), timeout=config.REALITY_TIMEOUT_S)
+        if res is None:
+            _reply_text(req, "The check timed out this time — please resend it shortly.")
+            return
+        if not res.extracted:
+            why = res.post.note or "no stock claims could be read from it"
+            _reply_text(req, f"🔍 Couldn't check that — {why}. You can paste the post's text instead: "
+                             "`reality check: <the text>`.")
+            return
+        rep = reality_brief.build(res)
+        if rep["picks"]:
+            _set_pending(req, "reality", [_MenuItem(p["symbol"], p["name"]) for p in rep["picks"]])
+        _track_tip(con, res, req.subject)
+    finally:
+        con.close()
+    emailer.send_report(_re_subject(req.subject), rep["markdown"], to=req.sender,
+                        html=emailer.body_html(rep["markdown"], "Reality Check"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent reality check (%s) to %s", res.verdict[0], req.sender)
+
+
+def _track_tip(con, res, subject: str) -> None:
+    """Log the tip itself (not our call) so the scorecard can show how checked tips played out:
+    each company the post was about, long if the post was bullish, avoid if bearish."""
+    direction = (res.extracted or {}).get("direction")
+    stance = {"bullish": "long", "bearish": "avoid"}.get(direction)
+    if not stance or not track_record.enabled():
+        return
+    for co in res.companies.values():
+        try:
+            track_record.log_call(con, "tip", co.symbol, stance, "TIP " + ("↑" if stance == "long" else "↓"),
+                                  context=f"{res.verdict[0]} — {(res.extracted or {}).get('summary', '')}",
+                                  ref=res.post.url or subject)
+        except Exception:  # noqa: BLE001
+            log.exception("track record: couldn't log the tip on %s", co.symbol)
+
+
 def _scorecard_query(subject: str) -> bool:
     """True for a 📊 track-record request ('scorecard', 'track record', 'track', 'hit rate')."""
     return bool(re.match(r"^\s*(?:re:\s*)?(?:score\s*card|track(?:\s*record)?|hit\s*rates?|"
@@ -957,6 +1017,14 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "full deep report."],
         ["`pickaxe --latest`",
          "Same, but forces a brand-new live scan instead of the 24h-cached result."],
+    ]),
+    ("🔍 Reality Check — is that reel / post / article true?", "Paste a link or the text itself.", [
+        ["`reality check: <link or text>` (or `reality: …`, `verify: …`)",
+         "Reads a **news article, X post or Reddit post** (or text you paste — e.g. a reel's caption) → "
+         "each claim checked against the company's **exchange filings** and reported numbers (✅ / 🟡 / ❌ / ⚠️), "
+         "**how big** it is vs the company's revenue and market cap, whether it's **already in the price**, "
+         "**red flags** (micro-cap, thin trading, run-up, pledges, promoter selling, hype words) and a bottom "
+         "line. Reply a number → that company's deep report."],
     ]),
     ("🏛️ Government policy radar", "", [
         ["`policy` (or `schemes`)",
@@ -2352,6 +2420,12 @@ def handle_request(req: EmailRequest) -> None:
     # 1e-oct) 🔥 Hotlist — multi-signal confluence across the discovery engines ('hotlist')
     if _hotlist_query(req.subject):
         _send_hotlist(req)
+        return
+
+    # 1e-nov-a) 🔍 Reality Check — is that post / article true ('reality check: <link or text>')
+    raw = _reality_query(req)
+    if raw:
+        _send_reality_check(req, raw)
         return
 
     # 1e-nov) 📊 Scorecard — the track record of every call ('scorecard', 'track record')

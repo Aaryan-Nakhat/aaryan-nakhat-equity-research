@@ -532,6 +532,35 @@ with zero).
 
 ---
 
+## Part F2 — 🔍 Reality Check (`analysis/reality_check.py`, `scrapers/post_fetch.py`, `reports/reality_brief.py`)
+
+- **Read:** X posts via X's public oEmbed endpoint (text + date, no login); Reddit posts in the headless browser
+  (plain requests are refused); articles by plain HTTP + `trafilatura` main-text extraction, browser as fallback;
+  pasted text as-is. YouTube / Instagram are declined with a request to paste the caption.
+- **Model — 🤖 LLM (`synthesize.reality_extract`, JSON):** the post's claims (text, kind, companies, ₹ amount,
+  other figures), its direction, date, promotional phrases, and at most 6 clearly-affected unnamed listed
+  companies. It adds nothing that isn't in the text.
+- **Resolve:** each company → NSE symbol by ticker-and-name consistency (`supply_chain._verify`), else the
+  normal resolver only when it returns a single match; ambiguous or unknown names are listed, not guessed.
+- **Evidence (computed / fetched):** per company, filings from the last 60 days (`F1…`, with links) and computed
+  facts (`C1…`): market cap, trailing-12-month revenue (else the last full year), the latest quarter's revenue
+  and profit YoY. Up to 4 filing PDFs whose subject matches a claim's kind are attached for the model to read.
+- **Model — 🤖 LLM (`synthesize.reality_verify`, JSON):** each claim → confirmed / partly / contradicted
+  (incl. a headline number off by more than ~⅓) / not found / unverifiable, citing one evidence id. A status
+  that cites an id that doesn't exist is downgraded to *not found*.
+- **Size (computed):** stated ₹ amount ÷ annual revenue and ÷ market cap; ≥ 5 % of revenue or ≥ 2 % of market cap = material.
+- **Price (computed):** the stock minus the Nifty 500 over 5 and 20 sessions and since the post's date, on
+  adjusted prices; last-5-session volume ÷ the prior 60.
+- **Red flags (computed):** market cap < ₹1,000 cr · average turnover < ₹1 cr/day · ≥ +15 % vs the market in 20
+  sessions · volume ≥ 3× usual · ≥ 25 % of the promoter's shares pledged · promoter selling ≥ ₹1 cr in 90 days ·
+  promotional phrases (LLM-listed + a fixed pattern list) · a company claim with no filing behind it.
+- **Bottom line (fixed rules, `reality_check.verdict`):** any contradicted → ❌ Contradicted; only partly → 🟡
+  Partly true; confirmed & material & moved ≥ 10 % → 🟡 already moved; confirmed & material → ✅ Real and material;
+  confirmed & sized small → 🟢 Real, but small; confirmed, no amount → ✅ Confirmed — size not stated; nothing on
+  record + hype or ≥ 3 red flags → 🚩 Looks like hype; else ⚠️ Unconfirmed.
+- **Logged** to the track record as a *tip* (the post's call, not the tool's), long if the post was bullish,
+  avoid if bearish — so the scorecard shows how checked tips played out.
+
 ## Part G — Every place the LLM is used (exhaustive)
 
 The LLM (**the configured LLM**) is used **only** here — everything else is deterministic:

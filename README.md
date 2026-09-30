@@ -16,7 +16,7 @@
 **[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
 **[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
 **[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[Track record](#-it-keeps-score-of-itself)** ·
-**[How it thinks](#-how-it-thinks)** ·
+**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[How it thinks](#-how-it-thinks)** ·
 **[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
@@ -247,6 +247,17 @@ a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking ri
 **📬 Arrives by itself** (with email set up): a pre-market brief at 08:30 (GIFT Nifty implied open, overnight
 markets, FII positioning), midday and evening watchlist digests, and weekly screen, sector, Tailwind, concall and
 results pushes.
+
+## 🔍 Saw a tip in a reel, a post or the news? Check it
+
+`reality check: <link or text>` reads a **news article, an X post or a Reddit post** (or text you paste — a
+reel's caption, a WhatsApp forward) and pulls out every claim. Each one is checked against the company's
+**own exchange filings** — the filing PDFs are read for the amounts — and its reported numbers: ✅ confirmed ·
+🟡 partly true · ❌ contradicted · ⚠️ no filing found. Then: **how big** it is next to the company's revenue and
+market cap, whether the stock has **already moved**, and **red flags** (micro-cap, thin trading, a run-up,
+pledged or selling promoters, "multibagger" language) — ending in a bottom line like *Real and material*,
+*Real, but small* or *Looks like hype*. Tried on a post saying HDFC Bank's profit "jumped 60%": ❌ contradicted —
+the reported quarter shows +19%.
 
 ## 📊 It keeps score of itself
 
