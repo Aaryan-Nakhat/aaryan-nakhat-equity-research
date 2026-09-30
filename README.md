@@ -16,7 +16,7 @@
 **[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
 **[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
 **[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[Track record](#-it-keeps-score-of-itself)** ·
-**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[How it thinks](#-how-it-thinks)** ·
+**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[Thesis Guard](#%EF%B8%8F-you-bought-it-for-a-reason-is-it-still-true)** · **[How it thinks](#-how-it-thinks)** ·
 **[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
@@ -258,6 +258,16 @@ market cap, whether the stock has **already moved**, and **red flags** (micro-ca
 pledged or selling promoters, "multibagger" language) — ending in a bottom line like *Real and material*,
 *Real, but small* or *Looks like hype*. Tried on a post saying HDFC Bank's profit "jumped 60%": ❌ contradicted —
 the reported quarter shows +19%.
+
+## 🛡️ You bought it for a reason. Is it still true?
+
+`thesis: BEL — order book keeps growing, debt-free, ROE above 20%, promoters not selling; exit below 250,
+trim above 450, trail 15%` — your reasons become checks: the measurable ones (growth, margins, ROE, debt,
+promoter / mutual-fund / FII stakes, pledge, P/E) computed from filings, the rest ("order book growing")
+judged from the company's recent filings and concall notes with the filing cited. Your rules become an exit
+plan. Every evening it's all re-checked, and you get an email **only when something changes** — a reason
+slipping from 🟢 intact to 🟡 weakening or 🔴 broken, or a rule triggering. It answers the question forums
+won't ("should I still hold this?") with your own reasons, not a tip.
 
 ## 📊 It keeps score of itself
 

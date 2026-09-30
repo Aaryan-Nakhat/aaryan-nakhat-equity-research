@@ -276,6 +276,19 @@ _SCHEMA = [
         PRIMARY KEY (call_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS theses (
+        symbol        VARCHAR,     -- one thesis per company (a new one replaces the old)
+        name          VARCHAR,
+        created_at    TIMESTAMP,   -- when you wrote it (a trailing stop counts its peak from here)
+        text          VARCHAR,     -- your words, as written
+        checks_json   VARCHAR,     -- the checks and price rules they became (analysis/thesis_guard.py)
+        last_json     VARCHAR,     -- statuses at the last check, to spot what changed
+        last_checked  TIMESTAMP,
+        active        BOOLEAN,
+        PRIMARY KEY (symbol)
+    )
+    """,
     # equity_eod with every split / bonus / consolidation applied, so a price series is continuous
     # across the action: prices before an ex-date are scaled by the product of the factors of every
     # later action, volumes by its inverse. prev_close belongs to the session before its row, so it

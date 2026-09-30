@@ -1360,3 +1360,71 @@ def reality_verify(claims: list[dict], evidence: dict[str, str], *,
             status, cite = "not_found", ""           # no real evidence behind it → not a confirmation
         out.append({"claim": i, "status": status, "evidence": cite, "note": str(d.get("note") or "")})
     return out
+
+
+# ─────────────────────────── 🛡️ Thesis Guard — your reasons for owning a stock ───────────────────────────
+_THESIS_PARSE_SYS = """Someone wrote why they own (or plan to own) an Indian listed stock, and maybe their price
+rules. Turn it into CHECKS a program can re-run every evening. Return ONE JSON object:
+{"checks": [ ... ], "unclear": "one line on anything you couldn't turn into a check, else ''"}
+
+Each check is one of:
+1. {"kind": "metric", "metric": <name>, "op": ">=" | "<=" | "not_falling" | "rising", "value": number|null,
+    "because": "the words it came from"}
+   metric names ONLY from: revenue_growth (% YoY, latest quarter), profit_growth (% YoY), ebitda_margin (%),
+   net_margin (%), roe (%), roce (%), debt_to_equity (x), pe (x), promoter_holding (%), mf_holding (%),
+   fpi_holding (%), pledge (% of promoter holding).
+   Use the person's own numbers. When they're vague, use these defaults: "growing" revenue/profit →
+   ">=" 10; "low debt"/"debt-free" → debt_to_equity "<=" 0.5 (debt-free → 0.1); "high ROE/ROCE" → ">=" 15;
+   "good margins" → keep margin ">=" (current-ish level if stated, else 10); "promoters not selling" →
+   promoter_holding "not_falling"; "institutions/MFs/FIIs buying" → mf_holding or fpi_holding "rising";
+   "no pledge" → pledge "<=" 5; "cheap"/"reasonable valuation" → pe "<=" the P/E they state (skip if none).
+2. {"kind": "price", "rule": "exit_below" | "add_below" | "trim_above" | "trailing_stop", "value": number,
+    "because": ...}   (price in ₹; trailing_stop value is a % fall from the peak)
+3. {"kind": "judged", "question": "a yes/no question a filing or concall could answer, e.g. 'Is the order
+    book still growing?'", "because": ...}  — for reasons no metric above measures (orders, a product, a
+    plant, a policy, management guidance).
+One check per reason; at most 10. Don't invent reasons they didn't give."""
+
+_THESIS_JUDGE_SYS = """You re-check someone's reasons for owning a stock against EVIDENCE: the company's recent
+exchange filings (F1, F2, …) and notes/figures (C1, C2, …). Judge ONLY from that evidence.
+
+Return a JSON array, one object per question, in order:
+[{"q": <question number>, "status": "intact" | "weakening" | "broken" | "unknown",
+  "evidence": "F3" or "C1" ("" for unknown), "note": "<= 25 words with the specifics"}]
+intact = the evidence supports the reason still holding; weakening = signs it's slipping (slower, smaller,
+delayed, cautious guidance); broken = the evidence says it no longer holds; unknown = nothing relevant."""
+
+
+def thesis_parse(company: str, text: str, *, model: str = MODEL) -> dict | None:
+    """🛡️ Your reasons → structured checks (validated by ``thesis_guard._clean_checks``). None on failure."""
+    try:
+        raw = llm.generate(_THESIS_PARSE_SYS, f"COMPANY: {company}\nTHESIS: {text}", json=True, model_name=model)
+        m = re.search(r"\{.*\}", raw or "", re.S)
+        data = json.loads(m.group(0)) if m else None
+    except Exception:  # noqa: BLE001
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def thesis_judge(questions: list[str], evidence: dict[str, str], *, model: str = MODEL) -> list[dict]:
+    """🛡️ Judge the reasons no metric measures, from numbered evidence only. A status citing an id that
+    doesn't exist becomes unknown. Returns ``[{status, evidence, note}]`` in order. Never raises."""
+    if not questions:
+        return []
+    listed = "\n".join(f"{i}. {q}" for i, q in enumerate(questions, 1))
+    ev = "\n".join(f"{k}: {v}" for k, v in evidence.items()) or "(no evidence available)"
+    try:
+        raw = llm.generate(_THESIS_JUDGE_SYS, f"QUESTIONS:\n{listed}\n\nEVIDENCE:\n{ev}", json=True, model_name=model)
+        m = re.search(r"\[.*\]", raw or "", re.S)
+        data = json.loads(m.group(0)) if m else []
+    except Exception:  # noqa: BLE001
+        data = []
+    out = []
+    for i in range(1, len(questions) + 1):
+        d = next((x for x in data if isinstance(x, dict) and str(x.get("q")) == str(i)), {})
+        status = d.get("status") if d.get("status") in ("intact", "weakening", "broken", "unknown") else "unknown"
+        cite = str(d.get("evidence") or "").strip().upper()
+        if status != "unknown" and cite not in evidence:
+            status, cite = "unknown", ""
+        out.append({"status": status, "evidence": cite, "note": str(d.get("note") or "")})
+    return out

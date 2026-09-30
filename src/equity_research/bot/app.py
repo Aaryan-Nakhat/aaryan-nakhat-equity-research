@@ -38,11 +38,13 @@ from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
                                       sector_analysis, sell_advisor, smallcap, supply_chain,
-                                      reality_check, technical, technical_screen, track_record)
+                                      reality_check, technical, technical_screen, thesis_guard,
+                                      track_record)
 from equity_research import mail_cleanup
 from equity_research.common.db import DEFAULT_DB_PATH, connect
 from equity_research.reports import call_radar_brief
 from equity_research.reports import reality_brief
+from equity_research.reports import thesis_brief
 from equity_research.reports import results_brief
 from equity_research.reports import scorecard_brief
 from equity_research.reports import charts
@@ -694,6 +696,119 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+def _thesis_query(subject: str) -> tuple[str, str, str] | None:
+    """🛡️ Thesis Guard → (action, company, text): ('list','',''), ('remove', co, ''), ('show', co, ''),
+    or ('set', co, reasons). `thesis: BEL — reasons…` (the company ends at —, -, |, : or 'because')."""
+    s = re.sub(r"^\s*re:\s*", "", subject or "", flags=re.I).strip()
+    if re.fullmatch(r"(?:my\s+)?theses|thesis(?:\s+list)?", s, flags=re.I):
+        return ("list", "", "")
+    m = re.match(r"^(?:unthesis|thesis\s+remove|drop\s+thesis|stop\s+thesis)\s*[:\-]\s*(.+)$", s, flags=re.I)
+    if m:
+        return ("remove", m.group(1).strip(), "")
+    m = re.match(r"^thesis\s*[:\-]\s*(.+)$", s, flags=re.I | re.S)
+    if not m:
+        return None
+    rest = m.group(1).strip()
+    parts = re.split(r"\s+[—–|]\s+|\s+-\s+|\s*:\s+|\s+because\s+", rest, maxsplit=1, flags=re.I)
+    co, why = parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+    return ("set", co, why) if why else ("show", co, "")
+
+
+def _send_thesis(req: EmailRequest, action: str, company: str, text: str) -> None:
+    con = connect()
+    try:
+        if action == "list":
+            items = [(t, thesis_guard.check(con, t)) for t in thesis_guard.load(con)]
+            md = thesis_brief.render_list(items)
+        else:
+            hit = reality_check._resolve(con, company)
+            if not hit:
+                md = (f"🛡️ Couldn't pin **{company}** to one NSE listing — send it again with the exact name "
+                      "or NSE symbol (e.g. `thesis: BEL — …`).")
+            elif action == "remove":
+                md = (f"🛡️ Stopped tracking the thesis on **{hit[1]}**." if thesis_guard.remove(con, hit[0])
+                      else f"🛡️ There was no thesis on **{hit[1]}**.")
+            elif action == "show":
+                ts = thesis_guard.load(con, hit[0])
+                if not ts:
+                    md = (f"🛡️ No thesis on **{hit[1]}** yet — write one: `thesis: {hit[0]} — <why you own it>; "
+                          "<your rules>`.")
+                else:
+                    res = thesis_guard.check(con, ts[0], with_judge=llm.configured())
+                    thesis_guard.record(con, hit[0], res)
+                    md = thesis_brief.render_one(ts[0], res)
+            else:                                            # set
+                if _needs_llm(req, "Thesis Guard"):
+                    return
+                _reply_text(req, f"🛡️ Got it — turning your reasons for **{hit[1]}** into checks and running "
+                                 "them now (~1 min).")
+                t, unclear = thesis_guard.create(con, hit[0], hit[1], text)
+                if not t:
+                    md = (f"🛡️ Couldn't turn that into checks ({unclear}). Try naming concrete reasons — "
+                          "growth, margins, debt, promoter or institutional stakes, a product or orders — "
+                          "and rules like 'exit below 250'.")
+                else:
+                    res = thesis_guard.check(con, t)
+                    thesis_guard.record(con, hit[0], res)
+                    note = f"_Couldn't make a check out of: {unclear}_" if unclear else ""
+                    md = thesis_brief.render_one(t, res, note=note)
+    finally:
+        con.close()
+    emailer.send_report(_re_subject(req.subject), md, to=req.sender, html=emailer.body_html(md, "Thesis Guard"),
+                        in_reply_to=req.message_id, references=req.references or req.message_id)
+    log.info("sent thesis guard (%s %s) to %s", action, company, req.sender)
+
+
+_thesis_lock = threading.Lock()
+
+
+def _thesis_sweep_worker() -> None:
+    """Re-check every thesis; email only what changed. One sweep per trading day (marked at the end)."""
+    if not _thesis_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        moved = []
+        for t in thesis_guard.load(con):
+            try:
+                res = thesis_guard.check(con, t, with_judge=llm.configured())
+            except Exception:  # noqa: BLE001
+                log.exception("thesis guard: check failed for %s", t["symbol"])
+                continue
+            ch = thesis_guard.changes(t["last"], res)
+            thesis_guard.record(con, t["symbol"], res)
+            if ch:
+                moved.append((t, res, ch))
+        scan._set_meta(con, "last_thesis_sweep", datetime.now(IST).date().isoformat())
+        to = os.environ.get("REPORT_TO") or (min(ALLOWED) if ALLOWED else None)
+        if moved and to:
+            md = thesis_brief.render_changes(moved)
+            emailer.send_report(f"🛡️ Thesis Guard — {len(moved)} change(s) tonight", md, to=to,
+                                html=emailer.body_html(md, "Thesis Guard"))
+        log.info("thesis guard sweep: %d thesis(es) changed", len(moved))
+    except Exception:  # noqa: BLE001
+        log.exception("thesis guard sweep failed")
+    finally:
+        con.close()
+        _thesis_lock.release()
+
+
+def maybe_thesis_sweep() -> None:
+    """Heartbeat hook: once per trading day, after the evening scan hour, in a background thread."""
+    now = datetime.now(IST)
+    if now.hour < SCAN_HOUR or _thesis_lock.locked():
+        return
+    con = connect()
+    try:
+        done = scan._meta(con, "last_thesis_sweep") == now.date().isoformat()
+        has = con.execute("SELECT count(*) FROM theses WHERE active").fetchone()[0]
+    finally:
+        con.close()
+    if done or not has or not scan.market_open_today():
+        return
+    threading.Thread(target=_thesis_sweep_worker, name="thesis-sweep", daemon=True).start()
+
+
 def _reality_query(req: EmailRequest) -> str | None:
     """🔍 Reality Check → what to check (a link and/or text), or None. `reality check: <link>`,
     `reality_check: …`, `reality: …`, `verify: …`, `tip: …`; with nothing after the colon, the email's
@@ -1025,6 +1140,16 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
          "**how big** it is vs the company's revenue and market cap, whether it's **already in the price**, "
          "**red flags** (micro-cap, thin trading, run-up, pledges, promoter selling, hype words) and a bottom "
          "line. Reply a number → that company's deep report."],
+    ]),
+    ("🛡️ Thesis Guard — why you own it, re-checked every evening", "Emails you only when something changes.", [
+        ["`thesis: <company> — <your reasons>; <your rules>`",
+         "Write why you own a stock and, optionally, your rules — e.g. `thesis: BEL — order book keeps growing, "
+         "debt-free, promoters not selling; exit below 250, trim above 450, trail 15%`. Each reason becomes a "
+         "check computed from filings (growth, margins, ROE, debt, promoter / MF / FII stakes, pledge, P/E) or, "
+         "where no number measures it, judged from recent filings and concall notes with the filing cited. "
+         "🟢 intact · 🟡 weakening · 🔴 broken; rules show 🔔 when triggered."],
+        ["`thesis: <company>` · `theses` · `unthesis: <company>`",
+         "The full check for one · all of them · stop tracking one."],
     ]),
     ("🏛️ Government policy radar", "", [
         ["`policy` (or `schemes`)",
@@ -2422,6 +2547,12 @@ def handle_request(req: EmailRequest) -> None:
         _send_hotlist(req)
         return
 
+    # 1e-nov-t) 🛡️ Thesis Guard — why you own it, re-checked ('thesis: X — reasons', 'theses', 'unthesis: X')
+    tq = _thesis_query(req.subject)
+    if tq:
+        _send_thesis(req, *tq)
+        return
+
     # 1e-nov-a) 🔍 Reality Check — is that post / article true ('reality check: <link or text>')
     raw = _reality_query(req)
     if raw:
@@ -3029,6 +3160,8 @@ def main(web_ui: bool | None = None) -> None:
                     maybe_alert_scan()   # keyword filing-alert sweep (background)
                 if config.ENABLE_SCORECARD_PUSH:
                     maybe_scorecard()        # weekly track-record email
+                if config.ENABLE_THESIS_GUARD:
+                    maybe_thesis_sweep()     # evening re-check of your theses (background)
                 if config.ENABLE_MAIL_HOUSEKEEPING:
                     maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout

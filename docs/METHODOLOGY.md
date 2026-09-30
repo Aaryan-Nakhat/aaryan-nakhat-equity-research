@@ -561,6 +561,28 @@ with zero).
 - **Logged** to the track record as a *tip* (the post's call, not the tool's), long if the post was bullish,
   avoid if bearish — so the scorecard shows how checked tips played out.
 
+## Part F3 — 🛡️ Thesis Guard + exit plan (`analysis/thesis_guard.py`, `reports/thesis_brief.py`)
+
+- **Parse — 🤖 LLM (`synthesize.thesis_parse`, JSON):** your words → checks of three kinds, validated against a
+  fixed catalogue (`_clean_checks` drops anything else): **metric** (revenue / profit growth YoY, EBITDA / net
+  margin, ROE, ROCE, debt-to-equity, P/E, promoter / mutual-fund / FPI holding, pledge) with an operator
+  (≥, ≤, not falling, rising) and your number — vague words get stated defaults ("low debt" → D/E ≤ 0.5,
+  "growing" → ≥ 10 %); **price** rules (exit below, add below, trim above, trailing stop %); **judged**
+  questions for reasons no metric measures.
+- **Measure (computed):** quarterly metrics from `fundamentals.latest_quarters`; ROE / ROCE / D/E from the last
+  full-year filing (`quant._ratios`); P/E from `valuation.snapshot`; holdings from `shp_holders` (all promoter
+  accounts; named > 1 % holders for MFs / FPIs); pledge from `shareholding`; prices from `equity_eod_adj`.
+- **Status:** ≥ / ≤ → broken past your line, weakening within 10 % of it (or falling toward it), else intact;
+  holdings "not falling" → broken at −1 pp in a quarter, weakening at −0.25 pp; "rising" → intact if up. No data →
+  *unknown*, never a guess. The thesis is as weak as its weakest check.
+- **Judge — 🤖 LLM (`synthesize.thesis_judge`, JSON):** judged questions against the last 90 days of filings
+  (`F#`), the latest concall notes and the latest quarter (`C#`); a status citing an id that doesn't exist
+  becomes *unknown*.
+- **Rules (computed, on the close):** exit / add below, trim above; trailing stop against the highest close since
+  the thesis was written.
+- **Sweep:** once per trading day after the evening scan (background thread); the email lists only checks whose
+  status changed and rules that newly triggered. It checks the person's own reasons — never a buy / sell call.
+
 ## Part G — Every place the LLM is used (exhaustive)
 
 The LLM (**the configured LLM**) is used **only** here — everything else is deterministic:
