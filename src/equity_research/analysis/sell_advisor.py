@@ -31,11 +31,14 @@ from __future__ import annotations
 
 import logging
 import math
+from datetime import date
 
 import duckdb
 
 from equity_research import watchlist
 from equity_research.analysis import ownership, quant, screener, technical, valuation
+from equity_research.portfolio import tax
+from equity_research.portfolio.tax import tax_estimate  # re-exported: the email layer uses it
 
 log = logging.getLogger(__name__)
 
@@ -193,53 +196,46 @@ def sell_ranking(con: duckdb.DuckDBPyConnection) -> list[dict]:
 
 
 # ══════════════════════ Version B — your cost, tax and "raise ₹X" ══════════════════════
-# Needs quantities and buy prices (💼 My holdings). Indian demat sales are FIFO by law (the oldest
-# shares of a stock go first), so the choice is *which stocks and how many shares* — never which lot.
-# Tax is an estimate: STCG / LTCG at config rates + cess, short-term losses set off against any gain,
-# long-term losses against long-term gains only, the yearly LTCG exemption applied, assuming no other
-# gains booked this financial year. Undated buys: profit / loss known, tax not estimated.
-
-def tax_estimate(sales: list[dict], *, exemption: float | None = None) -> dict:
-    """``sales`` = [{gain, term: short|long|unknown}] → {st_gain, lt_gain, unknown_gain, taxable_lt,
-    exemption_used, tax}. Set-off: short-term losses against short-term gains, then long-term gains;
-    long-term losses against long-term gains only."""
-    from equity_research import config
-
-    ex = config.LTCG_EXEMPTION if exemption is None else exemption
-    st_g = sum(s["gain"] for s in sales if s["term"] == "short" and s["gain"] > 0)
-    st_l = -sum(s["gain"] for s in sales if s["term"] == "short" and s["gain"] < 0)
-    lt_g = sum(s["gain"] for s in sales if s["term"] == "long" and s["gain"] > 0)
-    lt_l = -sum(s["gain"] for s in sales if s["term"] == "long" and s["gain"] < 0)
-    unknown = sum(s["gain"] for s in sales if s["term"] == "unknown")
-    net_st = max(0.0, st_g - st_l)
-    net_lt = max(0.0, lt_g - lt_l - max(0.0, st_l - st_g))
-    taxable_lt = max(0.0, net_lt - ex)
-    tax = (config.STCG_RATE * net_st + config.LTCG_RATE * taxable_lt) * (1 + config.TAX_CESS)
-    return {"st_gain": net_st, "lt_gain": net_lt, "unknown_gain": unknown, "taxable_lt": taxable_lt,
-            "exemption_used": min(net_lt, ex), "tax": tax}
+# Built on your tax lots (portfolio/timeline.py): bonus shares are their own ₹0-cost lots dated on allotment,
+# buys up to 31-Jan-2018 are grandfathered, and the gains you've already booked this financial year count
+# (they use up the yearly exemption and can set off). Indian demat sales are FIFO by law (the oldest shares of
+# a stock go first), so the choice is *which stocks and how many shares* — never which lot. Tax is an estimate
+# (portfolio/tax.py). Undated buys: profit / loss known, tax not estimated.
 
 
-def _book(con: duckdb.DuckDBPyConnection) -> tuple[dict[str, dict], list[str]]:
-    """symbol → {name, ltp, value, lots: FIFO [{shares, cost_ps, term, buy_date, days_to_long}]} for
-    priced holdings with quantities; plus the watchlist holdings that have no quantity yet."""
-    from equity_research import holdings
+def _book(con: duckdb.DuckDBPyConnection) -> tuple[dict[str, dict], list[str], list[dict]]:
+    """symbol → {name, ltp, value, lots: FIFO [{shares, cost_ps, acquired, term, days_to_long, fmv_ps}]} for
+    priced holdings; the watchlist holdings with no quantity yet; and this year's booked gains."""
+    from equity_research import portfolio
 
+    p = portfolio.portfolio(con)
+    today = date.today()
     book = {}
-    for s in holdings.portfolio(con)["stocks"]:
+    for s in p["stocks"]:
         if not s["priced"]:
             continue
-        dated = sorted((lt for lt in s["lots"] if lt.get("buy_date")), key=lambda lt: lt["buy_date"])
+        parts = [pt for lt in s["lots"] if not lt.get("sold_out") for pt in lt["parts"]]
+        parts.sort(key=lambda pt: (pt["acquired"] or "9999", pt["kind"] == "bonus"))   # FIFO; undated last
         lots = []
-        for lt in dated + [lt for lt in s["lots"] if not lt.get("buy_date")]:   # undated: age unknown, last
-            n = int(lt["adj_qty"] + 1e-6)
+        for pt in parts:
+            n = int(pt["shares"] + 1e-6)
             if n > 0:
-                lots.append({"shares": n, "cost_ps": lt["adj_price"], "buy_date": lt.get("buy_date"),
-                             "term": lt.get("term") or "unknown", "days_to_long": lt.get("days_to_long")})
+                acq = date.fromisoformat(pt["acquired"]) if pt["acquired"] else None
+                lots.append({"shares": n, "cost_ps": pt["cost_ps"], "acquired": acq, "kind": pt["kind"],
+                             "term": tax.term(acq, today), "days_to_long": tax.days_to_long(acq, today),
+                             "fmv_ps": pt["fmv_ps"]})
         if lots:
             book[s["symbol"]] = {"name": s["name"], "ltp": s["ltp"], "lots": lots,
                                  "value": sum(x["shares"] for x in lots) * s["ltp"]}
     no_qty = [sym for sym, _ in watchlist.entries_by_type(con, "holding") if sym not in book]
-    return book, no_qty
+    return book, no_qty, portfolio.realised_this_year(p, today)
+
+
+def _gain_ps(lot: dict, ltp: float) -> float:
+    """Taxable gain per share sold at ``ltp`` (grandfathered cost for shares held since 31-Jan-2018)."""
+    if lot["term"] == "long":
+        return ltp - tax.tax_cost_ps(lot["cost_ps"], ltp, lot["acquired"], lot["fmv_ps"])
+    return ltp - lot["cost_ps"]
 
 
 def _marginal_rate(lot: dict, ltp: float, exemption_left: float) -> float:
@@ -248,21 +244,22 @@ def _marginal_rate(lot: dict, ltp: float, exemption_left: float) -> float:
     set-off), so among zero-tax choices the weaker holding goes first rather than your losers."""
     from equity_research import config
 
-    g = max(0.0, (ltp - lot["cost_ps"]) / ltp)
+    g = max(0.0, _gain_ps(lot, ltp) / ltp)
     if lot["term"] == "long":
         return 0.0 if exemption_left > 0 else g * config.LTCG_RATE
     return g * config.STCG_RATE           # short-term, and undated (assumed short-term: the cautious case)
 
 
-def _plan(book: dict, amount: float, order: str, keep: dict) -> dict:
+def _plan(book: dict, amount: float, order: str, keep: dict, booked: list[dict]) -> dict:
     """Shares to sell to raise ``amount`` at the last close. ``order`` = 'tax' (the stock whose next
     FIFO shares cost the least tax per rupee first; weaker keep score breaks ties) or 'merit' (weakest
-    keep score first)."""
+    keep score first). ``booked`` = gains already realised this financial year."""
     from equity_research import config
 
     ptr = {sym: [dict(lt) for lt in b["lots"]] for sym, b in book.items()}
     sold: dict[str, list[dict]] = {}
-    need, ex_left = amount, config.LTCG_EXEMPTION
+    need = amount
+    ex_left = max(0.0, config.LTCG_EXEMPTION - tax_estimate(booked)["lt_gain"])
     merit_order = sorted(book, key=lambda s: (keep.get(s) is None, keep.get(s) or 0, s))
     while need > 0.5:
         live = [s for s in merit_order if ptr[s]]
@@ -275,11 +272,12 @@ def _plan(book: dict, amount: float, order: str, keep: dict) -> dict:
                                           merit_order.index(s)))
         lot, ltp = ptr[sym][0], book[sym]["ltp"]
         n = min(lot["shares"], math.ceil(need / ltp))
-        if order == "tax" and lot["term"] == "long" and ltp > lot["cost_ps"] and ex_left > 0:
-            n = min(n, max(1, int(ex_left / (ltp - lot["cost_ps"]))))   # stay inside the exemption first
-        gain = n * (ltp - lot["cost_ps"])
-        sold.setdefault(sym, []).append({"shares": n, "gain": gain, "term": lot["term"],
-                                         "buy_date": lot["buy_date"], "days_to_long": lot["days_to_long"],
+        g = _gain_ps(lot, ltp)
+        if order == "tax" and lot["term"] == "long" and g > 0 and ex_left > 0:
+            n = min(n, max(1, int(ex_left / g)))                         # stay inside the exemption first
+        gain = n * g
+        sold.setdefault(sym, []).append({"shares": n, "gain": gain, "term": lot["term"], "kind": lot["kind"],
+                                         "acquired": lot["acquired"], "days_to_long": lot["days_to_long"],
                                          "proceeds": n * ltp})
         if lot["term"] == "long" and gain > 0:
             ex_left -= gain
@@ -301,7 +299,9 @@ def _plan(book: dict, amount: float, order: str, keep: dict) -> dict:
                 tips.append({"symbol": sym, "days": p["days_to_long"], "gain": p["gain"],
                              "save": p["gain"] * (config.STCG_RATE - config.LTCG_RATE) * (1 + config.TAX_CESS)})
     sales = [p for r in rows for p in r["parts"]]
-    t = tax_estimate(sales)
+    before, after = tax_estimate(booked), tax_estimate(booked + sales)
+    t = {**tax_estimate(sales), "tax": after["tax"] - before["tax"],
+         "exemption_used": after["exemption_used"] - before["exemption_used"]}
     proceeds = sum(r["proceeds"] for r in rows)
     return {"order": order, "rows": rows, "proceeds": proceeds, "short_by": max(0.0, amount - proceeds),
             "tax": t, "net": proceeds - t["tax"], "tips": tips,
@@ -310,23 +310,25 @@ def _plan(book: dict, amount: float, order: str, keep: dict) -> dict:
 
 def raise_plan(con: duckdb.DuckDBPyConnection, amount: float, ranking: list[dict] | None = None) -> dict:
     """Two ways to raise ``amount`` from your holdings: 🧾 lowest tax and 💪 weakest first (the merit
-    keep score from ``sell_ranking``). Returns {amount, book_value, plans: {tax, merit}, no_qty, same}."""
-    book, no_qty = _book(con)
+    keep score from ``sell_ranking``). Returns {amount, book_value, plans: {tax, merit}, no_qty, same,
+    booked}."""
+    book, no_qty, booked = _book(con)
     keep = {r["symbol"]: r.get("keep_score") for r in (ranking or [])}
-    plans = {o: _plan(book, amount, o, keep) for o in ("tax", "merit")} if book else {}
+    plans = {o: _plan(book, amount, o, keep, booked) for o in ("tax", "merit")} if book else {}
     same = bool(plans) and ({(r["symbol"], r["shares"]) for r in plans["tax"]["rows"]}
                             == {(r["symbol"], r["shares"]) for r in plans["merit"]["rows"]})
     return {"amount": amount, "book_value": sum(b["value"] for b in book.values()), "plans": plans,
-            "no_qty": no_qty, "same": same}
+            "no_qty": no_qty, "same": same, "booked": tax_estimate(booked) if booked else None}
 
 
 def book_summary(con: duckdb.DuckDBPyConnection) -> dict[str, dict]:
     """symbol → {value, pnl, pnl_pct, terms} for the plain `sell` table (holdings with quantities)."""
-    from equity_research import holdings
+    from equity_research import portfolio
 
     out = {}
-    for s in holdings.portfolio(con)["stocks"]:
+    for s in portfolio.portfolio(con)["stocks"]:
         if s["priced"]:
-            out[s["symbol"]] = {"value": s["value"], "pnl": s["pnl"], "pnl_pct": s["pnl_pct"],
-                                "terms": {lt.get("term") or "undated" for lt in s["lots"]}}
+            terms = {pt["term"] if pt["term"] != "unknown" else "undated"
+                     for lt in s["lots"] if not lt.get("sold_out") for pt in lt["parts"]}
+            out[s["symbol"]] = {"value": s["value"], "pnl": s["pnl"], "pnl_pct": s["pnl_pct"], "terms": terms}
     return out

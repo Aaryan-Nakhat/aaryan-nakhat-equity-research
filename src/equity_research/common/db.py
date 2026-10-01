@@ -7,6 +7,7 @@ Default DB lives under ``data/processed/`` (gitignored).
 from __future__ import annotations
 
 import os
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -111,7 +112,7 @@ _SCHEMA = [
         list_type  VARCHAR DEFAULT 'holding'   -- 'holding' (owned) | 'tracking' (watching, not owned)
     )
     """,
-    # your buys — quantity, price, optional date (holdings.py); local only, never exported
+    # your buys — quantity, price, optional date (portfolio/store.py); local only, never exported
     """
     CREATE TABLE IF NOT EXISTS holding_lots (
         id         VARCHAR PRIMARY KEY,
@@ -127,6 +128,58 @@ _SCHEMA = [
     # shares that arrived through a merger / demerger: this company's own splits / bonuses count only from here
     # (buy_date stays the original purchase — it decides the tax term)
     "ALTER TABLE holding_lots ADD COLUMN IF NOT EXISTS received DATE",
+    # your sells — FIFO-matched against your buys (portfolio/timeline.py); local only
+    """
+    CREATE TABLE IF NOT EXISTS holding_sells (
+        id         VARCHAR PRIMARY KEY,
+        symbol     VARCHAR,
+        name       VARCHAR,
+        qty        DOUBLE,        -- as sold that day (your contract note)
+        price      DOUBLE,
+        sell_date  DATE,
+        kind       VARCHAR,       -- 'sell' | 'buyback' (tendered in a buyback — taxed by its own rules)
+        source     VARCHAR,       -- 'ui' | 'csv'
+        added_at   TIMESTAMP
+    )
+    """,
+    # what you can hold beyond NSE main-board shares: ETFs, SME shares, REITs, InvITs, BSE-only shares
+    """
+    CREATE TABLE IF NOT EXISTS instruments (
+        symbol      VARCHAR PRIMARY KEY,   -- NSE symbol, or 'BSE:<scrip code>' for BSE-only shares
+        name        VARCHAR,
+        isin        VARCHAR,
+        kind        VARCHAR,               -- etf | sme | reit | invit | bse
+        updated_at  TIMESTAMP
+    )
+    """,
+    # closing prices of BSE-only shares (BSE's daily bhavcopy)
+    """
+    CREATE TABLE IF NOT EXISTS bse_prices (
+        symbol      VARCHAR,
+        trade_date  DATE,
+        close       DOUBLE,
+        PRIMARY KEY (symbol, trade_date)
+    )
+    """,
+    # the highest price of each share on 31-Jan-2018 — the grandfathered cost for older buys
+    """
+    CREATE TABLE IF NOT EXISTS fmv_2018 (
+        symbol  VARCHAR,
+        isin    VARCHAR,
+        high    DOUBLE
+    )
+    """,
+    # cash dividends per share (NSE's corporate-action record), for the stocks you hold
+    """
+    CREATE TABLE IF NOT EXISTS dividends (
+        symbol     VARCHAR,
+        ex_date    DATE,
+        amount     DOUBLE,
+        subject    VARCHAR,
+        PRIMARY KEY (symbol, ex_date, subject)
+    )
+    """,
+    "CREATE TABLE IF NOT EXISTS dividend_fetch (symbol VARCHAR PRIMARY KEY, fetched_at TIMESTAMP)",
     # companies that stopped trading (merged / delisted) — so a buy can be entered as it was made
     """
     CREATE TABLE IF NOT EXISTS former_companies (
@@ -379,12 +432,23 @@ _SCHEMA = [
 ]
 
 
+_schema_ready: set[str] = set()
+_schema_lock = threading.Lock()
+
+
 def connect(path: str | Path | None = None) -> duckdb.DuckDBPyConnection:
-    """Open (creating dirs + schema as needed) the DuckDB database."""
+    """Open (creating dirs + schema as needed) the DuckDB database. The schema is applied once per database per
+    process, under a lock — background threads opening connections at the same time would otherwise race on the
+    same DDL ("write-write conflict")."""
     db_path = Path(path) if path is not None else DEFAULT_DB_PATH
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
-    ensure_schema(con)
+    key = str(db_path.resolve())
+    if key not in _schema_ready:
+        with _schema_lock:
+            if key not in _schema_ready:
+                ensure_schema(con)
+                _schema_ready.add(key)
     return con
 
 

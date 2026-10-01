@@ -85,11 +85,18 @@
             converts it, keeping your cost and date.</li>
           <li><b>Demerger?</b> Your cost is split the way the company's own notice says (e.g. 85% stays, 15% goes to the
             new company) and you're offered the new company's shares to add with one click.</li>
-          <li><b>Why add the date:</b> short- vs long-term tax (held over 12 months), yearly return and the Nifty 500 since —
-            and <code>raise 50000</code> can then estimate the tax.</li>
+          <li><b>Sold some?</b> Click <b>Sell</b> on the stock's line (date, qty, price — tick <i>buyback</i> if you tendered
+            in one). Your oldest shares go first, as the tax rules say, and the gain lands in <b>Booked</b> below by year.</li>
+          <li><b>Bonus shares</b> appear on their own: ₹0 cost and their own date for tax (your broker averages them in —
+            the totals match). <b>Rights issue?</b> Nothing is assumed — if you subscribed, one click adds those shares.</li>
+          <li><b>Bought before Feb-2018?</b> The 31-Jan-2018 price counts as your cost for tax (grandfathering) — automatic.</li>
+          <li><b>ETFs, SME shares, REITs, InvITs and BSE-only shares</b> can be added too — type the name.</li>
+          <li><b>Why add the date:</b> short- vs long-term tax (held over 12 months), yearly return, the Nifty 500 since,
+            dividends received and XIRR — and <code>raise 50000</code> can then estimate the tax.</li>
         </ul>
       </details>
       <div class="h-summary" id="hSummary"></div>
+      <div class="h-notes" id="hNotes" hidden></div>
       <form class="h-form" id="hForm" autocomplete="off">
         <div class="h-pick"><input name="stock" required placeholder="Company — start typing, e.g. bharat elec"
           aria-label="Company"><ul class="suggest h-suggest" id="hSuggest" role="listbox" hidden></ul></div>
@@ -112,6 +119,7 @@
           <tbody id="hRows"></tbody>
         </table>
       </div>
+      <section class="h-realised" id="hRealised"></section>
       <p class="h-csv small muted" id="hCsv"></p>
     </section>
   </main>

@@ -9,11 +9,13 @@ and the saved-report files.
     GET  /api/jobs/{id}/events       → Server-Sent Events: each event as it happens, then "end"
     GET  /api/history                → saved reports, newest first (survives restarts)
     GET  /files/{path}               → a saved report / PDF from the outputs folder
-    GET  /api/holdings               → your lots valued (re-reads holdings.csv if it changed)
+    GET  /api/holdings               → your portfolio valued (re-reads holdings.csv if it changed)
     GET  /api/stocks?q=bharat ele    → company-name search for the add box
     POST /api/holdings               ← {"stock", "qty", "price", "date"?}  → the new lot
     PUT  /api/holdings/{id}          ← {"qty", "price", "date"?}          (UI lots only)
     DELETE /api/holdings/{id}                                             (UI lots only)
+    POST /api/sells                  ← {"stock", "qty", "price", "date", "kind"?: "sell" | "buyback"}
+    DELETE /api/sells/{id}                                                (UI sells only)
 
 Binds to localhost by default (``WEB_HOST`` / ``WEB_PORT``). Runs standalone (``serve``) or in a
 background thread of the email bot (``start_background``), so one process owns the database.
@@ -89,6 +91,14 @@ class LotRequest(BaseModel):
     price: float | str
     date: str | None = None
     received: str | None = None      # got these through a merger / demerger on this date
+
+
+class SellRequest(BaseModel):
+    stock: str
+    qty: float | str
+    price: float | str
+    date: str
+    kind: str = "sell"
 
 
 class JobRequest(BaseModel):
@@ -239,14 +249,14 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
             commands_json=cmds, auth=bool(password), v=_static_version()))
 
     def _holdings_call(fn):
-        from equity_research import holdings
+        from equity_research import portfolio
         from equity_research.common.db import connect
 
         con = connect()
         try:
-            return fn(holdings, con)
+            return fn(portfolio, con)
         except KeyError:
-            raise HTTPException(404, "no such lot") from None
+            raise HTTPException(404, "no such entry") from None
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         finally:
@@ -258,13 +268,23 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
             sync = h.sync_csv(con)
             return {**h.portfolio(con), "csv": sync, "how_to": h.HOW_TO_ENTER}
         out = _holdings_call(run)
-        if out.get("lookups"):                       # read any company cost-split notices in the background
-            from equity_research.analysis import demerger_costs
-            demerger_costs.lookup_missing_async(out["lookups"])
-        if out.get("merger_lookups"):                # …and how a merged company's shares were swapped
-            from equity_research.analysis import former_companies
-            former_companies.lookup_missing_async(out["merger_lookups"])
+        _start_lookups(out)
         return JSONResponse(json.loads(json.dumps(out, default=str)))
+
+    def _start_lookups(out: dict) -> None:
+        """Background reads the page is waiting on: demerger cost notices, merger terms, dividend histories,
+        the 31-Jan-2018 prices. Each runs once at a time; the page re-polls while any is pending."""
+        from equity_research.analysis import demerger_costs, former_companies
+        from equity_research.portfolio import income, tax
+
+        if out.get("lookups"):
+            demerger_costs.lookup_missing_async(out["lookups"])
+        if out.get("merger_lookups"):
+            former_companies.lookup_missing_async(out["merger_lookups"])
+        if out.get("dividend_refresh"):
+            income.refresh_async(out["dividend_refresh"])
+        if out.get("fmv_pending"):
+            tax.load_fmv_async()
 
     @app.get("/api/stocks")
     def stocks_search(q: str = "") -> list[dict]:
@@ -285,6 +305,16 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
     @app.delete("/api/holdings/{lot_id}")
     def holdings_delete(lot_id: str) -> dict:
         _holdings_call(lambda h, con: h.delete_lot(con, lot_id))
+        return {"ok": True}
+
+    @app.post("/api/sells")
+    def sells_add(req: SellRequest) -> JSONResponse:
+        sell = _holdings_call(lambda h, con: h.add_sell(con, req.stock, req.qty, req.price, req.date, kind=req.kind))
+        return JSONResponse(json.loads(json.dumps(sell, default=str)))
+
+    @app.delete("/api/sells/{sell_id}")
+    def sells_delete(sell_id: str) -> dict:
+        _holdings_call(lambda h, con: h.delete_sell(con, sell_id))
         return {"ok": True}
 
     app.mount("/static", StaticFiles(directory=_WEB_DIR / "static"), name="static")

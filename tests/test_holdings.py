@@ -8,7 +8,7 @@ from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from equity_research import holdings as h
+from equity_research import portfolio as h
 from equity_research.common import db
 
 TODAY = date(2026, 9, 30)

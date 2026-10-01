@@ -93,7 +93,7 @@ def lookup(con: duckdb.DuckDBPyConnection, symbol: str, name: str, ex_date: date
 
 
 def _resolve(con, name: str) -> tuple[str, str] | None:
-    from equity_research import holdings
+    from equity_research.portfolio import store as holdings
 
     hits = holdings.search(con, re.sub(r"\b(limited|ltd\.?|formerly.*)$", "", name, flags=re.I).strip())
     return (hits[0]["symbol"], hits[0]["name"]) if hits else None

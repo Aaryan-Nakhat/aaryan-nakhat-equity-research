@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from equity_research import holdings as h
+from equity_research import portfolio as h
 from equity_research.analysis import sell_advisor as sa
 from equity_research.common import db
 

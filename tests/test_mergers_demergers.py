@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from equity_research import holdings as h
+from equity_research import portfolio as h
 from equity_research.analysis import demerger_costs as dc
 from equity_research.analysis import former_companies as fcm
 from equity_research.common import db

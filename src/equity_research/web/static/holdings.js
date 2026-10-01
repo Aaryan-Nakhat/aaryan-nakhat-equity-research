@@ -1,11 +1,12 @@
-/* 💼 My holdings — your lots (stock · qty · buy price · optional date), valued on the latest close.
-   Lots typed here can be edited / deleted; lots from holdings.csv are edited in that file. Everything
-   stays on this machine. */
+/* 💼 My holdings — your buys and sells, valued on the latest close, with tax lots, realised gains by year,
+   dividends and XIRR (all worked out server-side, portfolio/). Entries typed here can be edited / deleted;
+   entries from holdings.csv are changed in that file. Everything stays on this machine. */
 (() => {
   "use strict";
 
   const $ = (sel, el = document) => el.querySelector(sel);
   const panel = $("#holdings"), feed = $("#feed"), empty = $("#empty");
+  const TODAY = new Date().toISOString().slice(0, 10);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const inr = (n, d = 0) => n == null ? "—" : (n < 0 ? "−₹" : "₹") + Math.abs(Number(n)).toLocaleString("en-IN",
@@ -15,6 +16,7 @@
   const tone = (n) => n == null ? "" : n >= 0 ? "up" : "down";
   const fmtDate = (iso) => iso ? new Date(`${iso}T00:00`).toLocaleDateString("en-IN",
     { day: "2-digit", month: "short", year: "numeric" }) : "";
+  const KIND = { etf: "ETF", sme: "SME", reit: "REIT", invit: "InvIT", bse: "BSE only", former: "merged / delisted" };
 
   async function call(method, path, body) {
     const res = await fetch(path, { method, headers: { "Content-Type": "application/json" },
@@ -26,25 +28,31 @@
     return res.json();
   }
 
+  function flash(msg, ok = false) {
+    const f = $("#hFlash");
+    f.className = ok ? "flash ok" : "flash err";
+    f.textContent = msg;
+    f.hidden = false;
+    clearTimeout(flash.t);
+    flash.t = setTimeout(() => { f.hidden = true; }, ok ? 3000 : 8000);
+  }
+
   // ── show / hide ─────────────────────────────────────────────────────────────
   function open() {
     panel.hidden = false; feed.hidden = true; empty.hidden = true;
-    document.body.classList.add("on-holdings");
     load();
   }
   function close() {
     if (panel.hidden) return;
     panel.hidden = true; feed.hidden = false;
     empty.hidden = feed.children.length > 0;
-    document.body.classList.remove("on-holdings");
   }
   $("#holdingsBtn").addEventListener("click", open);
-  // any command / new question goes back to the research feed
-  $("#ask").addEventListener("submit", close, true);
+  $("#ask").addEventListener("submit", close, true);             // any command goes back to the research feed
   $("#newBtn").addEventListener("click", close, true);
   document.addEventListener("click", (e) => { if (e.target.closest("[data-cmd]")) close(); }, true);
 
-  // ── render ──────────────────────────────────────────────────────────────────
+  // ── one buy's details ───────────────────────────────────────────────────────
   function lotDetail(l) {
     const bits = [];
     if (l.buy_date) {
@@ -59,11 +67,27 @@
         ? `, <a href="${esc(l.via.url)}" target="_blank" rel="noopener">filing ↗</a>` : ""})</span>`);
     if (l.note) bits.push(`<span class="lot-note">🔁 ${esc(l.note)}</span>`);
     if (l.adjusted && l.adjusted.length && !l.via)
-      bits.push(`<span class="muted">you entered ${num(l.qty, 4)} @ ${inr(l.price, 2)} — shown after ${esc(l.adjusted.join(", "))}</span>`);
+      bits.push(`<span class="muted">you entered ${num(l.qty, 4)} @ ${inr(l.price, 2)} — then ${esc(l.adjusted.join("; "))}</span>`);
+    if (l.dividends) bits.push(`💰 dividends ${inr(l.dividends)}`);
+    if (l.sold) bits.push(`<span class="muted">${num(l.sold, 4)} sold</span>`);
+    if (l.grandfathered) bits.push(`<span class="muted" title="Held since 31-Jan-2018: that day's price counts as cost for tax">grandfathered</span>`);
     let out = bits.join(" · ");
+    const bonus = (l.parts || []).filter((p) => p.kind === "bonus");
+    if (bonus.length)
+      out += `<div class="lot-sub">🎁 ${bonus.map((p) => `${num(p.shares, 4)} bonus shares since ${fmtDate(p.acquired)}`).join(", ")}
+        — ₹0 cost and their own date for tax (${bonus.every((p) => p.term === "long") ? "long-term" : "short-term for now"}).</div>`;
+    for (const r of l.rights || []) out += rightsNote(l, r);
     for (const dm of l.demergers || []) out += demergerNote(l, dm);
     if (l.warn) out += `<div class="lot-warn">⚠️ ${esc(l.warn)}</div>`;
     return out;
+  }
+
+  function rightsNote(l, r) {
+    const price = r.price != null ? ` @ ${inr(r.price, 2)}` : "";
+    return `<div class="lot-sub">🎟️ <b>Rights issue ${fmtDate(r.date)}</b> (${esc(r.ratio)}): you could apply for
+      <b>${num(r.entitled, 4)}</b> shares${price}. Did you? <button type="button" class="add-rights"
+      data-sym="${esc(l.symbol)}" data-qty="${r.entitled}" data-price="${r.price ?? ""}" data-date="${esc(r.date)}">
+      ＋ I subscribed — add them</button> <span class="muted">(change the date to your allotment date if you know it)</span></div>`;
   }
 
   function demergerNote(l, dm) {
@@ -92,10 +116,10 @@
       company's shares yourself (same buy date) and check the company's notice.</div>`;
   }
 
+  // ── rows ────────────────────────────────────────────────────────────────────
   function lotRow(l) {
     const tr = document.createElement("tr");
     tr.className = "lot";
-    tr.dataset.id = l.id;
     const csv = l.source === "csv";
     tr.innerHTML = `
       <td class="indent">${l.buy_date ? fmtDate(l.buy_date) : "<span class='muted'>undated</span>"}
@@ -105,18 +129,23 @@
       <td class="n">${inr(l.value)}</td>
       <td class="n ${tone(l.pnl)}">${inr(l.pnl)} <small>${pct(l.pnl_pct)}</small></td>
       <td class="detail">${lotDetail(l)}</td>
-      <td class="acts">${csv ? "<span class='muted small' title='Edit holdings.csv to change this lot'>in file</span>"
+      <td class="acts">${csv ? "<span class='muted small' title='Change it in holdings.csv'>in file</span>"
         : `<button type="button" data-act="edit" title="Edit">✎</button><button type="button" data-act="del" title="Delete">🗑</button>`}</td>`;
     tr.addEventListener("click", async (e) => {
-      const ch = e.target.closest("button.add-child");
-      if (ch) {
-        ch.disabled = true;
+      const add = e.target.closest("button.add-child, button.add-rights");
+      if (add) {
+        if (add.classList.contains("add-rights") && !add.dataset.price) {
+          anotherBuy({ symbol: add.dataset.sym, name: l.name }, { qty: add.dataset.qty, date: add.dataset.date });
+          flash("Enter the price you paid per rights share, then Add.");
+          return;
+        }
+        add.disabled = true;
         try {
-          await call("POST", "/api/holdings", { stock: ch.dataset.sym, qty: ch.dataset.qty, price: ch.dataset.price,
-            date: ch.dataset.date || null, received: ch.dataset.rcv });
-          flash("Added the demerged company's shares", true);
+          await call("POST", "/api/holdings", { stock: add.dataset.sym, qty: add.dataset.qty, price: add.dataset.price,
+            date: add.dataset.date || null, received: add.dataset.rcv || null });
+          flash(add.classList.contains("add-rights") ? "Added your rights shares" : "Added the demerged company's shares", true);
           load();
-        } catch (err) { flash(err.message); ch.disabled = false; }
+        } catch (err) { flash(err.message); add.disabled = false; }
         return;
       }
       const b = e.target.closest("button[data-act]");
@@ -134,8 +163,7 @@
       <td><b>${esc(m.name)}</b> <small class="muted">${esc(m.symbol)}</small></td>
       <td class="n"><input type="number" step="any" min="0" placeholder="Qty" aria-label="Quantity"></td>
       <td class="n"><input type="number" step="any" min="0" placeholder="₹ paid" aria-label="Buy price"></td>
-      <td colspan="3"><input type="date" max="${new Date().toISOString().slice(0, 10)}" aria-label="Buy date (optional)"
-        title="Buy date (optional)"></td>
+      <td colspan="3"><input type="date" max="${TODAY}" aria-label="Buy date (optional)" title="Buy date (optional)"></td>
       <td class="acts"><button type="button" class="save">Save</button></td>`;
     const [q, p, d] = tr.querySelectorAll("input");
     const save = async () => {
@@ -153,7 +181,7 @@
 
   function edit(tr, l) {
     tr.innerHTML = `
-      <td class="indent"><input type="date" value="${esc(l.buy_date || "")}" max="${new Date().toISOString().slice(0, 10)}" title="Buy date"></td>
+      <td class="indent"><input type="date" value="${esc(l.buy_date || "")}" max="${TODAY}" title="Buy date"></td>
       <td class="n"><input type="number" step="any" min="0" value="${esc(l.qty)}"></td>
       <td class="n"><input type="number" step="any" min="0" value="${esc(l.price)}"></td>
       <td colspan="3" class="muted small">With a date: qty and price <b>as you bought them</b> (splits / bonuses since are applied).
@@ -166,33 +194,121 @@
         await call("PUT", `/api/holdings/${l.id}`, { qty: q.value, price: p.value, date: d.value || null,
           received: l.received || null });
         load();
-      }
-      catch (err) { flash(err.message); }
+      } catch (err) { flash(err.message); }
     });
   }
 
   async function remove(l, button) {
-    if (!confirm(`Delete this ${l.symbol} lot (${num(l.qty, 4)} @ ${inr(l.price, 2)})?`)) return;
+    if (!confirm(`Delete this ${l.name} buy (${num(l.qty, 4)} @ ${inr(l.price, 2)})?`)) return;
     button.disabled = true;
     try { await call("DELETE", `/api/holdings/${l.id}`); load(); } catch (err) { flash(err.message); button.disabled = false; }
   }
 
-  function flash(msg, ok = false) {
-    const f = $("#hFlash");
-    f.className = ok ? "flash ok" : "flash err";
-    f.textContent = msg;
-    f.hidden = false;
-    clearTimeout(flash.t);
-    flash.t = setTimeout(() => { f.hidden = true; }, ok ? 3000 : 8000);
+  // "Sell" on a stock's line → a small form row under it
+  function sellRow(s) {
+    const tr = document.createElement("tr");
+    tr.className = "sell-form";
+    tr.innerHTML = `
+      <td class="indent"><input type="date" max="${TODAY}" required aria-label="Sell date" title="Sell date"></td>
+      <td class="n"><input type="number" step="any" min="0" placeholder="Qty sold" aria-label="Quantity sold"></td>
+      <td class="n"><input type="number" step="any" min="0" placeholder="₹ per share" aria-label="Sell price"></td>
+      <td colspan="3" class="small"><label><input type="checkbox"> tendered in a <b>buyback</b></label>
+        <span class="muted">— as on your contract note; your oldest shares go first (FIFO).</span></td>
+      <td class="acts"><button type="button" class="save">Save sell</button><button type="button" class="cancel">✕</button></td>`;
+    const [d, q, p, bb] = tr.querySelectorAll("input");
+    $(".cancel", tr).addEventListener("click", () => tr.remove());
+    $(".save", tr).addEventListener("click", async () => {
+      if (!d.value || !q.value || !p.value) { flash("Enter the sell date, quantity and price."); return; }
+      try {
+        await call("POST", "/api/sells", { stock: s.symbol, qty: q.value, price: p.value, date: d.value,
+          kind: bb.checked ? "buyback" : "sell" });
+        flash(`Recorded the sell of ${s.name}`, true);
+        load();
+      } catch (err) { flash(err.message); }
+    });
+    return tr;
+  }
+
+  function stockRow(s, body) {
+    const tr = document.createElement("tr");
+    tr.className = "stock";
+    const tag = KIND[s.kind] ? ` <span class="tag">${KIND[s.kind]}</span>` : "";
+    const extras = [];
+    if (s.ltp != null) extras.push(`last close ${inr(s.ltp, 2)}`);
+    if (s.weight_pct != null) extras.push(`${s.weight_pct.toFixed(1)}% of portfolio`);
+    if (s.dividends) extras.push(`dividends ${inr(s.dividends)}`);
+    if (s.realised_gain) extras.push(`booked ${inr(s.realised_gain)}`);
+    if (s.xirr_pct != null) extras.push(`XIRR ${pct(s.xirr_pct)}`);
+    tr.innerHTML = `
+      <td><b>${esc(s.name)}</b> <small class="muted">${esc(s.symbol)}</small>${tag}</td>
+      <td class="n">${num(s.qty, 4)}</td>
+      <td class="n">${inr(s.avg_price, 2)}</td>
+      <td class="n">${s.priced ? inr(s.value) : "<span class='muted'>no price</span>"}</td>
+      <td class="n ${tone(s.pnl)}">${s.priced ? `${inr(s.pnl)} <small>${pct(s.pnl_pct)}</small>` : "—"}</td>
+      <td class="detail muted">${extras.join(" · ")}</td>
+      <td class="acts">${s.kind === "former" ? "" : `<button type="button" class="another" title="Add another buy of this stock">＋ Buy</button><button type="button" class="sell" title="Record a sell">Sell</button>`}</td>`;
+    if (s.kind !== "former") {
+      $(".another", tr).addEventListener("click", () => anotherBuy(s));
+      $(".sell", tr).addEventListener("click", () => {
+        if (tr.nextElementSibling && tr.nextElementSibling.classList.contains("sell-form")) return;
+        tr.after(sellRow(s));
+        $("input", tr.nextElementSibling).focus();
+      });
+    }
+    body.append(tr);
+  }
+
+  // ── realised gains by financial year ────────────────────────────────────────
+  function renderRealised(data) {
+    const box = $("#hRealised");
+    const years = data.realised || [];
+    if (!years.length) { box.innerHTML = ""; return; }
+    const ui = new Set((data.sells || []).filter((s) => s.source === "ui").map((s) => s.id));
+    box.innerHTML = `<h2>📒 Booked — realised gains by year</h2>` + years.map((y, i) => {
+      const t = y.tax;
+      const totals = [`short-term ${inr(t.st_gain)}`, `long-term ${inr(t.lt_gain)}`
+        + (t.exemption_used ? ` (${inr(t.exemption_used)} tax-free)` : ""), `est. tax <b>${inr(t.tax)}</b>`];
+      if (y.dividends) totals.push(`dividends received ${inr(y.dividends)} (taxed at your slab)`);
+      if (y.deemed_dividend) totals.push(`buyback proceeds taxed as dividend ${inr(y.deemed_dividend)}`);
+      if (y.exempt_buyback) totals.push(`exempt buyback gain ${inr(y.exempt_buyback)}`);
+      const rows = y.rows.map((r) => `<tr>
+          <td>${fmtDate(r.date)}</td><td>${esc(r.name)}</td><td class="n">${num(r.shares, 4)}</td>
+          <td class="n">${inr(r.proceeds)}</td><td class="n">${r.cost == null ? "—" : inr(r.cost)}</td>
+          <td class="n ${tone(r.gain)}">${r.gain == null ? "—" : inr(r.gain)}</td>
+          <td>${r.treatment === "unmatched" ? "<span class='tag warn'>no matching buy</span>"
+            : `<span class="tag ${r.term === "long" ? "ok" : ""}">${r.term}</span>`}
+            ${r.kind === "buyback" ? ` <span class="tag">buyback · ${esc(r.treatment.replace("_", " "))}</span>` : ""}
+            ${r.grandfathered ? " <span class='muted small'>grandfathered</span>" : ""}
+            ${r.acquired ? `<span class="muted small"> bought ${fmtDate(r.acquired)}</span>` : ""}</td>
+          <td class="acts">${ui.has(r.sell_id) ? `<button type="button" data-sell="${esc(r.sell_id)}" title="Delete this sell">🗑</button>` : ""}</td>
+        </tr>`).join("");
+      return `<details class="h-year" ${i === 0 ? "open" : ""}><summary><b>${esc(y.fy)}</b> — ${totals.join(" · ")}</summary>
+        <table class="h-table small"><thead><tr><th>Sold</th><th>Stock</th><th class="n">Shares</th><th class="n">Got</th>
+        <th class="n">Cost (tax)</th><th class="n">Gain</th><th>Term</th><th></th></tr></thead><tbody>${rows}</tbody></table></details>`;
+    }).join("") + `<p class="muted small">An estimate for planning (FIFO, set-off, the yearly long-term exemption, 31-Jan-2018
+      grandfathering) — not tax advice. Only sells you record here are counted.</p>`;
+    box.querySelectorAll("button[data-sell]").forEach((b) => b.addEventListener("click", async () => {
+      if (!confirm("Delete this sell?")) return;
+      try { await call("DELETE", `/api/sells/${b.dataset.sell}`); load(); } catch (err) { flash(err.message); }
+    }));
   }
 
   function render(data) {
     const t = data.total;
-    $("#hSummary").innerHTML = data.stocks.length ? `
-      <div><small>Invested</small><b>${inr(t.cost)}</b></div>
-      <div><small>Value now</small><b>${inr(t.value)}</b></div>
-      <div class="${tone(t.pnl)}"><small>Profit / loss</small><b>${inr(t.pnl)} <em>${pct(t.pnl_pct)}</em></b></div>
-      <div><small>Stocks · lots</small><b>${t.n_stocks} · ${t.n_lots}</b></div>` : "";
+    const cards = data.stocks.length ? [
+      `<div><small>Invested</small><b>${inr(t.cost)}</b></div>`,
+      `<div><small>Value now</small><b>${inr(t.value)}</b></div>`,
+      `<div class="${tone(t.pnl)}"><small>Profit / loss</small><b>${inr(t.pnl)} <em>${pct(t.pnl_pct)}</em></b></div>`,
+      `<div><small>Dividends received</small><b>${inr(t.dividends)}</b></div>`,
+      `<div class="${tone(t.xirr_pct)}"><small>XIRR (dated buys)</small><b>${t.xirr_pct == null ? "—" : pct(t.xirr_pct)}</b></div>`,
+      `<div><small>Stocks · buys</small><b>${t.n_stocks} · ${t.n_lots}</b></div>`] : [];
+    $("#hSummary").innerHTML = cards.join("");
+    const notes = [...(data.warns || []).map((w) => `⚠️ ${esc(w)}`)];
+    if (data.fmv_pending) notes.push("⏳ Loading 31-Jan-2018 prices for your older buys (grandfathering)…");
+    if ((data.dividend_refresh || []).length) notes.push("⏳ Fetching dividend history…");
+    $("#hNotes").innerHTML = notes.map((n) => `<div>${n}</div>`).join("");
+    $("#hNotes").hidden = !notes.length;
+
     const body = $("#hRows");
     body.innerHTML = "";
     const miss = data.missing || [];
@@ -209,29 +325,16 @@
         <code>holdings.csv</code> in the project folder.</td></tr>`;
     }
     for (const s of data.stocks) {
-      const tr = document.createElement("tr");
-      tr.className = "stock";
-      tr.innerHTML = `
-        <td><b>${esc(s.name)}</b> <small class="muted">${esc(s.symbol)}</small></td>
-        <td class="n">${num(s.qty, 4)}</td>
-        <td class="n">${inr(s.avg_price, 2)}</td>
-        <td class="n">${s.priced ? inr(s.value) : "<span class='muted'>no price</span>"}</td>
-        <td class="n ${tone(s.pnl)}">${s.priced ? `${inr(s.pnl)} <small>${pct(s.pnl_pct)}</small>` : "—"}</td>
-        <td class="detail muted">${s.ltp != null ? `last close ${inr(s.ltp, 2)}` : ""}${s.weight_pct != null ? ` · ${s.weight_pct.toFixed(1)}% of portfolio` : ""}</td>
-        <td class="acts"><button type="button" class="another" title="Add another buy of this stock">＋ Another buy</button></td>`;
-      $(".another", tr).addEventListener("click", () => anotherBuy(s));
-      body.append(tr);
-      for (const l of s.lots) body.append(lotRow(l));
+      stockRow(s, body);
+      for (const l of s.lots) if (!l.sold_out) body.append(lotRow(l));
     }
+    renderRealised(data);
     const c = data.csv || {};
-    const csvBox = $("#hCsv");
-    if (c.status === "none") {
-      csvBox.innerHTML = `Have many stocks? Put them in <code>${esc(c.path)}</code> — columns <code>symbol, qty, price, date</code>
-        (date optional; your broker's holdings export works too). It's read automatically whenever it changes.`;
-    } else {
-      csvBox.innerHTML = `📄 <code>${esc(c.path)}</code> — ${c.status === "imported" ? `just imported ${c.imported} lot(s)` : "in sync"}.`
+    $("#hCsv").innerHTML = c.status === "none"
+      ? `Have many stocks? Put them in <code>${esc(c.path)}</code> — columns <code>symbol, qty, price, date</code> (date optional;
+        add <code>side</code> = sell for sells). Your broker's holdings export works too. It's read whenever it changes.`
+      : `📄 <code>${esc(c.path)}</code> — ${c.status === "imported" ? `just imported ${c.imported} row(s)` : "in sync"}.`
         + (c.errors && c.errors.length ? `<ul class="csv-err">${c.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : "");
-    }
   }
 
   let retries = 0;
@@ -240,26 +343,26 @@
       const data = await call("GET", "/api/holdings");
       render(data);
       clearTimeout(load.t);
-      if (((data.lookups || []).length || (data.merger_lookups || []).length) && retries < 4) {   // a company notice is being read — check back
-        retries += 1;
-        load.t = setTimeout(load, 20000);
-      } else retries = 0;
+      const pending = ["lookups", "merger_lookups", "dividend_refresh"].some((k) => (data[k] || []).length) || data.fmv_pending;
+      if (pending && retries < 6) { retries += 1; load.t = setTimeout(load, 20000); }   // background reads running
+      else retries = 0;
     } catch (err) { flash(`Couldn't load holdings: ${err.message}`); }
   }
 
-  // "＋ Another buy" on a stock's line → the add form, with that company already picked
-  function anotherBuy(s) {
-    picked = { symbol: s.symbol, name: s.name };
-    hits = [picked];
-    form.stock.value = s.name;
-    form.scrollIntoView({ behavior: "smooth", block: "center" });
-    form.qty.focus();
-  }
-
-  // company-name autocomplete: type any part of the name, pick from the list
+  // ── the add form: company-name search, "＋ Buy" / rights prefill ─────────────
   const form = $("#hForm"), box = $("#hSuggest");
   let picked = null, hits = [], active = -1, seq = 0;
   const hideBox = () => { box.hidden = true; active = -1; };
+
+  function anotherBuy(s, prefill = {}) {
+    picked = { symbol: s.symbol, name: s.name };
+    hits = [picked];
+    form.stock.value = s.name;
+    if (prefill.qty) form.qty.value = prefill.qty;
+    if (prefill.date) form.date.value = prefill.date;
+    form.scrollIntoView({ behavior: "smooth", block: "center" });
+    (prefill.qty ? form.price : form.qty).focus();
+  }
   function pickHit(i) {
     picked = hits[i];
     form.stock.value = picked.name;
@@ -280,8 +383,8 @@
       box.hidden = false;
       return;
     }
-    box.innerHTML = hits.map((h, i) => `<li role="option" data-i="${i}"><b>${esc(h.name)}</b><span>${h.former
-      ? `<em class="former">${esc(h.note)}</em>` : esc(h.symbol)}</span></li>`).join("");
+    box.innerHTML = hits.map((h, i) => `<li role="option" data-i="${i}"><b>${esc(h.name)}</b><span>${h.note
+      ? `<em class="${h.former ? "former" : "kind"}">${esc(h.note)}</em>` : esc(h.symbol)}</span></li>`).join("");
     box.hidden = false;
     active = -1;
   });
@@ -303,22 +406,21 @@
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const f = e.target;
-    const btn = $("button[type=submit]", f);
+    const btn = $("button[type=submit]", form);
     if (!picked && hits.length === 1) picked = hits[0];
     btn.disabled = true;
     try {
-      const lot = await call("POST", "/api/holdings", { stock: picked ? picked.symbol : f.stock.value, qty: f.qty.value,
-        price: f.price.value, date: f.date.value || null });
+      const lot = await call("POST", "/api/holdings", { stock: picked ? picked.symbol : form.stock.value,
+        qty: form.qty.value, price: form.price.value, date: form.date.value || null });
       flash(`Added ${lot.name} — ${num(lot.qty, 4)} @ ${inr(lot.price, 2)}`, true);
       picked = null; hits = [];
-      f.reset();
-      f.stock.focus();
+      form.reset();
+      form.stock.focus();
       load();
     } catch (err) { flash(err.message); }
     btn.disabled = false;
   });
-  $("#hForm").date.max = new Date().toISOString().slice(0, 10);
+  form.date.max = TODAY;
 
   // "Need cash?" → the same `raise <amount>` command, run as a job in the research feed
   $("#hRaise").addEventListener("submit", (e) => {

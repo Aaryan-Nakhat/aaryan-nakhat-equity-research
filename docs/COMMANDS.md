@@ -47,7 +47,7 @@ reads your tagged watchlist holdings.
 |---|---|
 | `booking` | Where the tracked institutions on **your** holdings sit on big gains → profit-booking (selling) risk, ranked. |
 | `sell` *(or `raise` / `trim`)* | Ranks your holdings **weakest-hand-first** — which to sell first if you need cash. With quantities (💼 My holdings) each row also shows value, profit / loss and short- / long-term. |
-| `raise 50000` *(or `take out 2 lakh` · `sell ₹1.5L` · `need 50k` · `withdraw 1cr`)* | **💰 What to sell to raise that much** — two plans: 🧾 **least tax** and 💪 **weakest holdings first** (the `sell` keep score), each with shares to sell, ≈ money, gain / loss, estimated capital-gains tax and money in hand, plus the trade-off between them and ⏳ "turns long-term in N days — wait and save ≈ ₹X" tips. Oldest shares first (FIFO); needs quantities and buy prices (the date adds the tax). Also a **Need cash?** box on the web UI's 💼 My holdings page. |
+| `raise 50000` *(or `take out 2 lakh` · `sell ₹1.5L` · `need 50k` · `withdraw 1cr`)* | **💰 What to sell to raise that much** — two plans: 🧾 **least tax** and 💪 **weakest holdings first** (the `sell` keep score), each with shares to sell, ≈ money, gain / loss, estimated capital-gains tax and money in hand, plus the trade-off between them and ⏳ "turns long-term in N days — wait and save ≈ ₹X" tips. Oldest shares first (FIFO), bonus shares at ₹0 cost, buys before Feb-2018 grandfathered, and the gains from sells you recorded this year counted; needs quantities and buy prices (the date adds the tax). Also a **Need cash?** box on the web UI's 💼 My holdings page. |
 
 ## 🔎 Idea screeners
 

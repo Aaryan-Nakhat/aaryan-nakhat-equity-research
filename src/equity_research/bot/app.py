@@ -28,13 +28,14 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import duckdb
 
 from equity_research import scan
 from equity_research import screen_digest
 from equity_research.analysis import former_companies
+from equity_research.portfolio import tax
 from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
@@ -701,18 +702,60 @@ _former_lock = threading.Lock()
 
 
 def _former_worker() -> None:
-    """Learn the names (and merger dates) of companies that stopped trading, so buys of them can be entered."""
+    """Weekly: learn what can be held beyond today's NSE main board, so it can be found and entered —
+    companies that stopped trading (names, merger dates), ETFs / SME / REITs / InvITs, BSE-only shares."""
+    from equity_research.portfolio import instruments
+
     if not _former_lock.acquire(blocking=False):
         return
     con = connect()
     try:
-        former_companies.refresh(con)
-        scan._set_meta(con, "last_former_refresh", datetime.now(IST).date().isoformat())
-    except Exception:  # noqa: BLE001
-        log.exception("former companies refresh failed")
+        for step in (former_companies.refresh, instruments.refresh_nse, instruments.refresh_bse):
+            try:
+                step(con)
+            except Exception:  # noqa: BLE001 — one source down shouldn't stop the others
+                log.exception("weekly instruments refresh: %s failed", step.__qualname__)
+        scan._set_meta(con, "last_weekly_instruments", datetime.now(IST).date().isoformat())
     finally:
         con.close()
         _former_lock.release()
+
+
+_bse_lock = threading.Lock()
+
+
+def _bse_prices_worker() -> None:
+    from equity_research.portfolio import instruments
+
+    if not _bse_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        instruments.refresh_bse_prices(con)
+        scan._set_meta(con, "last_bse_prices", datetime.now(IST).date().isoformat())
+    except Exception:  # noqa: BLE001
+        log.exception("BSE prices refresh failed")
+    finally:
+        con.close()
+        _bse_lock.release()
+
+
+def maybe_bse_prices() -> None:
+    """Heartbeat hook: once a day after the evening scan hour if a BSE-only share is held — and at once when
+    a newly added one has no price yet."""
+    now = datetime.now(IST)
+    if _bse_lock.locked():
+        return
+    con = connect()
+    try:
+        done = scan._meta(con, "last_bse_prices") == now.date().isoformat()
+        held = con.execute("SELECT count(*) FROM holding_lots WHERE symbol LIKE 'BSE:%'").fetchone()[0]
+        unpriced = con.execute("""SELECT count(*) FROM holding_lots WHERE symbol LIKE 'BSE:%'
+                                  AND symbol NOT IN (SELECT symbol FROM bse_prices)""").fetchone()[0]
+    finally:
+        con.close()
+    if held and (unpriced or (not done and now.hour >= SCAN_HOUR)):   # a new one right away, else nightly
+        threading.Thread(target=_bse_prices_worker, name="bse-prices", daemon=True).start()
 
 
 def maybe_former_refresh() -> None:
@@ -721,7 +764,7 @@ def maybe_former_refresh() -> None:
         return
     con = connect()
     try:
-        last = scan._meta(con, "last_former_refresh")
+        last = scan._meta(con, "last_weekly_instruments")
     finally:
         con.close()
     if last and (datetime.now(IST).date() - datetime.fromisoformat(last).date()).days < 7:
@@ -2388,6 +2431,10 @@ def _send_raise_plan(req: EmailRequest, amount: float) -> None:
             f"- **{t['symbol']}** — some of these shares turn long-term in **{t['days']} days**; selling "
             f"them then instead of now saves ≈ {_inr(t['save'])} in tax (more if the yearly ₹1.25 lakh "
             "long-term exemption covers it)." for t in sorted(tips, key=lambda t: -t["save"])))
+    if res.get("booked"):
+        bk = res["booked"]
+        parts.append(f"_Already booked this year (sells you recorded): long-term {_inr(bk['lt_gain'])}, short-term "
+                     f"{_inr(bk['st_gain'])} — counted: the tax above is only what these sales would add._")
     if res["no_qty"]:
         parts.append("_Not included (no quantity yet): " + ", ".join(res["no_qty"]) + " — add them in "
                      "💼 My holdings._")
@@ -2395,10 +2442,12 @@ def _send_raise_plan(req: EmailRequest, amount: float) -> None:
         "---\n_How this is worked out: prices are the **last close** (the real sale price will differ); shares "
         "go **oldest first** (FIFO — how Indian demat sales are taxed); tax is an **estimate** at "
         f"{config.STCG_RATE:.1%} short-term / {config.LTCG_RATE:.1%} long-term + {config.TAX_CESS:.0%} cess, "
-        f"with ₹{config.LTCG_EXEMPTION:,.0f} of long-term gain tax-free a year, losses set off, and **no other "
-        "gains assumed this financial year**. Brokerage, STT and surcharge are left out. Keep score = the "
-        "`sell` ranking's merit score (higher = stronger hold). Buys with a date are counted as entered (as "
-        "bought) and brought through splits / bonuses since; buys without one are taken as today's numbers. "
+        f"with ₹{config.LTCG_EXEMPTION:,.0f} of long-term gain tax-free a year, losses set off, and the gains "
+        "from **sells you've recorded this year** counted (others aren't known). Bonus shares cost ₹0 and are dated "
+        "on allotment; shares held since 31-Jan-2018 use that day's price as cost (grandfathering). Brokerage, STT "
+        "and surcharge are left out. Keep score = the `sell` ranking's merit score (higher = stronger hold). Buys "
+        "with a date are counted as entered (as bought) and brought through splits / bonuses since; buys without "
+        f"one are taken as today's numbers. Long-term gains on listed shares: {tax.ltcg_section(date.today())}. "
         "Decision support, not tax advice — check with your CA for large sales._")
     md = "\n\n".join(parts)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
@@ -3361,7 +3410,8 @@ def main(web_ui: bool | None = None) -> None:
                     maybe_scorecard()        # weekly track-record email
                 if config.ENABLE_THESIS_GUARD:
                     maybe_thesis_sweep()     # evening re-check of your theses (background)
-                maybe_former_refresh()       # weekly: names of merged / delisted companies (background)
+                maybe_former_refresh()       # weekly: merged companies, ETFs / SME / REITs / InvITs, BSE-only
+                maybe_bse_prices()           # daily: closes of BSE-only shares you hold (background)
                 if config.ENABLE_MAIL_HOUSEKEEPING:
                     maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout

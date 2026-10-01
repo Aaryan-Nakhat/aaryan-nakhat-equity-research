@@ -448,7 +448,7 @@ src/equity_research/
   reports/     report generation + email delivery
   bot/         the command handler (app.py) + the local channel (local.py) shared by email and CLI
   web/         the local web UI (FastAPI + plain JS, no build step), incl. 💼 My holdings
-  holdings.py  your lots (qty / price / optional date) — web UI + holdings.csv, valued on the latest close
+  portfolio/   your buys / sells (web UI + holdings.csv) → tax lots, realised gains, dividends, XIRR
   cli.py       the `eqr` terminal command
   common/      config, storage, shared utilities
 scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py / make_samples.py /
@@ -520,7 +520,11 @@ today**. **Mergers and demergers are handled:** a company that merged into anoth
 (type the old company's name — the tool reads from the filings what it merged into and at what ratio, and
 converts it, keeping your cost and date), and after a demerger your cost is split the way the
 company's own cost-of-acquisition notice says — read from its filing — with the new company's shares offered
-to add in one click. The date is optional *per buy*: with it you also get short- / long-term
+to add in one click. **Sells** are recorded with one click (oldest shares go first, as the tax rules say) and land in a **realised
+gains by year** table with the estimated tax; **bonus shares** are their own ₹0-cost lots dated on allotment;
+**rights issues** are offered, never assumed; buys before **Feb-2018** are grandfathered; **dividends** you received
+and your **XIRR** are worked out from your buys. **ETFs, SME shares, REITs, InvITs and BSE-only shares** can be
+added too. The date is optional *per buy*: with it you also get short- / long-term
 (held over 12 months), the yearly return, split / bonus adjustment and the Nifty 500 over the same days;
 without it, profit / loss only. The file is re-read whenever it changes. To make sure it — or the
 database or `.env` — can never be committed, turn on the repo's guard once: `git config core.hooksPath .githooks`.

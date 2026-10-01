@@ -94,44 +94,67 @@ Validated on RELIANCE (2026-06-12, 373 trading days): close 1,293 below SMA20/50
 - Relative strength needs `index_close` populated for the same dates (the EOD
   backfill covers `equity_eod` only; index closes are backfilled separately).
 
-## Your holdings (`holdings.py`, `web/static/holdings.js`)
+## Your holdings (`portfolio/`, `web/static/holdings.js`)
 
-- **Store:** `holding_lots` (one row per buy: symbol, qty, price, optional `buy_date`, `source` = `ui` | `csv`).
-  Adding a lot also marks the stock a *holding* in the watchlist. Local DuckDB only; nothing is sent anywhere.
-- **In:** the web UI (`GET/POST /api/holdings`, `PUT/DELETE /api/holdings/{id}`; watchlist holdings with no
-  lot yet come back as `missing` rows to fill in; `GET /api/stocks?q=` is the company-name search — every word
-  must appear in the name, or the query is the symbol) or `holdings.csv` (headers
-  matched loosely — `symbol|instrument|stock`, `qty|quantity`, `price|avg cost|buy price`, `date|buy date`; dates
-  day-first). The file is re-imported when its mtime changes; its rows replace the last import, UI lots stay.
-  Lots from the file are read-only in the UI. Unmatched stocks / bad numbers are listed by file line.
-- **Valuation:** the latest close from `equity_eod_adj`. A dated lot is brought through every split / bonus /
-  consolidation / rights since its date (`corporate_actions.share_multiplier_since`: qty × m, price ÷ m) — so
-  enter a dated lot as you bought it. A dated lot whose price is under 60 % of the raw close nearest its date (within ~2 months,
-  before the first split since) is flagged — it's almost always today's adjusted numbers with the old date, which
-  would count the split twice. Undated lots are taken as today's numbers (the broker's qty and average price).
-- **Mergers (`analysis/former_companies.py`, table `former_companies`):** companies that stopped trading are
-  learned weekly in the background — every main-board symbol in the price history that isn't listed today is looked
-  up once on NSE's per-company corporate-action record (batched in one browser session per 80), which gives its
-  name and, for a merger, the `Merger` / `Amalgamation` record date. So the add box finds the old company. When such
-  a stock is held, its filings around the record date are read (`synthesize.merger_terms`) for the surviving company
-  and the swap ratio (kept only if the company resolves to a listed one; retried weekly). The lot stays as entered
-  (old company, qty, price, date) and is valued as `qty × old splits before the merger × ratio` shares of the
-  survivor, same total cost and buy date, whose own actions count only from the record date (`received`) — so
-  the survivor's earlier bonuses or demergers don't touch shares that came from the merged company. The ratio is
-  usually stated in the record-date notice, so those are read first.
-- **`received`:** the date shares arrived through a merger / demerger (set for converted mergers and for demerged
-  shares added from the UI); this company's splits / bonuses / demergers count only after it; buy_date, the
-  original purchase, still decides the tax term.
-- **Demergers (`analysis/demerger_costs.py`, table `demerger_costs`):** for each demerger after a dated lot's
-  start, the parent keeps the cost share from the company's **apportionment-of-cost notice** (found among its
-  filings from 60 days before to 150 after the ex-date — by title *or filename*, the title is often just "General
-  Updates" — and read by `synthesize.demerger_cost_split`, kept only if the percentages add to ~100). The new
-  companies' shares (qty × the entitlement ratio, their slice of the cost, same buy date, received on the ex-date)
-  are offered in the UI. Lookups run in a background thread on page load; until then (or if no notice exists) the
-  market split — the parent's opening gap, `price_adjustments.factor` — is used and labelled an estimate. A 'none'
-  result is retried after 7 days. A demerger can create several companies (one row each). Term: long when held more than 365 days (else days left). Yearly return
-  = (close ÷ adjusted price)^(365 ÷ days) − 1, shown once held a year. Benchmark = Nifty 500 from the first close
-  on/after the buy date. Undated lots: profit / loss only.
+Local only — nothing is sent anywhere, and nothing personal is committed (see the last bullet).
+
+| Module | Does |
+|---|---|
+| `portfolio/store.py` | buys (`holding_lots`) and sells (`holding_sells`) — add / edit / delete; the company-name search; the watchlist holdings still waiting for numbers |
+| `portfolio/csvio.py` | `holdings.csv` import (buys and, with a `side` column, sells) |
+| `portfolio/instruments.py` | ETFs, SME shares, REITs, InvITs and BSE-only shares (`instruments`); BSE prices (`bse_prices`) |
+| `portfolio/timeline.py` | one stock's history replayed in date order → your tax lots, sells matched, dividends credited |
+| `portfolio/valuation.py` | the whole portfolio: every timeline, mergers carried across, realised gains by year, XIRR |
+| `portfolio/income.py` | dividend history (`dividends`), XIRR |
+| `portfolio/tax.py` | Indian capital-gains rules: term, rates, set-off, 31-Jan-2018 grandfathering (`fmv_2018`), buybacks, the 2025 Act |
+
+- **In:** the web UI (`GET/POST /api/holdings`, `PUT/DELETE /api/holdings/{id}`, `POST/DELETE /api/sells`,
+  `GET /api/stocks?q=` — every word must appear in the name, or the query is the symbol) or `holdings.csv`
+  (headers matched loosely — `symbol|instrument|stock`, `qty|quantity`, `price|avg cost|buy price`, `date`,
+  optional `side` = buy / sell, `type` = buyback, `received`; dates day-first). The file is re-imported when its
+  mtime changes; its rows replace the last import, UI entries stay; file rows are read-only in the UI.
+- **How a buy is entered:** with a date, qty and price as bought; without one, the broker's numbers today
+  (undated buys aren't replayed, aren't touched by sells, and have P&L only).
+- **The timeline (per stock, in date order; same day: dividend, then the ex-date action, then buys, then sells):**
+  each dated buy becomes a *part* (shares, cost, acquisition date).
+  - *split / consolidation* (and combined split+bonus records, treated as splits): every part's shares × m; cost and
+    date unchanged.
+  - *bonus*: each part spawns a part of `shares × (m − 1)` at **₹0 cost, acquired on the ex-date** (s.55(2)(aa) —
+    brokers average it in; the totals match theirs, the per-share split doesn't).
+  - *rights*: not applied — each lot gets an offer (entitled whole shares, issue price = face value + the premium
+    in NSE's subject when the face value is on file) that adds a new buy if you subscribed.
+  - *demerger*: every part keeps the parent's share of cost from the company's **apportionment-of-cost notice**
+    (`analysis/demerger_costs.py` — found by title or filename 60 days before to 150 after the ex-date, read by
+    `synthesize.demerger_cost_split`, kept only if it adds to ~100; else the market split `price_adjustments.factor`,
+    labelled an estimate; a miss is retried after 7 days). The new companies' shares are offered per lot (same buy
+    date, `received` on the ex-date — shares that arrived through an event carry no cash flow).
+  - *dividend*: shares held before the ex-date × the amount (NSE's per-symbol record; `Rs`/`Re` amounts summed,
+    REIT / InvIT distributions included, old "% of face value" subjects skipped), refreshed weekly per held stock in
+    the background when NSE access is on.
+  - *sell*: FIFO across parts by acquisition date (bonus parts after bought parts of the same day). Each slice:
+    proceeds, cost, term at the sell date; long-term slices of parts acquired by 31-Jan-2018 use
+    `max(cost, min(FMV, sale price))` with FMV = NSE's 31-Jan-2018 high (loaded once in the background; matched by
+    ISIN, else symbol) divided by the share multiplications since. A buyback is exempt before 1-Oct-2024, a deemed
+    dividend (proceeds) plus capital loss (cost) to 31-Mar-2026, ordinary gains after. Selling more than the dated
+    buys cover is listed as unmatched with a warning.
+- **Mergers (`analysis/former_companies.py`, table `former_companies`):** symbols that stopped trading are learned
+  weekly (name + `Merger` record date from NSE's per-symbol record, batched 80 per browser session), so the add box
+  finds the old company. Held ones have their record-date / scheme filings read (`synthesize.merger_terms`) for the
+  survivor and swap ratio. The old company's timeline runs up to the record date; its parts × the ratio are carried
+  into the survivor's timeline on that date, so the survivor's earlier bonuses or demergers don't touch them.
+- **Instruments:** ETFs (NSE's ETF list), SME shares (NSE Emerge's list), REITs / InvITs (series `RR` / `IV` in the
+  bhavcopy, named from NSE's per-symbol record) — priced from the same NSE bhavcopy. BSE-only shares: BSE's active
+  scrips whose ISIN isn't on NSE, as `BSE:<scrip code>`, priced daily from BSE's bhavcopy; NSE corporate actions
+  don't cover them. Lists refresh weekly with the merged companies; BSE prices daily (and at once for a new one).
+- **Output per stock:** remaining shares and cost (the broker-style average), value on the latest close, P&L,
+  dividends received, gains booked, XIRR (dated buys, sells and dividends as cash flows plus today's value of the dated
+  shares — bisection, `analysis/funds._xirr`; none under a month). Per buy: its parts (for the tax planner), term,
+  yearly return once held a year, the Nifty 500 since (only when the index history reaches the buy date — within 10
+  days), the history applied, bonus parts, rights offers, demerger notes, and the "today's numbers typed with an old
+  date" flag (a price under 60 % of the raw close nearest the date, before the first split since).
+- **Realised gains by financial year:** every sold slice, totals after set-off, the yearly exemption, the estimated
+  tax (`tax.tax_estimate`), dividends received, deemed buyback dividends. The `raise ₹X` planner adds this year's
+  booked gains before working out a plan's tax (so the exemption already used counts).
 - **Never committed:** `holdings*.csv` (except the example) is gitignored; `.githooks/pre-commit`
   (`git config core.hooksPath .githooks`) refuses a staged holdings file, `.duckdb` or `.env`; a test fails if
   git ever tracks one.

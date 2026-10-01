@@ -585,10 +585,14 @@ with zero).
 
 ## Part F4 — 💰 What to sell to raise ₹X (`analysis/sell_advisor.py` · `raise_plan`)
 
-- **Input:** your lots (💼 My holdings — qty, buy price, optional date), valued at the last close; a dated lot
-  is brought through splits / bonuses since the buy. Holdings without a quantity are listed, not used.
+- **Input:** your tax lots (💼 My holdings → `portfolio/timeline.py`): each buy brought through splits since
+  (cost and date kept), each bonus as its own ₹0-cost lot dated on allotment, rights shares only if you added them,
+  demerger cost splits from the company's notice, and what you've already sold removed. Valued at the last close.
+  Holdings without a quantity are listed, not used.
 - **FIFO:** Indian demat sales are taxed oldest-shares-first, so within a stock the shares sold are fixed —
   dated lots oldest first, undated lots last (their age is unknown). The plan chooses *which stocks and how many*.
+- **Grandfathering:** long-term lots acquired by 31-Jan-2018 use `max(cost, min(31-Jan-2018 high, sale price))`
+  as cost.
 - **🧾 Least tax (greedy):** repeatedly take the stock whose next FIFO shares cost the least tax per rupee
   raised — long-term gains are free while the yearly exemption lasts, a loss counts as zero (booking it only
   helps against a taxable gain), short-term (and undated, cautiously) gains cost the STCG rate — with the weaker
@@ -596,8 +600,11 @@ with zero).
 - **💪 Weakest first:** stocks in `sell`-ranking order (lowest keep score first), FIFO within each.
 - **Tax estimate (computed, `tax_estimate`):** short-term losses set off against short-term gains, then long-term
   gains; long-term losses against long-term gains only; the yearly long-term exemption; STCG / LTCG rates + cess
-  from `.env` (defaults 20 % / 12.5 % / ₹1.25 lakh / 4 %). Assumes no other gains this financial year; brokerage,
-  STT and surcharge left out; undated shares' gain / loss shown but not taxed. Whole shares, at the last close.
+  from `.env` (defaults 20 % / 12.5 % / ₹1.25 lakh / 4 %). The gains from sells you've recorded this financial
+  year are added first, so the plan's tax is only what it adds (exemption already used, set-off available); other
+  gains aren't known. Brokerage, STT and surcharge left out; undated shares' gain / loss shown but not taxed. Whole
+  shares, at the last close. From 1-Apr-2026 the law is the Income-tax Act 2025 (long-term gains on listed shares:
+  s.198, was s.112A).
 - **⏳ Wait tip:** a short-term lot with a gain that turns long-term within 60 days → the saving from the rate
   difference if sold then.
 

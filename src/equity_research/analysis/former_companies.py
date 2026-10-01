@@ -122,7 +122,7 @@ def needs_lookup(fc: dict) -> bool:
 
 def lookup_merger(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | None:
     """Read the company's scheme / allotment filings → into whom it merged and at what ratio. Never raises."""
-    from equity_research import holdings
+    from equity_research.portfolio import store as holdings
     from equity_research.common.http import fetch_bytes
     from equity_research.reports import synthesize
     from equity_research.scrapers import nse_api
