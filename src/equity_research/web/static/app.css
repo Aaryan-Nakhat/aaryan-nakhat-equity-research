@@ -213,3 +213,5 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .h-suggest em.former { font-style: normal; color: var(--warn); font-size: 11.5px; }
 .lot-note { color: var(--warn); }
 .h-suggest li span { white-space: normal; overflow: visible; text-overflow: clip; text-align: right; max-width: 55%; }
+.h-table tr.stock .acts button.another { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 2px 8px; font-size: 12px; white-space: nowrap; }
+.h-table tr.stock .acts button.another:hover { border-color: var(--accent); color: var(--accent); }

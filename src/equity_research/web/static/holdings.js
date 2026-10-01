@@ -218,7 +218,8 @@
         <td class="n">${s.priced ? inr(s.value) : "<span class='muted'>no price</span>"}</td>
         <td class="n ${tone(s.pnl)}">${s.priced ? `${inr(s.pnl)} <small>${pct(s.pnl_pct)}</small>` : "—"}</td>
         <td class="detail muted">${s.ltp != null ? `last close ${inr(s.ltp, 2)}` : ""}${s.weight_pct != null ? ` · ${s.weight_pct.toFixed(1)}% of portfolio` : ""}</td>
-        <td></td>`;
+        <td class="acts"><button type="button" class="another" title="Add another buy of this stock">＋ Another buy</button></td>`;
+      $(".another", tr).addEventListener("click", () => anotherBuy(s));
       body.append(tr);
       for (const l of s.lots) body.append(lotRow(l));
     }
@@ -244,6 +245,15 @@
         load.t = setTimeout(load, 20000);
       } else retries = 0;
     } catch (err) { flash(`Couldn't load holdings: ${err.message}`); }
+  }
+
+  // "＋ Another buy" on a stock's line → the add form, with that company already picked
+  function anotherBuy(s) {
+    picked = { symbol: s.symbol, name: s.name };
+    hits = [picked];
+    form.stock.value = s.name;
+    form.scrollIntoView({ behavior: "smooth", block: "center" });
+    form.qty.focus();
   }
 
   // company-name autocomplete: type any part of the name, pick from the list
