@@ -623,6 +623,8 @@ The LLM (**the configured LLM**) is used **only** here — everything else is de
 | Pickaxe Analyst | `synthesize.pickaxe_analyst` | demand signals (Trends + news) | durable demand themes + source index (JSON) |
 | Pickaxe Mapper | `synthesize.pickaxe_beneficiaries` | one theme (+ web search) | Indian beneficiaries, direct + indirect "pickaxe" layers |
 | Pickaxe Projection | `synthesize.pickaxe_projection` | one company + theme (+ web search) | revenue-share now→next-FY + growth, with sources (JSON) |
+| Merger terms | `synthesize.merger_terms` | a merged company's scheme / allotment filings | the surviving company + swap ratio (N new for M held) |
+| Demerger cost split | `synthesize.demerger_cost_split` | the company's cost-of-acquisition notice (PDF) | % of cost kept by the parent / moved to each new company + share ratio (kept only if it adds to ~100) |
 | Pre-market read | `synthesize.premarket_brief` | GIFT Nifty + overnight + headlines | "overnight → likely open → watch" |
 | Symbol resolution | `reports/resolve.py` | free-text name | NSE symbol (exact/renamed symbol or name match in `equity_master`; group names → list; else LLM + search, validated against the master via NSE's symbol-change list) |
 

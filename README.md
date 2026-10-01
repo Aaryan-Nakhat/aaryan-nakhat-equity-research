@@ -514,7 +514,13 @@ own data store.
 **💼 My holdings** page — the stocks already in your watchlist are listed there by company name, so you just
 type how many you hold and what you paid; a new one is found by typing any part of its name — or copy [`holdings.example.csv`](holdings.example.csv) to `holdings.csv`
 (gitignored; `HOLDINGS_CSV` moves it) — columns `symbol, qty, price, date`, and a broker's holdings export
-works as-is. One row per buy; the date is optional *per buy*: with it you also get short- / long-term
+works as-is. One row per buy. **With a date, enter the quantity and price as you bought them** (splits / bonuses since
+are applied — 100 @ ₹500 bought before a 1:5 split shows as 500 @ ₹100); **without one, what your broker shows
+today**. **Mergers and demergers are handled:** a company that merged into another is entered as you bought it
+(type the old company's name — the tool reads from the filings what it merged into and at what ratio, and
+converts it, keeping your cost and date), and after a demerger your cost is split the way the
+company's own cost-of-acquisition notice says — read from its filing — with the new company's shares offered
+to add in one click. The date is optional *per buy*: with it you also get short- / long-term
 (held over 12 months), the yearly return, split / bonus adjustment and the Nifty 500 over the same days;
 without it, profit / loss only. The file is re-read whenever it changes. To make sure it — or the
 database or `.env` — can never be committed, turn on the repo's guard once: `git config core.hooksPath .githooks`.

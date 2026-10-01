@@ -88,6 +88,7 @@ class LotRequest(BaseModel):
     qty: float | str
     price: float | str
     date: str | None = None
+    received: str | None = None      # got these through a merger / demerger on this date
 
 
 class JobRequest(BaseModel):
@@ -255,8 +256,15 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
     def holdings_view() -> JSONResponse:
         def run(h, con):
             sync = h.sync_csv(con)
-            return {**h.portfolio(con), "csv": sync}
-        return JSONResponse(json.loads(json.dumps(_holdings_call(run), default=str)))
+            return {**h.portfolio(con), "csv": sync, "how_to": h.HOW_TO_ENTER}
+        out = _holdings_call(run)
+        if out.get("lookups"):                       # read any company cost-split notices in the background
+            from equity_research.analysis import demerger_costs
+            demerger_costs.lookup_missing_async(out["lookups"])
+        if out.get("merger_lookups"):                # …and how a merged company's shares were swapped
+            from equity_research.analysis import former_companies
+            former_companies.lookup_missing_async(out["merger_lookups"])
+        return JSONResponse(json.loads(json.dumps(out, default=str)))
 
     @app.get("/api/stocks")
     def stocks_search(q: str = "") -> list[dict]:
@@ -264,12 +272,14 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
 
     @app.post("/api/holdings")
     def holdings_add(req: LotRequest) -> JSONResponse:
-        lot = _holdings_call(lambda h, con: h.add_lot(con, req.stock or "", req.qty, req.price, req.date or None))
+        lot = _holdings_call(lambda h, con: h.add_lot(con, req.stock or "", req.qty, req.price, req.date or None,
+                                                          received=req.received or None))
         return JSONResponse(json.loads(json.dumps(lot, default=str)))
 
     @app.put("/api/holdings/{lot_id}")
     def holdings_edit(lot_id: str, req: LotRequest) -> dict:
-        _holdings_call(lambda h, con: h.update_lot(con, lot_id, req.qty, req.price, req.date or None))
+        _holdings_call(lambda h, con: h.update_lot(con, lot_id, req.qty, req.price, req.date or None,
+                                                             req.received or None))
         return {"ok": True}
 
     @app.delete("/api/holdings/{lot_id}")

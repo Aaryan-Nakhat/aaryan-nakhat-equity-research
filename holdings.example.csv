@@ -1,6 +1,9 @@
-# Copy to holdings.csv (gitignored — stays on your computer) and put your own buys in.
-# One row per buy. date is optional: with it you also get short- / long-term, yearly return and the Nifty 500
-# over the same days. Symbol or company name both work. Your broker's holdings export works too.
+# Copy to holdings.csv (gitignored — stays on your computer) and put your own buys in. One row per buy.
+# Company name or NSE symbol both work. Your broker's holdings export works too (no dates → P&L only).
+# WITH a date  → qty and price AS YOU BOUGHT THEM (contract note); splits / bonuses since are applied for you
+#                e.g. 100 @ 500 bought before a 1:5 split shows as 500 @ 100.
+# WITHOUT date → what your broker shows TODAY (qty and average price). Don't put today's numbers with an old date.
+# A company that merged into another? Put the OLD company as you bought it — it's converted.
 symbol,qty,price,date
 INFY,10,1450.00,2024-06-15
 ITC,25,410.50,

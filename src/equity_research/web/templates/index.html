@@ -71,6 +71,24 @@
         <p class="muted small">Kept on this computer only — never uploaded or committed. Add each buy; the date is
           optional (with it you also get short- / long-term, yearly return and the Nifty 500 over the same days).</p>
       </div>
+      <details class="h-howto" open>
+        <summary>📌 How to enter a buy — read once</summary>
+        <ul>
+          <li><b>One row per buy.</b> Bought the same stock twice? Two rows.</li>
+          <li><b>Know the date?</b> Enter the quantity and price <b>as you bought them</b> (your contract note).
+            Splits and bonuses since then are applied for you — e.g. <b>100 @ ₹500</b> bought before a 1:5 split
+            shows as <b>500 @ ₹100</b>.</li>
+          <li><b>No date?</b> Enter what your broker shows <b>today</b> — quantity and average price. Nothing is adjusted.</li>
+          <li><b>Don't mix them:</b> today's 500 @ ₹100 with the old date would count the split twice — you'll see a ⚠️ if it looks like that.</li>
+          <li><b>Your company merged into another?</b> Enter the <b>old company</b> as you bought it — type its name
+            (it's listed as “merged”). The tool reads the merger from the filings (e.g. 3 new shares for every 2) and
+            converts it, keeping your cost and date.</li>
+          <li><b>Demerger?</b> Your cost is split the way the company's own notice says (e.g. 85% stays, 15% goes to the
+            new company) and you're offered the new company's shares to add with one click.</li>
+          <li><b>Why add the date:</b> short- vs long-term tax (held over 12 months), yearly return and the Nifty 500 since —
+            and <code>raise 50000</code> can then estimate the tax.</li>
+        </ul>
+      </details>
       <div class="h-summary" id="hSummary"></div>
       <form class="h-form" id="hForm" autocomplete="off">
         <div class="h-pick"><input name="stock" required placeholder="Company — start typing, e.g. bharat elec"

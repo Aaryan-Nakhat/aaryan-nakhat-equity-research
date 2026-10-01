@@ -158,3 +158,32 @@ def test_watchlist_holdings_without_numbers_are_listed_to_fill(con):
     assert [m["name"] for m in h.missing(con)] == ["Acme Ltd", "Beta Ltd"]
     h.add_lot(con, "ACME", 1, 100)
     assert [m["symbol"] for m in h.portfolio(con)["missing"]] == ["BETA"]
+
+
+def test_todays_numbers_with_an_old_date_are_flagged(con):
+    """100 @ 500 bought, then a 1:5 split. As bought → 500 @ 100, no warning.
+    Today's 500 @ 100 typed with the old date → split applied twice, flagged."""
+    con.execute("INSERT INTO equity_master (symbol, company_name) VALUES ('SPLITCO', 'Splitco')")
+    con.execute("INSERT INTO equity_eod (trade_date, symbol, series, prev_close, open, high, low, last, close, avg_price, "
+                "ttl_trd_qnty, turnover_lacs, no_of_trades, deliv_qty, deliv_per) VALUES "
+                "('2024-11-15', 'SPLITCO', 'EQ', 500, 500, 500, 500, 500, 500, 500, 1, 1, 1, 1, 50), "
+                "(?, 'SPLITCO', 'EQ', 120, 120, 120, 120, 120, 120, 120, 1, 1, 1, 1, 50)", [TODAY])
+    con.execute("INSERT INTO price_adjustments VALUES ('SPLITCO', '2025-09-01', 0.2, 5, 'split', 'nse', 'FV 10 to 2')")
+    right = h.value_lot(con, h.add_lot(con, "SPLITCO", 100, 500, "2024-11-15"), today=TODAY)
+    assert right["adj_qty"] == 500 and right["adj_price"] == 100 and "warn" not in right
+    wrong = h.value_lot(con, h.add_lot(con, "SPLITCO", 500, 100, "2024-11-15"), today=TODAY)
+    assert wrong["adj_qty"] == 2500 and "looks like today's numbers" in wrong["warn"]
+    undated = h.value_lot(con, h.add_lot(con, "SPLITCO", 500, 100), today=TODAY)
+    assert undated["adj_qty"] == 500 and "warn" not in undated
+
+
+def test_the_check_bridges_gaps_in_price_history(con):
+    """No price on the buy date (history gap) → the nearest one before the split is used."""
+    con.execute("INSERT INTO equity_master (symbol, company_name) VALUES ('GAP', 'Gappy')")
+    con.execute("INSERT INTO equity_eod (trade_date, symbol, series, prev_close, open, high, low, last, close, avg_price, "
+                "ttl_trd_qnty, turnover_lacs, no_of_trades, deliv_qty, deliv_per) VALUES "
+                "('2025-01-01', 'GAP', 'EQ', 540, 540, 540, 540, 540, 540, 540, 1, 1, 1, 1, 50), "
+                "(?, 'GAP', 'EQ', 120, 120, 120, 120, 120, 120, 120, 1, 1, 1, 1, 50)", [TODAY])
+    con.execute("INSERT INTO price_adjustments VALUES ('GAP', '2025-09-01', 0.2, 5, 'split', 'nse', 'FV 10 to 2')")
+    assert "warn" in h.value_lot(con, h.add_lot(con, "GAP", 500, 100, "2024-11-15"), today=TODAY)
+    assert "warn" not in h.value_lot(con, h.add_lot(con, "GAP", 100, 500, "2024-11-15"), today=TODAY)

@@ -1362,6 +1362,88 @@ def reality_verify(claims: list[dict], evidence: dict[str, str], *,
     return out
 
 
+# ─────────────────────────── 🔁 Merger terms — into whom, at what ratio ───────────────────────────
+_MERGER_TERMS_SYS = """An Indian listed company was merged (amalgamated) into another company. From its stock-exchange
+filings (numbered F1, F2, ...; PDFs attached as F1.pdf, ...) find what its shareholders received. Use ONLY them.
+Return ONE JSON object:
+{"into_name": "<full name of the company whose shares were allotted>", "ratio_new": <shares of it allotted>,
+ "ratio_old": <for every N shares held of the merged company>, "cash_per_share": <cash per share if any, else null>,
+ "source_id": "F#"}
+e.g. "3 equity shares of Beta Industries Limited for every 2 equity shares of Alpha Limited" →
+{"into_name": "Beta Industries Limited", "ratio_new": 3, "ratio_old": 2, ...}. If the filings don't state
+the swap ratio, return {}. Never estimate."""
+
+
+def merger_terms(company: str, record_date, evidence: dict[str, str], *,
+                 files: list[tuple[str, bytes]] | None = None, model: str = MODEL) -> dict:
+    """🔁 A merged company's swap terms from its filings → {into_name, ratio_new, ratio_old, source_id} (both
+    ratio parts positive numbers), else {}. Never raises."""
+    ev = "\n".join(f"{k}: {v}" for k, v in evidence.items())
+    try:
+        raw = llm.generate(_MERGER_TERMS_SYS, f"MERGED COMPANY: {company}\nRECORD DATE: {record_date}\n\n"
+                           f"FILINGS:\n{ev}", json=True, files=files or None, model_name=model)
+        m = re.search(r"\{.*\}", raw or "", re.S)
+        data = json.loads(m.group(0)) if m else {}
+    except Exception:  # noqa: BLE001
+        return {}
+    try:
+        a, b = float(data.get("ratio_new")), float(data.get("ratio_old"))
+    except (TypeError, ValueError):
+        return {}
+    name = str(data.get("into_name") or "").strip()
+    if a <= 0 or b <= 0 or not name:
+        return {}
+    return {"into_name": name, "ratio_new": a, "ratio_old": b,
+            "source_id": str(data.get("source_id") or "").strip().upper()}
+
+
+# ─────────────────────────── ✂️ Demerger cost split — the company's own notice ───────────────────────────
+_DEMERGER_COST_SYS = """You read an Indian listed company's notice to shareholders on the APPORTIONMENT OF COST OF
+ACQUISITION after a demerger (the documents are numbered F1, F2, ...; PDFs attached as F1.pdf, ...). Use ONLY
+them. Return ONE JSON object:
+{"parent_pct": <% of the original cost that stays with the parent (demerged company)>,
+ "resulting": [{"name": "<resulting company's full name>", "pct": <% of the original cost that moves to it>,
+                "ratio_new": <shares of it received>, "ratio_old": <for every N parent shares held>}],
+ "source_id": "F#"}
+One entry per resulting company. Percentages as plain numbers (87.94, not "87.94%"). ratio_new / ratio_old
+only if stated (e.g. "one share ... for every one share" → 1 and 1), else null. If the documents don't give the
+percentages, return {"resulting": []}. Never estimate."""
+
+
+def demerger_cost_split(company: str, ex_date, evidence: dict[str, str], *,
+                        files: list[tuple[str, bytes]] | None = None, model: str = MODEL) -> dict:
+    """✂️ The filed cost split of a demerger → {parent_pct, resulting: [{name, pct, ratio_new, ratio_old}],
+    source_id}. Kept only when the percentages add up to ~100. Never raises."""
+    ev = "\n".join(f"{k}: {v}" for k, v in evidence.items())
+    try:
+        raw = llm.generate(_DEMERGER_COST_SYS, f"COMPANY: {company}\nDEMERGER EX-DATE: {ex_date}\n\n"
+                           f"DOCUMENTS:\n{ev}", json=True, files=files or None, model_name=model)
+        m = re.search(r"\{.*\}", raw or "", re.S)
+        data = json.loads(m.group(0)) if m else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+    def num(x):
+        try:
+            return float(str(x).replace("%", "").replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    res = []
+    for c in data.get("resulting") or []:
+        pct = num(c.get("pct")) if isinstance(c, dict) else None
+        if pct is None or not 0 < pct < 100 or not str(c.get("name") or "").strip():
+            continue
+        res.append({"name": str(c["name"]).strip(), "pct": pct, "ratio_new": num(c.get("ratio_new")),
+                    "ratio_old": num(c.get("ratio_old"))})
+    parent = num(data.get("parent_pct"))
+    total = sum(c["pct"] for c in res) + (parent if parent is not None else 0)
+    if not res or (parent is not None and abs(total - 100) > 1.0) or sum(c["pct"] for c in res) >= 100:
+        return {}
+    return {"parent_pct": parent if parent is not None else 100 - sum(c["pct"] for c in res),
+            "resulting": res, "source_id": str(data.get("source_id") or "").strip().upper()}
+
+
 # ─────────────────────────── 🛡️ Thesis Guard — your reasons for owning a stock ───────────────────────────
 _THESIS_PARSE_SYS = """Someone wrote why they own (or plan to own) an Indian listed stock, and maybe their price
 rules. Turn it into CHECKS a program can re-run every evening. Return ONE JSON object:

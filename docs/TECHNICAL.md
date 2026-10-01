@@ -106,7 +106,30 @@ Validated on RELIANCE (2026-06-12, 373 trading days): close 1,293 below SMA20/50
   Lots from the file are read-only in the UI. Unmatched stocks / bad numbers are listed by file line.
 - **Valuation:** the latest close from `equity_eod_adj`. A dated lot is brought through every split / bonus /
   consolidation / rights since its date (`corporate_actions.share_multiplier_since`: qty × m, price ÷ m) — so
-  enter a dated lot as you bought it. Term: long when held more than 365 days (else days left). Yearly return
+  enter a dated lot as you bought it. A dated lot whose price is under 60 % of the raw close nearest its date (within ~2 months,
+  before the first split since) is flagged — it's almost always today's adjusted numbers with the old date, which
+  would count the split twice. Undated lots are taken as today's numbers (the broker's qty and average price).
+- **Mergers (`analysis/former_companies.py`, table `former_companies`):** companies that stopped trading are
+  learned weekly in the background — every main-board symbol in the price history that isn't listed today is looked
+  up once on NSE's per-company corporate-action record (batched in one browser session per 80), which gives its
+  name and, for a merger, the `Merger` / `Amalgamation` record date. So the add box finds the old company. When such
+  a stock is held, its filings around the record date are read (`synthesize.merger_terms`) for the surviving company
+  and the swap ratio (kept only if the company resolves to a listed one; retried weekly). The lot stays as entered
+  (old company, qty, price, date) and is valued as `qty × old splits before the merger × ratio` shares of the
+  survivor, same total cost and buy date, whose own actions count only from the record date (`received`) — so
+  the survivor's earlier bonuses or demergers don't touch shares that came from the merged company. The ratio is
+  usually stated in the record-date notice, so those are read first.
+- **`received`:** the date shares arrived through a merger / demerger (set for converted mergers and for demerged
+  shares added from the UI); this company's splits / bonuses / demergers count only after it; buy_date, the
+  original purchase, still decides the tax term.
+- **Demergers (`analysis/demerger_costs.py`, table `demerger_costs`):** for each demerger after a dated lot's
+  start, the parent keeps the cost share from the company's **apportionment-of-cost notice** (found among its
+  filings from 60 days before to 150 after the ex-date — by title *or filename*, the title is often just "General
+  Updates" — and read by `synthesize.demerger_cost_split`, kept only if the percentages add to ~100). The new
+  companies' shares (qty × the entitlement ratio, their slice of the cost, same buy date, received on the ex-date)
+  are offered in the UI. Lookups run in a background thread on page load; until then (or if no notice exists) the
+  market split — the parent's opening gap, `price_adjustments.factor` — is used and labelled an estimate. A 'none'
+  result is retried after 7 days. A demerger can create several companies (one row each). Term: long when held more than 365 days (else days left). Yearly return
   = (close ÷ adjusted price)^(365 ÷ days) − 1, shown once held a year. Benchmark = Nifty 500 from the first close
   on/after the buy date. Undated lots: profit / loss only.
 - **Never committed:** `holdings*.csv` (except the example) is gitignored; `.githooks/pre-commit`

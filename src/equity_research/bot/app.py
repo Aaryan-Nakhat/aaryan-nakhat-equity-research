@@ -34,6 +34,7 @@ import duckdb
 
 from equity_research import scan
 from equity_research import screen_digest
+from equity_research.analysis import former_companies
 from equity_research.analysis import (accumulation, booking_risk, call_radar,
                                       fundamental_screens, holdco, hotlist, investors, keyword_alerts,
                                       leaders, momentum, policy, results_radar, screener,
@@ -696,6 +697,38 @@ def _calls_query(subject: str) -> bool:
                          r"\s*[:\-]?\s*$", subject, flags=re.I))
 
 
+_former_lock = threading.Lock()
+
+
+def _former_worker() -> None:
+    """Learn the names (and merger dates) of companies that stopped trading, so buys of them can be entered."""
+    if not _former_lock.acquire(blocking=False):
+        return
+    con = connect()
+    try:
+        former_companies.refresh(con)
+        scan._set_meta(con, "last_former_refresh", datetime.now(IST).date().isoformat())
+    except Exception:  # noqa: BLE001
+        log.exception("former companies refresh failed")
+    finally:
+        con.close()
+        _former_lock.release()
+
+
+def maybe_former_refresh() -> None:
+    """Heartbeat hook: once a week (and on first start), in a background thread."""
+    if _former_lock.locked():
+        return
+    con = connect()
+    try:
+        last = scan._meta(con, "last_former_refresh")
+    finally:
+        con.close()
+    if last and (datetime.now(IST).date() - datetime.fromisoformat(last).date()).days < 7:
+        return
+    threading.Thread(target=_former_worker, name="former-companies", daemon=True).start()
+
+
 def _thesis_query(subject: str) -> tuple[str, str, str] | None:
     """🛡️ Thesis Guard → (action, company, text): ('list','',''), ('remove', co, ''), ('show', co, ''),
     or ('set', co, reasons). `thesis: BEL — reasons…` (the company ends at —, -, |, : or 'because')."""
@@ -1072,7 +1105,9 @@ _HELP_SECTIONS: list[tuple[str, str, list[list[str]]]] = [
         ["`raise 50000` (or `take out 2 lakh` · `sell ₹1.5L` · `need 50k`)",
          "Exactly what to sell to raise that much: two plans — 🧾 least tax and 💪 weakest holdings first — "
          "with shares, ≈ money in hand and the estimated capital-gains tax (FIFO, set-off, the yearly "
-         "₹1.25 lakh long-term exemption), plus 'wait N days and it turns long-term' tips."],
+         "₹1.25 lakh long-term exemption), plus 'wait N days and it turns long-term' tips. Needs your quantities "
+         "in the web UI's 💼 My holdings — with a buy date, enter qty and price as you bought them (splits / "
+         "bonuses since are applied); without one, what your broker shows today."],
     ]),
     ("🔎 Idea screeners — find new names", "Each returns a numbered list; reply a number → deep report.", [
         ["`screen: value` (or just `screen`)",
@@ -2305,8 +2340,11 @@ def _send_raise_plan(req: EmailRequest, amount: float) -> None:
         con.close()
     if not has_lots:
         _reply_text(req, f"💰 To plan how to raise **{_inr(amount)}** I need your quantities and buy prices — add "
-                         "them in the web UI's **💼 My holdings** (or `holdings.csv`; the buy date is optional, "
-                         "it adds the tax). Then resend.")
+                         "them in the web UI's **💼 My holdings** (your watchlist stocks are already listed there; or "
+                         "`holdings.csv`). Then resend.\n\n**How to enter:** with a buy date, the quantity and "
+                         "price **as you bought them** — splits / bonuses since are applied for you (e.g. "
+                         "100 @ ₹500 bought before a 1:5 split shows as 500 @ ₹100); without a date, what your "
+                         "broker shows **today**. The date adds the tax estimate.")
         return
     _reply_text(req, f"📩 Got it — working out what to sell to raise **{_inr(amount)}** (least tax vs weakest "
                      "holdings first). ~1–2 min.")
@@ -2359,8 +2397,9 @@ def _send_raise_plan(req: EmailRequest, amount: float) -> None:
         f"{config.STCG_RATE:.1%} short-term / {config.LTCG_RATE:.1%} long-term + {config.TAX_CESS:.0%} cess, "
         f"with ₹{config.LTCG_EXEMPTION:,.0f} of long-term gain tax-free a year, losses set off, and **no other "
         "gains assumed this financial year**. Brokerage, STT and surcharge are left out. Keep score = the "
-        "`sell` ranking's merit score (higher = stronger hold). Decision support, not tax advice — check with "
-        "your CA for large sales._")
+        "`sell` ranking's merit score (higher = stronger hold). Buys with a date are counted as entered (as "
+        "bought) and brought through splits / bonuses since; buys without one are taken as today's numbers. "
+        "Decision support, not tax advice — check with your CA for large sales._")
     md = "\n\n".join(parts)
     emailer.send_report(_re_subject(req.subject), md, to=req.sender,
                         html=emailer.body_html(md, "Raise cash — what to sell"),
@@ -3322,6 +3361,7 @@ def main(web_ui: bool | None = None) -> None:
                     maybe_scorecard()        # weekly track-record email
                 if config.ENABLE_THESIS_GUARD:
                     maybe_thesis_sweep()     # evening re-check of your theses (background)
+                maybe_former_refresh()       # weekly: names of merged / delisted companies (background)
                 if config.ENABLE_MAIL_HOUSEKEEPING:
                     maybe_mail_housekeeping()  # bin processed workbench mail on this server account
                 inbox.wait(timeout=IDLE_TIMEOUT)   # then sleep in IDLE until a nudge / timeout

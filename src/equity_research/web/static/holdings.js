@@ -53,9 +53,43 @@
       if (l.yearly_pct != null) bits.push(`${pct(l.yearly_pct)} a year`);
       if (l.bench_pct != null) bits.push(`Nifty 500 ${pct(l.bench_pct)} since`);
     } else bits.push(`<span class="muted">no date — P&amp;L only</span>`);
-    if (l.adjusted && l.adjusted.length)
-      bits.push(`<span class="muted" title="${esc(l.adjusted.join("; "))}">adjusted for ${l.adjusted.length} split/bonus</span>`);
-    return bits.join(" · ");
+    if (l.received) bits.push(`<span class="muted">received ${fmtDate(l.received)} (demerger)</span>`);
+    if (l.via) bits.push(`<span class="muted">you entered ${num(l.qty, 4)} <b>${esc(l.via.name)}</b> @ ${inr(l.price, 2)} →
+      ${num(l.via.shares, 4)} shares here (merged ${fmtDate(l.via.date)}, ${esc(l.via.ratio)}${l.via.url
+        ? `, <a href="${esc(l.via.url)}" target="_blank" rel="noopener">filing ↗</a>` : ""})</span>`);
+    if (l.note) bits.push(`<span class="lot-note">🔁 ${esc(l.note)}</span>`);
+    if (l.adjusted && l.adjusted.length && !l.via)
+      bits.push(`<span class="muted">you entered ${num(l.qty, 4)} @ ${inr(l.price, 2)} — shown after ${esc(l.adjusted.join(", "))}</span>`);
+    let out = bits.join(" · ");
+    for (const dm of l.demergers || []) out += demergerNote(l, dm);
+    if (l.warn) out += `<div class="lot-warn">⚠️ ${esc(l.warn)}</div>`;
+    return out;
+  }
+
+  function demergerNote(l, dm) {
+    const when = fmtDate(dm.ex_date);
+    if (dm.basis === "filing") {
+      const src = dm.url ? ` (<a href="${esc(dm.url)}" target="_blank" rel="noopener">company's notice ↗</a>)` : "";
+      let html = `✂️ <b>Demerger ${when}:</b> ${dm.parent_pct.toFixed(2)}% of your cost stays here${src}.`;
+      for (const c of dm.children) {
+        const what = c.qty != null ? `<b>${num(c.qty, 4)}</b> shares of <b>${esc(c.name)}</b>` : `shares of <b>${esc(c.name)}</b>`;
+        html += ` You should also have ${what} — ${c.pct.toFixed(2)}% of your cost (${inr(c.cost)}), same buy date.`;
+        if (c.have) html += ` <span class="tag ok">added</span>`;
+        else if (c.symbol && c.qty != null)
+          html += ` <button type="button" class="add-child" data-sym="${esc(c.symbol)}" data-qty="${c.qty}"
+            data-price="${c.price}" data-date="${esc(l.buy_date)}" data-rcv="${esc(dm.ex_date)}">＋ Add them</button>`;
+      }
+      return `<div class="lot-dm">${html}</div>`;
+    }
+    if (dm.basis === "looking")
+      return `<div class="lot-dm">✂️ <b>Demerger ${when}:</b> reading the company's cost-split notice…
+        ${dm.parent_pct != null ? `(for now a market-price estimate: ~${dm.parent_pct.toFixed(0)}% of your cost kept here)` : ""}</div>`;
+    if (dm.basis === "estimate")
+      return `<div class="lot-dm">✂️ <b>Demerger ${when}:</b> ~${dm.parent_pct.toFixed(0)}% of your cost kept here — a
+        <b>market-price estimate</b>; the company's cost-split notice wasn't found. Add the new company's shares yourself
+        (same buy date).</div>`;
+    return `<div class="lot-dm">✂️ <b>Demerger ${when}:</b> the cost split isn't known — your cost here isn't split. Add the new
+      company's shares yourself (same buy date) and check the company's notice.</div>`;
   }
 
   function lotRow(l) {
@@ -73,7 +107,18 @@
       <td class="detail">${lotDetail(l)}</td>
       <td class="acts">${csv ? "<span class='muted small' title='Edit holdings.csv to change this lot'>in file</span>"
         : `<button type="button" data-act="edit" title="Edit">✎</button><button type="button" data-act="del" title="Delete">🗑</button>`}</td>`;
-    tr.addEventListener("click", (e) => {
+    tr.addEventListener("click", async (e) => {
+      const ch = e.target.closest("button.add-child");
+      if (ch) {
+        ch.disabled = true;
+        try {
+          await call("POST", "/api/holdings", { stock: ch.dataset.sym, qty: ch.dataset.qty, price: ch.dataset.price,
+            date: ch.dataset.date || null, received: ch.dataset.rcv });
+          flash("Added the demerged company's shares", true);
+          load();
+        } catch (err) { flash(err.message); ch.disabled = false; }
+        return;
+      }
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       if (b.dataset.act === "del") remove(l, b);
@@ -108,15 +153,20 @@
 
   function edit(tr, l) {
     tr.innerHTML = `
-      <td class="indent"><input type="date" value="${esc(l.buy_date || "")}" max="${new Date().toISOString().slice(0, 10)}"></td>
+      <td class="indent"><input type="date" value="${esc(l.buy_date || "")}" max="${new Date().toISOString().slice(0, 10)}" title="Buy date"></td>
       <td class="n"><input type="number" step="any" min="0" value="${esc(l.qty)}"></td>
       <td class="n"><input type="number" step="any" min="0" value="${esc(l.price)}"></td>
-      <td colspan="3" class="muted small">Enter qty and price as you bought them — splits / bonuses after the date are applied for you.</td>
+      <td colspan="3" class="muted small">With a date: qty and price <b>as you bought them</b> (splits / bonuses since are applied).
+        No date: what your broker shows today.${l.via ? ` These are the <b>${esc(l.via.name)}</b> shares you bought.` : ""}</td>
       <td class="acts"><button type="button" class="save">Save</button><button type="button" class="cancel">✕</button></td>`;
     const [d, q, p] = tr.querySelectorAll("input");
     $(".cancel", tr).addEventListener("click", load);
     $(".save", tr).addEventListener("click", async () => {
-      try { await call("PUT", `/api/holdings/${l.id}`, { qty: q.value, price: p.value, date: d.value || null }); load(); }
+      try {
+        await call("PUT", `/api/holdings/${l.id}`, { qty: q.value, price: p.value, date: d.value || null,
+          received: l.received || null });
+        load();
+      }
       catch (err) { flash(err.message); }
     });
   }
@@ -149,8 +199,8 @@
     if (miss.length) {
       const head = document.createElement("tr");
       head.className = "miss-head";
-      head.innerHTML = `<td colspan="7">📝 <b>${miss.length} in your watchlist without numbers yet</b> — type how many
-        you hold and the price you paid (the date is optional; with it you also get tax and yearly return).</td>`;
+      head.innerHTML = `<td colspan="7">📝 <b>${miss.length} in your watchlist without numbers yet</b> — with a date, type the
+        quantity and price <b>as you bought them</b>; without one, what your broker shows today (see “How to enter” above).</td>`;
       body.append(head);
       for (const m of miss) body.append(missRow(m));
     }
@@ -183,9 +233,17 @@
     }
   }
 
+  let retries = 0;
   async function load() {
-    try { render(await call("GET", "/api/holdings")); }
-    catch (err) { flash(`Couldn't load holdings: ${err.message}`); }
+    try {
+      const data = await call("GET", "/api/holdings");
+      render(data);
+      clearTimeout(load.t);
+      if (((data.lookups || []).length || (data.merger_lookups || []).length) && retries < 4) {   // a company notice is being read — check back
+        retries += 1;
+        load.t = setTimeout(load, 20000);
+      } else retries = 0;
+    } catch (err) { flash(`Couldn't load holdings: ${err.message}`); }
   }
 
   // company-name autocomplete: type any part of the name, pick from the list
@@ -212,7 +270,8 @@
       box.hidden = false;
       return;
     }
-    box.innerHTML = hits.map((h, i) => `<li role="option" data-i="${i}"><b>${esc(h.name)}</b><span>${esc(h.symbol)}</span></li>`).join("");
+    box.innerHTML = hits.map((h, i) => `<li role="option" data-i="${i}"><b>${esc(h.name)}</b><span>${h.former
+      ? `<em class="former">${esc(h.note)}</em>` : esc(h.symbol)}</span></li>`).join("");
     box.hidden = false;
     active = -1;
   });

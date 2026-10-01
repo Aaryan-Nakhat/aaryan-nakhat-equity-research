@@ -124,6 +124,42 @@ _SCHEMA = [
         added_at   TIMESTAMP
     )
     """,
+    # shares that arrived through a merger / demerger: this company's own splits / bonuses count only from here
+    # (buy_date stays the original purchase — it decides the tax term)
+    "ALTER TABLE holding_lots ADD COLUMN IF NOT EXISTS received DATE",
+    # companies that stopped trading (merged / delisted) — so a buy can be entered as it was made
+    """
+    CREATE TABLE IF NOT EXISTS former_companies (
+        symbol       VARCHAR PRIMARY KEY,
+        name         VARCHAR,
+        isin         VARCHAR,
+        last_traded  DATE,
+        merger_date  DATE,         -- NSE's 'Merger' / 'Amalgamation' record date, if it merged
+        into_symbol  VARCHAR,      -- the company it merged into (from its filings, analysis/former_companies.py)
+        into_name    VARCHAR,
+        ratio_new    DOUBLE,       -- shares of it received ...
+        ratio_old    DOUBLE,       -- ... for every this many held
+        source       VARCHAR,
+        url          VARCHAR,
+        fetched_at   TIMESTAMP,
+        merger_checked_at TIMESTAMP
+    )
+    """,
+    # a demerger's cost split, from the company's "apportionment of cost of acquisition" notice
+    """
+    CREATE TABLE IF NOT EXISTS demerger_costs (
+        symbol      VARCHAR,      -- the parent (demerged company)
+        ex_date     DATE,
+        new_symbol  VARCHAR,      -- the resulting company (NULL if not listed / not matched)
+        new_name    VARCHAR,
+        cost_pct    DOUBLE,       -- % of the original cost that moves to it
+        ratio_new   DOUBLE,       -- its shares received ...
+        ratio_old   DOUBLE,       -- ... for every this many parent shares
+        source      VARCHAR,      -- 'filing' | 'none' (looked, nothing found — retried later)
+        url         VARCHAR,
+        fetched_at  TIMESTAMP
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS insider_trades (
         symbol           VARCHAR,
