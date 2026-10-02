@@ -79,6 +79,7 @@
     if (bonus.length)
       out += `<div class="lot-sub">🎁 ${bonus.map((p) => `${num(p.shares, 4)} bonus shares since ${fmtDate(p.acquired)}`).join(", ")}
         — ₹0 cost and their own date for tax (${bonus.every((p) => p.term === "long") ? "long-term" : "short-term for now"}).</div>`;
+    for (const n of l.events || []) out += `<div class="lot-warn">ℹ️ ${esc(n)}</div>`;
     for (const r of l.rights || []) out += rightsNote(l, r);
     for (const dm of l.demergers || []) out += demergerNote(l, dm);
     if (l.warn) out += `<div class="lot-warn">⚠️ ${esc(l.warn)}</div>`;
@@ -87,9 +88,11 @@
 
   function rightsNote(l, r) {
     const price = r.price != null ? ` @ ${inr(r.price, 2)}` : "";
-    return `<div class="lot-sub">🎟️ <b>Rights issue ${fmtDate(r.date)}</b> (${esc(r.ratio)}): you could apply for
-      <b>${num(r.entitled, 4)}</b> shares${price}. Did you? <button type="button" class="add-rights"
-      data-sym="${esc(l.symbol)}" data-qty="${r.entitled}" data-price="${r.price ?? ""}" data-date="${esc(r.date)}">
+    const what = r.entitled != null ? `you could apply for <b>${num(r.entitled, 4)}</b> shares${price}`
+      : "the record doesn't state the ratio";
+    return `<div class="lot-sub">🎟️ <b>Rights issue ${fmtDate(r.date)}</b> (${esc(r.ratio)}): ${what}. Did you subscribe?
+      <button type="button" class="add-rights"
+      data-sym="${esc(l.symbol)}" data-qty="${r.entitled ?? ""}" data-price="${r.price ?? ""}" data-date="${esc(r.date)}">
       ＋ I subscribed — add them</button> <span class="muted">(change the date to your allotment date if you know it)</span></div>`;
   }
 
@@ -140,7 +143,7 @@
       if (add) {
         if (!add.dataset.price) {
           anotherBuy({ symbol: add.dataset.sym, name: l.name }, { qty: add.dataset.qty, date: add.dataset.date });
-          flash("Enter the price you paid per rights share, then Add.");
+          flash("Enter the rights shares you got and the price you paid, then Add.");
           return;
         }
         add.disabled = true;
@@ -347,7 +350,8 @@
       const data = await call("GET", "/api/holdings");
       render(data);
       clearTimeout(load.t);
-      const pending = ["lookups", "merger_lookups", "dividend_refresh"].some((k) => (data[k] || []).length) || data.fmv_pending;
+      const pending = ["lookups", "merger_lookups", "dividend_refresh", "bse_action_refresh"]
+        .some((k) => (data[k] || []).length) || data.fmv_pending;
       if (pending && retries < 6) { retries += 1; load.t = setTimeout(load, 20000); }   // background reads running
       else retries = 0;
     } catch (err) { flash(`Couldn't load holdings: ${err.message}`); }

@@ -62,6 +62,7 @@ class LotLog:
     dividends: float = 0.0
     sold: float = 0.0
     warn: str | None = None
+    notes: list[str] = field(default_factory=list)   # events that change shares but couldn't be sized
     first_action: date | None = None     # the first split / bonus since the buy (for the "today's numbers" check)
 
 
@@ -196,15 +197,25 @@ def _apply(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: R
             _mark(res.logs[lot_id], ex, f"{kind} (ex {ex:%d-%b-%Y}, ×{mult:.3g} shares{note})")
     elif kind == "rights":
         m = _RIGHTS.search(str(detail or ""))
-        if not m:
-            return
-        a, b = float(m.group(1)), float(m.group(2))
-        fv = _face_value(con, symbol)
-        issue = (fv + float(m.group(3))) if fv and m.group(3) else None
+        if m:
+            a, b = float(m.group(1)), float(m.group(2))
+            fv = _face_value(con, symbol)
+            issue = (fv + float(m.group(3))) if fv and m.group(3) else None
+            per_share, ratio = a / b, f"{a:g} for every {b:g}"
+        elif mult and mult > 1:                        # BSE: ratio known as a multiplier only
+            per_share, ratio, issue = mult - 1, f"{mult - 1:g} per share held", None
+        else:                                          # BSE often doesn't state it
+            per_share, ratio, issue = None, "ratio not stated", None
         for lot_id in lot_ids:
-            res.logs[lot_id].rights.append({"date": ex.isoformat(), "ratio": f"{a:g} for every {b:g}",
-                                            "entitled": int(_lot_shares(parts, lot_id) * a / b + 1e-9),
+            entitled = int(_lot_shares(parts, lot_id) * per_share + 1e-9) if per_share else None
+            res.logs[lot_id].rights.append({"date": ex.isoformat(), "ratio": ratio, "entitled": entitled,
                                             "price": issue})
+    elif kind == "unsized":
+        for lot_id in lot_ids:
+            res.logs[lot_id].notes.append(
+                f"{str(detail or 'Corporate action').replace(' (BSE)', '')} on {ex:%d-%b-%Y} (BSE record) may have "
+                "changed your share count — it isn't applied here. Check this buy's quantity against your broker "
+                "and, if it changed, enter the buy without a date as your broker shows it today.")
     elif kind == "demerger":
         split = dc.known(con, symbol, ex)
         if split is None:

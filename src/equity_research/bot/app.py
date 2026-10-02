@@ -767,9 +767,10 @@ def maybe_former_refresh() -> None:
     con = connect()
     try:
         last = scan._meta(con, "last_weekly_instruments")
+        no_codes = con.execute("SELECT count(*) FROM bse_codes").fetchone()[0] == 0
     finally:
         con.close()
-    if last and (datetime.now(IST).date() - datetime.fromisoformat(last).date()).days < 7:
+    if last and not no_codes and (datetime.now(IST).date() - datetime.fromisoformat(last).date()).days < 7:
         return
     threading.Thread(target=_former_worker, name="former-companies", daemon=True).start()
 

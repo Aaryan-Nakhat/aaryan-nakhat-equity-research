@@ -141,6 +141,12 @@ Local only — nothing is sent anywhere, and nothing personal is committed (see 
     ISIN, else symbol) divided by the share multiplications since. A buyback is exempt before 1-Oct-2024, a deemed
     dividend (proceeds) plus capital loss (cost) to 31-Mar-2026, ordinary gains after. Selling more than the dated
     buys cover is listed as unmatched with a warning.
+- **BSE's record (`analysis/bse_actions.py`):** NSE's record only covers a company's NSE life, so for each held
+  stock BSE's corporate-action history is read too (scrip code by ISIN from `bse_codes`; weekly, in the background):
+  splits / consolidations / bonuses sized from BSE's wording go into `price_adjustments` (`source = 'bse'`) only when
+  NSE has nothing within a week of that date; dividends into `dividends`; rights (BSE rarely states the ratio) become
+  an offer without a number; reductions of capital / schemes become a note on the buys before them ("check your
+  share count") — never guessed. This covers shares that listed on NSE late and BSE-only shares.
 - **Mergers (`analysis/former_companies.py`, table `former_companies`):** symbols that stopped trading are learned
   weekly (name + `Merger` record date from NSE's per-symbol record, batched 80 per browser session), so the add box
   finds the old company. Held ones have their record-date / scheme filings read (`synthesize.merger_terms`) for the

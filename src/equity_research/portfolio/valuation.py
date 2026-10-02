@@ -53,6 +53,7 @@ def _lot_view(con, lot: dict, parts: list[Part], res: Result, ltp, today: date, 
          "adjusted": (old_logs.actions if old_logs else []) + (log.actions if log else []),
          "bonus": (old_logs.bonus if old_logs else []) + (log.bonus if log else []),
          "rights": log.rights if log else [], "demergers": log.demergers if log else [],
+         "events": (old_logs.notes if old_logs else []) + (log.notes if log else []),
          "dividends": (old_logs.dividends if old_logs else 0) + (log.dividends if log else 0),
          "sold": (old_logs.sold if old_logs else 0) + (log.sold if log else 0),
          "parts": [_part_view(p, today) for p in mine]}
@@ -95,7 +96,7 @@ def _undated_view(lot: dict, ltp) -> tuple[dict, Part]:
 def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> dict:
     """Every stock: lots (with their history), value and P&L on the latest close, dividends, realised gains and
     XIRR; totals; realised gains by financial year; and the background lookups to start."""
-    from equity_research.analysis import former_companies
+    from equity_research.analysis import bse_actions, former_companies
 
     today = today or date.today()
     by_sym: dict[str, list[dict]] = defaultdict(list)
@@ -259,6 +260,7 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
         "lookups": sorted(set(lookups)),
         "merger_lookups": sorted(set(merger_lookups)),
         "dividend_refresh": income.stale(con, syms),
+        "bse_action_refresh": bse_actions.stale(con, syms),
         "fmv_pending": fmv_needed and not tax.fmv_loaded(con),
         "realised": by_year(realised, dividends_all),
         "sells": [{**s, "sell_date": s["sell_date"].isoformat()} for ss in sells_by.values() for s in ss],

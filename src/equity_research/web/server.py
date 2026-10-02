@@ -285,6 +285,9 @@ def create_app(manager: JobManager | None = None, *, password: str | None = None
             income.refresh_async(out["dividend_refresh"])
         if out.get("fmv_pending"):
             tax.load_fmv_async()
+        if out.get("bse_action_refresh"):
+            from equity_research.analysis import bse_actions
+            bse_actions.refresh_async(out["bse_action_refresh"])
 
     @app.get("/api/stocks")
     def stocks_search(q: str = "") -> list[dict]:

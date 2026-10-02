@@ -180,6 +180,9 @@ _SCHEMA = [
     )
     """,
     "CREATE TABLE IF NOT EXISTS dividend_fetch (symbol VARCHAR PRIMARY KEY, fetched_at TIMESTAMP)",
+    # BSE scrip codes by ISIN (every active BSE scrip) — to read BSE's corporate-action record for any holding
+    "CREATE TABLE IF NOT EXISTS bse_codes (isin VARCHAR PRIMARY KEY, code VARCHAR, name VARCHAR)",
+    "CREATE TABLE IF NOT EXISTS bse_action_fetch (symbol VARCHAR PRIMARY KEY, fetched_at TIMESTAMP)",
     # companies that stopped trading (merged / delisted) — so a buy can be entered as it was made
     """
     CREATE TABLE IF NOT EXISTS former_companies (

@@ -92,12 +92,16 @@ def refresh_bse(con: duckdb.DuckDBPyConnection) -> int:
     nse_isins = {r[0] for r in con.execute(
         "SELECT isin FROM equity_master WHERE isin IS NOT NULL UNION SELECT isin FROM instruments "
         "WHERE isin IS NOT NULL AND kind <> 'bse'").fetchall()}
-    rows = []
+    rows, codes = [], []
     for r in data if isinstance(data, list) else []:
         isin, code = str(r.get("ISIN_NUMBER") or "").strip(), str(r.get("SCRIP_CD") or "").strip()
         name = str(r.get("Issuer_Name") or r.get("Scrip_Name") or "").strip()
+        if code and isin.startswith("INE"):
+            codes.append((isin, code, name))        # every scrip — BSE's corporate-action record for any holding
         if code and name and isin.startswith("INE") and isin not in nse_isins:
             rows.append((f"BSE:{code}", name, isin, "bse"))
+    if codes:
+        con.executemany("INSERT OR REPLACE INTO bse_codes VALUES (?, ?, ?)", codes)
     n = _store(con, rows)
     log.info("instruments: %d BSE-only shares", n)
     return n
