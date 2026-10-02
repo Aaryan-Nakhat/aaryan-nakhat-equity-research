@@ -109,6 +109,15 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
     carried: dict[str, list] = defaultdict(list)        # survivor → [(old symbol, terms, old result, old lots)]
     stuck: dict[str, tuple] = {}                        # old symbol → (terms, note) — not convertible (yet)
     merger_lookups: list[str] = []
+    for sym in sorted(set(by_sym) | set(sells_by)):             # still listed under another symbol → that one
+        fc = former_companies.info(con, sym)
+        live = former_companies.live_listing(con, fc) if fc else None
+        if live:
+            for lt in by_sym.pop(sym, []):
+                by_sym[live[0]].append({**lt, "symbol": live[0], "name": live[1]})
+            for s in sells_by.pop(sym, []):
+                sells_by[live[0]].append({**s, "symbol": live[0], "name": live[1]})
+            names.setdefault(live[0], live[1])
     for sym in sorted(set(by_sym) | set(sells_by)):
         fc = former_companies.info(con, sym)
         if not fc:

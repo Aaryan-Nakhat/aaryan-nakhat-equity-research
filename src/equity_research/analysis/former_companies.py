@@ -95,6 +95,9 @@ def search(con: duckdb.DuckDBPyConnection, q: str, limit: int = 5) -> list[dict]
     rows = con.execute(
         f"""SELECT symbol, name, merger_date, into_name FROM former_companies
             WHERE name IS NOT NULL AND (({cond}) OR upper(symbol) = ?)
+              AND (merger_date IS NOT NULL OR isin IS NULL OR isin NOT IN (   -- still listed elsewhere → that one
+                   SELECT isin FROM equity_master WHERE isin IS NOT NULL
+                   UNION SELECT isin FROM instruments WHERE isin IS NOT NULL))
             ORDER BY last_traded DESC LIMIT ?""", [f"%{w}%" for w in words] + [q.strip().upper(), limit]).fetchall()
     out = []
     for sym, name, md, into in rows:
@@ -105,11 +108,24 @@ def search(con: duckdb.DuckDBPyConnection, q: str, limit: int = 5) -> list[dict]
 
 def info(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | None:
     r = con.execute("""SELECT symbol, name, merger_date, into_symbol, into_name, ratio_new, ratio_old, source, url,
-                              merger_checked_at FROM former_companies WHERE symbol = ?""", [symbol]).fetchone()
+                              merger_checked_at, isin FROM former_companies WHERE symbol = ?""", [symbol]).fetchone()
     if not r:
         return None
     return dict(zip(["symbol", "name", "merger_date", "into_symbol", "into_name", "ratio_new", "ratio_old",
-                     "source", "url", "merger_checked_at"], r))
+                     "source", "url", "merger_checked_at", "isin"], r))
+
+
+_LIVE_BY_ISIN = """SELECT symbol, company_name FROM equity_master WHERE isin = ?
+                   UNION ALL SELECT symbol, name FROM instruments WHERE isin = ?"""
+
+
+def live_listing(con: duckdb.DuckDBPyConnection, fc: dict) -> tuple[str, str] | None:
+    """The same security still listed under another symbol (same ISIN) — e.g. a share that left NSE but trades
+    on BSE, or a stray old NSE symbol. Not for a merger (the merged company's ISIN is extinguished)."""
+    if fc.get("merger_date") or not fc.get("isin"):
+        return None
+    r = con.execute(_LIVE_BY_ISIN, [fc["isin"], fc["isin"]]).fetchone()
+    return (r[0], r[1]) if r else None
 
 
 def needs_lookup(fc: dict) -> bool:

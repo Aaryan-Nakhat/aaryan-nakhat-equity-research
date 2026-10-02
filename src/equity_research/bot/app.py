@@ -741,20 +741,22 @@ def _bse_prices_worker() -> None:
 
 
 def maybe_bse_prices() -> None:
-    """Heartbeat hook: once a day after the evening scan hour if a BSE-only share is held — and at once when
-    a newly added one has no price yet."""
+    """Heartbeat hook: BSE-only closes once a day after the evening scan hour — and at once the first time, or
+    when a newly added BSE-only holding has no price yet."""
     now = datetime.now(IST)
     if _bse_lock.locked():
         return
     con = connect()
     try:
         done = scan._meta(con, "last_bse_prices") == now.date().isoformat()
-        held = con.execute("SELECT count(*) FROM holding_lots WHERE symbol LIKE 'BSE:%'").fetchone()[0]
+        listed = con.execute("SELECT count(*) FROM instruments WHERE kind = 'bse'").fetchone()[0]
+        never = con.execute("SELECT count(*) FROM bse_prices").fetchone()[0] == 0
         unpriced = con.execute("""SELECT count(*) FROM holding_lots WHERE symbol LIKE 'BSE:%'
                                   AND symbol NOT IN (SELECT symbol FROM bse_prices)""").fetchone()[0]
     finally:
         con.close()
-    if held and (unpriced or (not done and now.hour >= SCAN_HOUR)):   # a new one right away, else nightly
+    # one small file a day (a holding can be BSE-only under an old NSE symbol, so don't gate on how it's stored)
+    if listed and (never or unpriced or (not done and now.hour >= SCAN_HOUR)):
         threading.Thread(target=_bse_prices_worker, name="bse-prices", daemon=True).start()
 
 

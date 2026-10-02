@@ -201,3 +201,15 @@ def test_the_merger_reader(monkeypatch):
         "into_name": "Parentco Industries Limited", "ratio_new": 3.0, "ratio_old": 2.0, "source_id": "F2"}
     monkeypatch.setattr(llm, "generate", lambda *a, **k: json.dumps({"into_name": "X", "ratio_new": 0}))
     assert synthesize.merger_terms("Oldco", EX, {"F2": "scheme"}) == {}
+
+
+def test_a_security_still_listed_elsewhere_is_valued_there(con):
+    """A symbol that stopped trading on NSE but whose ISIN is live on BSE is that BSE listing — not 'gone'."""
+    con.execute("INSERT INTO former_companies (symbol, name, isin, last_traded, fetched_at) "
+                "VALUES ('SKYAIR', 'SKYAIR LTD', 'INE000S01011', '2023-03-31', now())")
+    con.execute("INSERT INTO instruments VALUES ('BSE:999123', 'Skyair Limited', 'INE000S01011', 'bse', now())")
+    con.execute("INSERT INTO bse_prices VALUES ('BSE:999123', ?, 40)", [TODAY])
+    h.add_lot(con, "SKYAIR", 100, 30)
+    s = next(x for x in h.portfolio(con, today=TODAY)["stocks"] if x["symbol"] == "BSE:999123")
+    assert s["value"] == 4000 and s["priced"] and s["lots"][0]["symbol"] == "BSE:999123"
+    assert all(r["symbol"] != "SKYAIR" for r in h.search(con, "skyair"))      # the dead duplicate is hidden
