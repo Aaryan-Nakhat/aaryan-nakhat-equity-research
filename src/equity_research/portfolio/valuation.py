@@ -254,7 +254,8 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
                      for s in stocks for v in s["lots"] for p in v["parts"])
     return {
         "stocks": sorted(stocks, key=lambda s: -(s.get("value") or 0)),
-        "missing": store.missing(con),
+        "missing": [m for m in store.missing(con)                  # held already (e.g. through a demerger) → not missing
+                    if m["symbol"] not in {s["symbol"] for s in stocks}],
         "lookups": sorted(set(lookups)),
         "merger_lookups": sorted(set(merger_lookups)),
         "dividend_refresh": income.stale(con, syms),

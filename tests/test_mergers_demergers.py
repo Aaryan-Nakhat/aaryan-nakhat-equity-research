@@ -239,3 +239,10 @@ def test_a_security_still_listed_elsewhere_is_valued_there(con):
     s = next(x for x in h.portfolio(con, today=TODAY)["stocks"] if x["symbol"] == "BSE:999123")
     assert s["value"] == 4000 and s["priced"] and s["lots"][0]["symbol"] == "BSE:999123"
     assert all(r["symbol"] != "SKYAIR" for r in h.search(con, "skyair"))      # the dead duplicate is hidden
+
+
+def test_a_new_company_held_through_a_demerger_isnt_in_the_fill_in_list(con):
+    _filed(con)
+    con.execute("INSERT INTO watchlist (symbol, company, list_type) VALUES ('NEWCO', 'Newco', 'holding')")
+    h.add_lot(con, "PARENT", 100, 100, "2023-06-01")
+    assert all(m["symbol"] != "NEWCO" for m in h.portfolio(con, today=TODAY)["missing"])
