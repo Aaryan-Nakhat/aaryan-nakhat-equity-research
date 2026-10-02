@@ -16,7 +16,8 @@
   const tone = (n) => n == null ? "" : n >= 0 ? "up" : "down";
   const fmtDate = (iso) => iso ? new Date(`${iso}T00:00`).toLocaleDateString("en-IN",
     { day: "2-digit", month: "short", year: "numeric" }) : "";
-  const KIND = { etf: "ETF", sme: "SME", reit: "REIT", invit: "InvIT", bse: "BSE only", former: "merged / delisted" };
+  const KIND = { etf: "ETF", sme: "SME", reit: "REIT", invit: "InvIT", bse: "BSE only",
+    bse_suspended: "BSE · suspended — last traded price", former: "merged / delisted" };
 
   async function call(method, path, body) {
     const res = await fetch(path, { method, headers: { "Content-Type": "application/json" },

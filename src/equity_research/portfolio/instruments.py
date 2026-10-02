@@ -3,8 +3,9 @@
 * **ETFs** — NSE's ETF list (names from the underlying, e.g. "Nifty 50 ETF").
 * **SME shares** — NSE Emerge's list.
 * **REITs / InvITs** — the ``RR`` / ``IV`` symbols in NSE's daily bhavcopy, named from NSE's per-symbol record.
-* **BSE-only shares** — BSE's list of active scrips whose ISIN isn't listed on NSE, stored as ``BSE:<scrip code>``
-  and priced from BSE's daily bhavcopy (``bse_prices``). NSE corporate actions don't cover them, so splits /
+* **BSE-only shares** — BSE's lists of active and **suspended** scrips whose ISIN isn't listed on NSE, stored as
+  ``BSE:<scrip code>`` (kind ``bse`` / ``bse_suspended``) and priced from BSE's daily bhavcopy (``bse_prices``); a
+  held share missing from it (suspended) gets BSE's last traded price instead. NSE corporate actions don't cover them, so splits /
   bonuses aren't applied automatically — enter them as your broker shows today, or as bought if none happened.
 
 NSE-listed instruments are priced from the same bhavcopy as everything else (``equity_eod_adj``). Refreshed
@@ -23,10 +24,11 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 SERIES = ("EQ", "BE", "BZ", "SM", "ST", "RR", "IV")      # shares, SME, ETFs (EQ), REITs (RR), InvITs (IV)
-KIND_LABEL = {"etf": "ETF", "sme": "SME", "reit": "REIT", "invit": "InvIT", "bse": "BSE only"}
+KIND_LABEL = {"etf": "ETF", "sme": "SME", "reit": "REIT", "invit": "InvIT", "bse": "BSE only",
+              "bse_suspended": "BSE · suspended"}
 _SME_LIST = "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"
 _BSE_LIST = ("https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w?Group=&Scripcode=&industry="
-             "&segment=Equity&status=Active")
+             "&segment=Equity&status={status}")
 _BSE_BHAV = "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV"
 
 
@@ -84,11 +86,14 @@ def refresh_nse(con: duckdb.DuckDBPyConnection) -> int:
 
 
 def refresh_bse(con: duckdb.DuckDBPyConnection) -> int:
-    """BSE's active scrips whose ISIN isn't on NSE → ``BSE:<code>``."""
+    """BSE's active and suspended scrips whose ISIN isn't on NSE → ``BSE:<code>``; every scrip's code by ISIN."""
     from equity_research.common.http import fetch_json
     from equity_research.scrapers.bse import _HEADERS
 
-    data = fetch_json(_BSE_LIST, headers=_HEADERS)
+    data = []
+    for status in ("Active", "Suspended"):
+        got = fetch_json(_BSE_LIST.format(status=status), headers=_HEADERS)
+        data += got if isinstance(got, list) else []
     nse_isins = {r[0] for r in con.execute(
         "SELECT isin FROM equity_master WHERE isin IS NOT NULL UNION SELECT isin FROM instruments "
         "WHERE isin IS NOT NULL AND kind <> 'bse'").fetchall()}
@@ -99,7 +104,8 @@ def refresh_bse(con: duckdb.DuckDBPyConnection) -> int:
         if code and isin.startswith("INE"):
             codes.append((isin, code, name))        # every scrip — BSE's corporate-action record for any holding
         if code and name and isin.startswith("INE") and isin not in nse_isins:
-            rows.append((f"BSE:{code}", name, isin, "bse"))
+            kind = "bse_suspended" if str(r.get("Status") or "").lower().startswith("suspend") else "bse"
+            rows.append((f"BSE:{code}", name, isin, kind))
     if codes:
         con.executemany("INSERT OR REPLACE INTO bse_codes VALUES (?, ?, ?)", codes)
     n = _store(con, rows)
@@ -108,14 +114,40 @@ def refresh_bse(con: duckdb.DuckDBPyConnection) -> int:
 
 
 def refresh_bse_prices(con: duckdb.DuckDBPyConnection, *, days_back: int = 6) -> int:
-    """The latest BSE bhavcopy's closes for BSE-only shares (walks back over holidays / weekends)."""
+    """The latest BSE bhavcopy's closes for BSE-only shares (walks back over holidays / weekends), and the last
+    traded price for held ones it doesn't have (suspended)."""
+    codes = {r[0].split(":", 1)[1]: r[0] for r in con.execute(
+        "SELECT symbol FROM instruments WHERE kind IN ('bse', 'bse_suspended')").fetchall()}
+    if not codes:
+        return 0
+    n = _bhavcopy_closes(con, codes, days_back)
+    return n + _last_traded(con)
+
+
+def _last_traded(con: duckdb.DuckDBPyConnection) -> int:
+    """Held BSE shares without a close in the last week (suspended, or not traded) → BSE's last traded price."""
+    from equity_research.scrapers import bse
+
+    stale = [r[0] for r in con.execute(
+        """SELECT DISTINCT symbol FROM holding_lots WHERE symbol LIKE 'BSE:%' AND symbol NOT IN (
+               SELECT symbol FROM bse_prices WHERE trade_date >= current_date - INTERVAL 7 DAY)""").fetchall()]
+    n = 0
+    for sym in stale:
+        try:
+            h = bse.fetch_scrip_header(sym.split(":", 1)[1])
+            ltp = float(str((h.get("CurrRate") or {}).get("LTP") or "").replace(",", ""))
+        except Exception:  # noqa: BLE001 — no quote: stays unpriced
+            continue
+        if ltp > 0:
+            con.execute("INSERT OR REPLACE INTO bse_prices VALUES (?, current_date, ?)", [sym, ltp])
+            n += 1
+    return n
+
+
+def _bhavcopy_closes(con: duckdb.DuckDBPyConnection, codes: dict[str, str], days_back: int) -> int:
     from equity_research.common.http import fetch_bytes
     from equity_research.scrapers.bse import _HEADERS
 
-    codes = {r[0].split(":", 1)[1]: r[0] for r in con.execute(
-        "SELECT symbol FROM instruments WHERE kind = 'bse'").fetchall()}
-    if not codes:
-        return 0
     for back in range(days_back + 1):
         d = date.today() - timedelta(days=back)
         if d.weekday() >= 5:

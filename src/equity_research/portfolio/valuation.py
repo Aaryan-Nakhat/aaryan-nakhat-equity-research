@@ -313,7 +313,7 @@ def carried_old(carried: dict) -> list[str]:
 
 
 def _kind(con, sym: str) -> str:
-    r = con.execute("SELECT kind FROM instruments WHERE symbol = ?", [sym]).fetchone()
+    r = con.execute("SELECT kind FROM instruments WHERE symbol = ?", [sym]).fetchone()   # bse_suspended included
     return r[0] if r else "share"
 
 

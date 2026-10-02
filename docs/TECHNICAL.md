@@ -154,8 +154,9 @@ Local only — nothing is sent anywhere, and nothing personal is committed (see 
   into the survivor's timeline on that date, so the survivor's earlier bonuses or demergers don't touch them.
 - **Instruments:** ETFs (NSE's ETF list), SME shares (NSE Emerge's list), REITs / InvITs (series `RR` / `IV` in the
   bhavcopy, named from NSE's per-symbol record) — priced from the same NSE bhavcopy. BSE-only shares: BSE's active
-  scrips whose ISIN isn't on NSE, as `BSE:<scrip code>`, priced daily from BSE's bhavcopy; NSE corporate actions
-  don't cover them. Lists refresh weekly with the merged companies; BSE prices daily (and at once for a new one).
+  and suspended scrips whose ISIN isn't on NSE, as `BSE:<scrip code>` (`bse` / `bse_suspended`), priced daily from
+  BSE's bhavcopy — a held one missing from it (suspended) gets BSE's last traded price; their corporate actions come
+  from BSE's record (above). Lists refresh weekly with the merged companies; BSE prices daily (and at once for a new one).
 - **Output per stock:** remaining shares and cost (the broker-style average), value on the latest close, P&L,
   dividends received, gains booked, XIRR (dated buys, sells and dividends as cash flows plus today's value of the dated
   shares — bisection, `analysis/funds._xirr`; none under a month). Per buy: its parts (for the tax planner), term,

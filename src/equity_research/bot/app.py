@@ -749,7 +749,7 @@ def maybe_bse_prices() -> None:
     con = connect()
     try:
         done = scan._meta(con, "last_bse_prices") == now.date().isoformat()
-        listed = con.execute("SELECT count(*) FROM instruments WHERE kind = 'bse'").fetchone()[0]
+        listed = con.execute("SELECT count(*) FROM instruments WHERE kind IN ('bse', 'bse_suspended')").fetchone()[0]
         never = con.execute("SELECT count(*) FROM bse_prices").fetchone()[0] == 0
         unpriced = con.execute("""SELECT count(*) FROM holding_lots WHERE symbol LIKE 'BSE:%'
                                   AND symbol NOT IN (SELECT symbol FROM bse_prices)""").fetchone()[0]
@@ -767,7 +767,8 @@ def maybe_former_refresh() -> None:
     con = connect()
     try:
         last = scan._meta(con, "last_weekly_instruments")
-        no_codes = con.execute("SELECT count(*) FROM bse_codes").fetchone()[0] == 0
+        no_codes = con.execute("SELECT count(*) FROM bse_codes").fetchone()[0] == 0 or con.execute(
+            "SELECT count(*) FROM instruments WHERE kind = 'bse_suspended'").fetchone()[0] == 0   # first run of a new list
     finally:
         con.close()
     if last and not no_codes and (datetime.now(IST).date() - datetime.fromisoformat(last).date()).days < 7:

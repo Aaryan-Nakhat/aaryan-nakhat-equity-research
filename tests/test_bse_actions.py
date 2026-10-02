@@ -73,3 +73,17 @@ def test_unsized_events_and_rights_without_a_ratio_are_shown(con):
 def test_bse_code_by_isin(con):
     con.execute("INSERT INTO bse_codes VALUES ('INE0LATE001', '599001', 'Lateco')")
     assert ba.code_for(con, "LATECO") == "599001" and ba.code_for(con, "BSE:123456") == "123456"
+
+
+def test_a_suspended_bse_share_is_found_and_gets_its_last_traded_price(con, monkeypatch):
+    from equity_research.portfolio import instruments
+    from equity_research.scrapers import bse
+
+    con.execute("INSERT INTO instruments VALUES ('BSE:599002', 'Dormant Capital Ltd.', 'INE0DORM001', "
+                "'bse_suspended', now())")
+    assert pf.search(con, "dormant capital")[0]["note"] == "BSE · suspended"
+    pf.add_lot(con, "dormant capital", 100, 2, "2024-05-01")
+    monkeypatch.setattr(bse, "fetch_scrip_header", lambda code: {"CurrRate": {"LTP": "0.23"}})
+    assert instruments._last_traded(con) == 1
+    s = next(x for x in pf.portfolio(con, today=TODAY)["stocks"] if x["symbol"] == "BSE:599002")
+    assert s["value"] == pytest.approx(23) and s["kind"] == "bse_suspended"
