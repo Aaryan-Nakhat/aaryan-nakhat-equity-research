@@ -8,7 +8,10 @@ Every dated buy becomes a **part** (shares, cost, the date that decides its tax 
 * **rights issue** — nothing changes on its own: whether you subscribed is yours to say. Each lot gets an
   offer (entitled shares, the issue price when known) to add as a new buy.
 * **demerger** — every part keeps the parent's share of cost from the company's filed notice (else the market
-  estimate); the new company's shares are offered per lot (``analysis/demerger_costs.py``).
+  estimate) and, when the notice names a listed new company and the ratio, **spawns** that company's shares:
+  same acquisition date, the moved share of cost, no cash paid. They're carried into the new company's own
+  timeline (``valuation.py``), so later sells / buys of the parent before the ex-date are reflected automatically
+  (``analysis/demerger_costs.py``).
 * **dividend** — the shares held just before the ex-date × the amount, credited per lot (``income.py``).
 * **sell** — FIFO across parts by acquisition date (Indian demat rule), each slice taxed by its own term, with
   31-Jan-2018 grandfathering; a buyback by the rules of its date (``tax.py``).
@@ -71,6 +74,7 @@ class Result:
     flows: list[tuple[date, float]] = field(default_factory=list)
     lookups: list[tuple] = field(default_factory=list)           # demerger notices to read
     warns: list[str] = field(default_factory=list)
+    spawned: list[dict] = field(default_factory=list)            # demerged shares → the new company's timeline
 
 
 def _actions(con, symbol: str, after: date, until: date) -> list[tuple]:
@@ -221,8 +225,18 @@ def _apply(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: R
                 n = held * c["ratio_new"] / c["ratio_old"] if c["ratio_new"] and c["ratio_old"] else None
                 c_cost = lot_cost * c["cost_pct"] / 100
                 item["children"].append({"symbol": c["new_symbol"], "name": c["new_name"], "pct": c["cost_pct"],
-                                         "qty": n, "cost": c_cost, "price": c_cost / n if n else None})
+                                         "qty": n, "cost": c_cost, "price": c_cost / n if n else None,
+                                         "carried": bool(c["new_symbol"] and n)})
             res.logs[lot_id].demergers.append(item)
+        for c in split or []:                       # the new company's shares, part by part (same date, ₹ share)
+            if not (c["new_symbol"] and c["ratio_new"] and c["ratio_old"]):
+                continue
+            ratio = c["ratio_new"] / c["ratio_old"]
+            kids = [Part(f"{p.lot_id}>{c['new_symbol']}", p.shares * ratio, p.cost * c["cost_pct"] / 100, p.acquired,
+                         p.kind) for p in parts if p.shares > 1e-9]
+            res.spawned.append({"symbol": c["new_symbol"], "name": c["new_name"], "ex": ex, "parts": kids,
+                                "parent": symbol, "parent_name": name, "pct": c["cost_pct"],
+                                "url": split[0]["url"]})
         for p in parts:
             p.cost *= keep
 

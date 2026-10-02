@@ -126,8 +126,12 @@ Local only — nothing is sent anywhere, and nothing personal is committed (see 
   - *demerger*: every part keeps the parent's share of cost from the company's **apportionment-of-cost notice**
     (`analysis/demerger_costs.py` — found by title or filename 60 days before to 150 after the ex-date, read by
     `synthesize.demerger_cost_split`, kept only if it adds to ~100; else the market split `price_adjustments.factor`,
-    labelled an estimate; a miss is retried after 7 days). The new companies' shares are offered per lot (same buy
-    date, `received` on the ex-date — shares that arrived through an event carry no cash flow).
+    labelled an estimate; a miss is retried after 7 days). When the notice names a listed new company and the ratio,
+    every part **spawns** that company's shares (shares × ratio, the moved share of cost, the same acquisition date,
+    no cash flow), carried into the new company's own timeline — `valuation.py` settles parents before children in
+    passes, so a sell or buy of the parent before the ex-date changes the new company's shares too, whatever order
+    they were entered in. One read-only `auto` entry per parent buy; an entry typed for the same shares (received on
+    that ex-date) is flagged as a duplicate and not counted.
   - *dividend*: shares held before the ex-date × the amount (NSE's per-symbol record; `Rs`/`Re` amounts summed,
     REIT / InvIT distributions included, old "% of face value" subjects skipped), refreshed weekly per held stock in
     the background when NSE access is on.

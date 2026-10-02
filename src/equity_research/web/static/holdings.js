@@ -61,7 +61,10 @@
       if (l.yearly_pct != null) bits.push(`${pct(l.yearly_pct)} a year`);
       if (l.bench_pct != null) bits.push(`Nifty 500 ${pct(l.bench_pct)} since`);
     } else bits.push(`<span class="muted">no date — P&amp;L only</span>`);
-    if (l.received) bits.push(`<span class="muted">received ${fmtDate(l.received)} (demerger)</span>`);
+    if (l.from) bits.push(`<span class="muted">✂️ from your <b>${esc(l.from.name)}</b> buy — demerger ${fmtDate(l.from.date)},
+      ${l.from.pct.toFixed(2)}% of its cost${l.from.url ? ` (<a href="${esc(l.from.url)}" target="_blank" rel="noopener">notice ↗</a>)` : ""};
+      updates by itself when you change that buy</span>`);
+    else if (l.received && !l.duplicate) bits.push(`<span class="muted">received ${fmtDate(l.received)} (demerger)</span>`);
     if (l.via) bits.push(`<span class="muted">you entered ${num(l.qty, 4)} <b>${esc(l.via.name)}</b> @ ${inr(l.price, 2)} →
       ${num(l.via.shares, 4)} shares here (merged ${fmtDate(l.via.date)}, ${esc(l.via.ratio)}${l.via.url
         ? `, <a href="${esc(l.via.url)}" target="_blank" rel="noopener">filing ↗</a>` : ""})</span>`);
@@ -97,11 +100,10 @@
       let html = `✂️ <b>Demerger ${when}:</b> ${dm.parent_pct.toFixed(2)}% of your cost stays here${src}.`;
       for (const c of dm.children) {
         const what = c.qty != null ? `<b>${num(c.qty, 4)}</b> shares of <b>${esc(c.name)}</b>` : `shares of <b>${esc(c.name)}</b>`;
-        html += ` You should also have ${what} — ${c.pct.toFixed(2)}% of your cost (${inr(c.cost)}), same buy date.`;
-        if (c.have) html += ` <span class="tag ok">added</span>`;
-        else if (c.symbol && c.qty != null)
-          html += ` <button type="button" class="add-child" data-sym="${esc(c.symbol)}" data-qty="${c.qty}"
-            data-price="${c.price}" data-date="${esc(l.buy_date)}" data-rcv="${esc(dm.ex_date)}">＋ Add them</button>`;
+        html += c.carried
+          ? ` ${what} (${c.pct.toFixed(2)}% of your cost, ${inr(c.cost)}, same buy date) — <span class="tag ok">carried over automatically</span>`
+          : ` You should also have ${what} — ${c.pct.toFixed(2)}% of your cost (${inr(c.cost)}), same buy date; it isn't
+            listed (or the ratio isn't stated), so it isn't tracked here.`;
       }
       return `<div class="lot-dm">${html}</div>`;
     }
@@ -120,21 +122,23 @@
   function lotRow(l) {
     const tr = document.createElement("tr");
     tr.className = "lot";
-    const csv = l.source === "csv";
+    const csv = l.source === "csv", auto = l.source === "auto";
+    if (l.duplicate) tr.classList.add("dupe");
     tr.innerHTML = `
       <td class="indent">${l.buy_date ? fmtDate(l.buy_date) : "<span class='muted'>undated</span>"}
-        ${csv ? "<span class='tag'>csv</span>" : ""}</td>
+        ${csv ? "<span class='tag'>csv</span>" : ""}${auto ? "<span class='tag'>auto</span>" : ""}</td>
       <td class="n">${num(l.adj_qty, 4)}</td>
       <td class="n">${inr(l.adj_price, 2)}</td>
       <td class="n">${inr(l.value)}</td>
       <td class="n ${tone(l.pnl)}">${inr(l.pnl)} <small>${pct(l.pnl_pct)}</small></td>
       <td class="detail">${lotDetail(l)}</td>
       <td class="acts">${csv ? "<span class='muted small' title='Change it in holdings.csv'>in file</span>"
+        : auto ? "" : l.duplicate ? `<button type="button" data-act="del" title="Delete">🗑</button>`
         : `<button type="button" data-act="edit" title="Edit">✎</button><button type="button" data-act="del" title="Delete">🗑</button>`}</td>`;
     tr.addEventListener("click", async (e) => {
-      const add = e.target.closest("button.add-child, button.add-rights");
+      const add = e.target.closest("button.add-rights");
       if (add) {
-        if (add.classList.contains("add-rights") && !add.dataset.price) {
+        if (!add.dataset.price) {
           anotherBuy({ symbol: add.dataset.sym, name: l.name }, { qty: add.dataset.qty, date: add.dataset.date });
           flash("Enter the price you paid per rights share, then Add.");
           return;
@@ -142,8 +146,8 @@
         add.disabled = true;
         try {
           await call("POST", "/api/holdings", { stock: add.dataset.sym, qty: add.dataset.qty, price: add.dataset.price,
-            date: add.dataset.date || null, received: add.dataset.rcv || null });
-          flash(add.classList.contains("add-rights") ? "Added your rights shares" : "Added the demerged company's shares", true);
+            date: add.dataset.date || null });
+          flash("Added your rights shares", true);
           load();
         } catch (err) { flash(err.message); add.disabled = false; }
         return;

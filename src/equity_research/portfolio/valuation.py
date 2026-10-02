@@ -10,6 +10,7 @@ dividend histories and the 31-Jan-2018 prices.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date
 
 import duckdb
@@ -57,6 +58,8 @@ def _lot_view(con, lot: dict, parts: list[Part], res: Result, ltp, today: date, 
          "parts": [_part_view(p, today) for p in mine]}
     if via:
         v["via"] = via
+    if lot.get("from"):
+        v["from"] = lot["from"]
     if ltp:
         v.update(ltp=ltp[0], ltp_date=ltp[1].isoformat(), value=shares * ltp[0])
         v.update(pnl=v["value"] - cost, pnl_pct=100 * (v["value"] / cost - 1) if cost else None)
@@ -147,15 +150,47 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
                 note = f"{fc['name']} is no longer traded (last traded {fc.get('last_traded')})."
             stuck[sym] = (fc, note)
 
+    # Demerged shares flow from the parent's timeline into the new company's: settle in passes (a parent's
+    # buys / sells before the ex-date decide the new company's shares; a demerged company can demerge again).
+    base = (set(by_sym) | set(sells_by) | set(injected)) - set(carried_old(carried)) - set(stuck)
+    spawns: dict[str, list[dict]] = {}
+    for _ in range(4):
+        results = {}
+        for sym in sorted(base | set(spawns)):
+            lots = by_sym.get(sym, [])
+            dated = [lt for lt in lots if lt.get("received") or lt.get("buy_date")]
+            undated = [lt for lt in lots if lt not in dated]
+            dupes = [lt for lt in dated if _replaced_by_spawn(lt, spawns.get(sym, []))]
+            dated = [lt for lt in dated if lt not in dupes]
+            inj = list(injected.get(sym, [])) + [(sp["ex"], [replace(pt) for pt in sp["parts"]])
+                                                  for sp in spawns.get(sym, [])]
+            for sp in spawns.get(sym, []):
+                names.setdefault(sym, sp["name"])
+            results[sym] = (walk(con, sym, names[sym], dated, sells_by.get(sym, []), today=today, injected=inj),
+                            dated, undated, dupes)
+        found: dict[str, list[dict]] = defaultdict(list)
+        for res, *_ in results.values():
+            for sp in res.spawned:
+                found[sp["symbol"]].append(sp)
+        if _sig(found) == _sig(spawns):
+            break
+        spawns = dict(found)
+
     stocks, realised, dividends_all, lookups, warns, all_flows = [], [], [], [], [], []
-    held_symbols = set()
-    for sym in sorted((set(by_sym) | set(sells_by) | set(injected)) - set(carried_old(carried)) - set(stuck)):
-        lots = by_sym.get(sym, [])
-        dated = [lt for lt in lots if lt.get("received") or lt.get("buy_date")]
-        undated = [lt for lt in lots if lt not in dated]
-        res = walk(con, sym, names[sym], dated, sells_by.get(sym, []), today=today, injected=injected.get(sym, []))
+    for sym, (res, dated, undated, dupes) in sorted(results.items()):
         ltp = instruments.last_close(con, sym)
         views = [_lot_view(con, lt, res.parts, res, ltp, today) for lt in dated]
+        for lt in _spawn_lots(sym, names[sym], spawns.get(sym, [])):
+            v = _lot_view(con, lt, res.parts, res, ltp, today)
+            if not v.get("sold_out") or v["sold"]:
+                views.append(v)
+        for lt in dupes:
+            views.append({**lt, "buy_date": _iso(lt.get("buy_date")), "received": _iso(lt.get("received")),
+                          "adj_qty": 0.0, "adj_price": None, "cost": 0.0, "value": 0.0, "adjusted": [], "bonus": [],
+                          "rights": [], "demergers": [], "dividends": 0.0, "sold": 0.0, "sold_out": False,
+                          "parts": [], "duplicate": True,
+                          "note": "These shares are now worked out automatically from your buys of the parent company "
+                                  "(see the 'from demerger' line) — this entry isn't counted; you can delete it."})
         for old_sym, fc, old_res, old_lots in carried.get(sym, []):
             via_base = {"symbol": old_sym, "name": fc["name"], "date": fc["merger_date"].isoformat(),
                         "url": fc.get("url"), "ratio": f"{fc['ratio_new']:g} for every {fc['ratio_old']:g}"}
@@ -195,7 +230,6 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
         s["avg_price"] = cost / qty if qty else None
         all_flows += res.flows + ([(today, sum(p.shares for p in res.parts) * ltp[0])] if ltp else [])
         if qty > 1e-9:                      # fully sold stocks live on in the realised table
-            held_symbols.add(sym)
             stocks.append(s)
 
     for sym, (fc, note) in stuck.items():
@@ -210,11 +244,6 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
                            "cost": sum(v["cost"] for v in views), "priced": False, "ltp": None, "kind": "former",
                            "dividends": 0.0, "realised_gain": 0.0, "avg_price": None})
 
-    for s in stocks:
-        for v in s["lots"]:
-            for dm in v["demergers"]:
-                for c in dm["children"]:
-                    c["have"] = c["symbol"] in held_symbols
     priced = [s for s in stocks if s["priced"]]
     cost = sum(s["cost"] for s in priced)
     value = sum(s["value"] for s in priced)
@@ -235,12 +264,45 @@ def portfolio(con: duckdb.DuckDBPyConnection, *, today: date | None = None) -> d
         "warns": warns,
         "total": {"cost": cost, "value": value, "pnl": value - cost,
                   "pnl_pct": 100 * (value / cost - 1) if cost else None, "n_stocks": len(stocks),
-                  "n_lots": sum(1 for s in stocks for v in s["lots"] if not v.get("sold_out")),
+                  "n_lots": sum(1 for s in stocks for v in s["lots"]
+                                if not v.get("sold_out") and not v.get("duplicate")),
                   "unpriced": [s["symbol"] for s in stocks if not s["priced"]],
                   "dividends": sum(d["amount"] for d in dividends_all),
                   "realised_gain": sum(r["gain"] or 0 for r in realised),
                   "xirr_pct": _pct(income.xirr(all_flows))},
     }
+
+
+def _sig(spawns: dict[str, list[dict]]) -> tuple:
+    """A comparable fingerprint of the demerged shares found (to know when the passes have settled)."""
+    return tuple(sorted((sym, sp["ex"], pt.lot_id, round(pt.shares, 6), round(pt.cost, 4))
+                        for sym, sps in spawns.items() for sp in sps for pt in sp["parts"]))
+
+
+def _spawn_lots(sym: str, name: str, spawns: list[dict]) -> list[dict]:
+    """One entry per parent buy for the shares a demerger gave you — shown, not edited (source 'auto')."""
+    out = {}
+    for sp in spawns:
+        for pt in sp["parts"]:
+            lot = out.setdefault(pt.lot_id, {"id": pt.lot_id, "symbol": sym, "name": name, "qty": 0.0, "cost": 0.0,
+                                             "buy_date": pt.acquired, "source": "auto", "received": sp["ex"],
+                                             "from": {"symbol": sp["parent"], "name": sp["parent_name"],
+                                                      "date": sp["ex"].isoformat(), "pct": sp["pct"],
+                                                      "url": sp["url"]}})
+            lot["qty"] += pt.shares
+            lot["cost"] += pt.cost
+            if pt.acquired and (not lot["buy_date"] or pt.acquired < lot["buy_date"]):
+                lot["buy_date"] = pt.acquired
+    for lot in out.values():
+        lot["price"] = lot.pop("cost") / lot["qty"] if lot["qty"] else 0.0
+    return list(out.values())
+
+
+def _replaced_by_spawn(lot: dict, spawns: list[dict]) -> bool:
+    """An entry typed (or added with the old one-off button) for shares a demerger gave — the automatic carry
+    replaces it: same company, received on that demerger's ex-date."""
+    return bool(lot.get("received")) and lot.get("source") == "ui" and any(sp["ex"] == lot["received"]
+                                                                            for sp in spawns)
 
 
 def carried_old(carried: dict) -> list[str]:

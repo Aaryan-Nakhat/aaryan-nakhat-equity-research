@@ -57,23 +57,49 @@ def test_received_date_is_validated(con):
 
 
 # ------------------------------------------------------------------ demergers
-def test_demerger_uses_the_filed_split_and_offers_the_new_shares(con):
+def _stock(p, sym):
+    return next(s for s in p["stocks"] if s["symbol"] == sym)
+
+
+def test_demerger_uses_the_filed_split_and_carries_the_new_shares(con):
     _filed(con)
-    lot = h.add_lot(con, "PARENT", 100, 100, "2023-06-01")          # 100 @ 100 → bonus → 400 @ 25, cost 10,000
+    h.add_lot(con, "PARENT", 100, 100, "2023-06-01")                # 100 @ 100 → bonus → 400 @ 25, cost 10,000
     p = h.portfolio(con, today=TODAY)
-    v = p["stocks"][0]["lots"][0]
+    v = _stock(p, "PARENT")["lots"][0]
     assert v["adj_qty"] == 400 and v["cost"] == pytest.approx(8500)  # 85 % stays
     dm = v["demergers"][0]
-    assert dm["basis"] == "filing" and dm["parent_pct"] == pytest.approx(85)
-    child = dm["children"][0]
-    assert child["symbol"] == "NEWCO" and child["qty"] == 400 and child["cost"] == pytest.approx(1500)
-    assert child["have"] is False and p["lookups"] == []
-    h.add_lot(con, "NEWCO", child["qty"], child["price"], lot["buy_date"], received=EX)
-    p2 = h.portfolio(con, today=TODAY)
-    newco = next(s for s in p2["stocks"] if s["symbol"] == "NEWCO")
-    assert newco["cost"] == pytest.approx(1500) and newco["lots"][0]["term"] == "long"
-    assert next(s for s in p2["stocks"] if s["symbol"] == "PARENT")["lots"][0]["demergers"][0]["children"][0]["have"]
-    assert p2["total"]["cost"] == pytest.approx(10000)                # nothing lost or double-counted
+    assert dm["basis"] == "filing" and dm["parent_pct"] == pytest.approx(85) and p["lookups"] == []
+    assert dm["children"][0]["carried"]
+    newco = _stock(p, "NEWCO")                                        # carried automatically — nothing to add
+    lot = newco["lots"][0]
+    assert newco["qty"] == 400 and newco["cost"] == pytest.approx(1500)
+    assert lot["source"] == "auto" and lot["buy_date"] == "2023-06-01" and lot["term"] == "long"
+    assert lot["from"]["symbol"] == "PARENT"
+    assert p["total"]["cost"] == pytest.approx(10000)                 # nothing lost or double-counted
+
+
+def test_buys_and_sells_before_a_demerger_flow_into_the_new_company_whatever_the_entry_order(con):
+    """Buy 54, sell 4, buy 25 — all before the demerger, entered in any order → 75 new-company shares."""
+    _filed(con)
+    con.execute("DELETE FROM price_adjustments WHERE kind = 'bonus'")
+    h.add_lot(con, "PARENT", 54, 600, "2023-11-03")
+    h.add_sell(con, "PARENT", 4, 900, "2024-03-14")
+    h.add_lot(con, "PARENT", 25, 650, "2025-02-27")
+    p = h.portfolio(con, today=TODAY)
+    assert _stock(p, "PARENT")["qty"] == 75
+    newco = _stock(p, "NEWCO")
+    assert newco["qty"] == 75 and len(newco["lots"]) == 2              # one per parent buy, each with its date
+    assert newco["cost"] == pytest.approx((50 * 600 + 25 * 650) * 0.15)
+    assert sorted(lt["buy_date"] for lt in newco["lots"]) == ["2023-11-03", "2025-02-27"]
+
+
+def test_an_entry_added_with_the_old_button_is_marked_and_not_counted(con):
+    _filed(con)
+    h.add_lot(con, "PARENT", 100, 100, "2023-06-01")
+    h.add_lot(con, "NEWCO", 400, 3.75, "2023-06-01", received=EX)     # what the old one-off button created
+    newco = _stock(h.portfolio(con, today=TODAY), "NEWCO")
+    dupes = [lt for lt in newco["lots"] if lt.get("duplicate")]
+    assert newco["qty"] == 400 and len(dupes) == 1 and "delete" in dupes[0]["note"]
 
 
 def test_no_notice_yet_uses_a_labelled_market_estimate_and_asks_for_a_lookup(con):

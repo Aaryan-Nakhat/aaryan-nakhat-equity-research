@@ -229,3 +229,5 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .h-year summary { cursor: pointer; font-size: 14px; }
 .h-year table { margin-top: 8px; box-shadow: none; }
 .h-suggest em.kind { font-style: normal; color: var(--accent); font-size: 11.5px; }
+.h-table tr.dupe td { opacity: .6; text-decoration: line-through; }
+.h-table tr.dupe td.detail { text-decoration: none; opacity: 1; }
