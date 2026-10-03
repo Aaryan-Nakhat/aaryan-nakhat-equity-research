@@ -53,3 +53,6 @@ Thumbs.db
 holdings.csv
 holdings*.csv
 !holdings.example.csv
+
+# test coverage data
+.coverage
