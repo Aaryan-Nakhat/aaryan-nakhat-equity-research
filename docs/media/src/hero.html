@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hero video</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14; --panel: rgba(22, 30, 48, .72); --line: rgba(148, 163, 184, .16); --text: #eef2f8;
+    --muted: #93a0b8; --faint: #5b6780; --teal: #2dd4bf; --saffron: #f5a524; --green: #34d399;
+    --red: #f87171; --blue: #7aa2ff; --violet: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1600px; height: 900px; overflow: hidden; background: var(--bg); }
+  body { font-family: Inter, system-ui, sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+  #stage { position: relative; width: 1600px; height: 900px; overflow: hidden; }
+  #bg { position: absolute; inset: -80px; }
+  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
+  .grid { position: absolute; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 64px 64px;
+          mask-image: radial-gradient(ellipse at 50% 45%, #000 20%, transparent 75%); opacity: .35; }
+  .scene { position: absolute; inset: 0; padding: 72px 96px; }
+  .kicker { font: 600 18px/1 Inter; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); }
+  h1 { font: 800 76px/1.04 Inter; letter-spacing: -.035em; }
+  h2 { font: 800 54px/1.08 Inter; letter-spacing: -.03em; margin-top: 14px; }
+  .sub { font: 500 24px/1.45 Inter; color: var(--muted); margin-top: 18px; max-width: 980px; }
+  .grad { background: linear-gradient(90deg, #5eead4, #7aa2ff 55%, #f5a524); -webkit-background-clip: text; color: transparent; }
+  .card { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 22px;
+          backdrop-filter: blur(14px); box-shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05); }
+  .card h3 { font: 700 15px/1 Inter; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+          border: 1px solid var(--line); background: rgba(255,255,255,.04); font: 600 17px/1 Inter; color: #cfd6e4; }
+  .mono { font-family: "JetBrains Mono", monospace; }
+  .big { font: 800 44px/1 Inter; letter-spacing: -.02em; }
+  .muted { color: var(--muted); } .ok { color: var(--green); } .warn { color: var(--saffron); } .bad { color: var(--red); }
+  .caret::after { content: ""; display: inline-block; width: 3px; height: 1em; background: var(--teal);
+                  margin-left: 4px; vertical-align: -0.15em; }
+  .bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 6px; width: 0; }
+  .tag { font: 700 13px/1 "JetBrains Mono"; padding: 6px 9px; border-radius: 8px; }
+  #progress { position: absolute; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, var(--teal), var(--saffron)); }
+  .brand { position: absolute; left: 96px; bottom: 40px; display: flex; align-items: center; gap: 12px;
+           font: 600 17px/1 Inter; color: var(--faint); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div class="orb" style="width:700px;height:700px;left:-120px;top:-200px;background:#0f766e"></div>
+    <div class="orb" style="width:620px;height:620px;right:-160px;top:120px;background:#3b4fd8"></div>
+    <div class="orb" style="width:520px;height:520px;left:520px;bottom:-320px;background:#b45309;opacity:.35"></div>
+    <div class="grid"></div>
+  </div>
+
+  <!-- ─────────────────────────── 1 · intro ─────────────────────────── -->
+  <section class="scene" data-t="0,4.6" style="display:flex;flex-direction:column;justify-content:center">
+    <svg width="96" height="96" viewBox="0 0 96 96" data-in="0.1,0.6,pop" style="margin-bottom:34px">
+      <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#7aa2ff"/></linearGradient></defs>
+      <rect width="96" height="96" rx="24" fill="url(#lg)"/>
+      <path d="M20 66 L40 44 L55 56 L77 30" stroke="#06101f" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-in="0.4,0.9,draw"/>
+    </svg>
+    <div class="kicker" data-in="0.3,0.6,up">Open-source equity research · India</div>
+    <h1 style="margin-top:20px" data-in="0.5,0.8,up">Research any Indian stock<br><span class="grad">the way an analyst would.</span></h1>
+    <p class="sub" data-in="1.1,0.8,up">Reads the exchange filings, does the maths, and an AI writes it up — every number traced to its source.</p>
+    <div style="display:flex;gap:12px;margin-top:34px">
+      <span class="chip" data-in="1.6,0.5,up">📄 NSE &amp; BSE filings</span>
+      <span class="chip" data-in="1.75,0.5,up">🧮 Forensics &amp; valuation</span>
+      <span class="chip" data-in="1.9,0.5,up">🤖 Agents</span>
+      <span class="chip" data-in="2.05,0.5,up">💼 Your portfolio &amp; tax</span>
+    </div>
+    <div class="card" style="left:1130px;top:170px;width:380px;padding:24px" data-in="0.8,0.7,left">
+      <h3>Forensic</h3>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <span class="tag" style="background:rgba(52,211,153,.14);color:#6ee7b7">Altman Z · safe</span>
+        <span class="tag" style="background:rgba(52,211,153,.14);color:#6ee7b7">Beneish · clean</span></div>
+      <div class="bar" style="margin-top:18px"><i data-in="1.2,1,grow" data-to="78" style="background:var(--green)"></i></div></div>
+    <div class="card" style="left:1060px;top:360px;width:420px;padding:24px" data-in="1.1,0.7,left">
+      <h3>Fair value range</h3>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:90px;margin-top:16px">
+        <i style="flex:1;background:#2f4a78;border-radius:4px 4px 0 0" data-in="1.5,.5,growy" data-to="25"></i>
+        <i style="flex:1;background:#3a67a8;border-radius:4px 4px 0 0" data-in="1.55,.5,growy" data-to="55"></i>
+        <i style="flex:1;background:#4b7fd0;border-radius:4px 4px 0 0" data-in="1.6,.5,growy" data-to="100"></i>
+        <i style="flex:1;background:#3a67a8;border-radius:4px 4px 0 0" data-in="1.65,.5,growy" data-to="70"></i>
+        <i style="flex:1;background:#2f4a78;border-radius:4px 4px 0 0" data-in="1.7,.5,growy" data-to="38"></i>
+        <i style="flex:1;background:#263553;border-radius:4px 4px 0 0" data-in="1.75,.5,growy" data-to="18"></i></div></div>
+    <div class="card" style="left:1150px;top:560px;width:350px;padding:22px 24px" data-in="1.4,0.7,left">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:700 19px Inter">Cited</span>
+        <span class="tag" style="background:rgba(122,162,255,.16);color:#9db8ff">F1 · F2 · F3</span></div>
+      <div class="muted" style="font:500 15px/1.45 Inter;margin-top:8px">Every figure links to the filing it came from</div></div>
+  </section>
+
+  <!-- ─────────────────────────── 2 · ask → report ─────────────────────────── -->
+  <section class="scene" data-t="4.6,13.6">
+    <div class="kicker" data-in="0,0.5,up">Deep report</div>
+    <h2 data-in="0.1,0.6,up">Ask in plain words. Get the full picture.</h2>
+    <div class="card" style="left:96px;top:250px;width:640px;height:76px;display:flex;align-items:center;gap:16px;padding:0 26px" data-in="0.4,0.6,up">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#93a0b8" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span class="mono" style="font-size:28px" data-in="0.9,1.0,type" data-text="adani power"></span>
+    </div>
+    <div class="card" style="left:96px;top:340px;width:640px;padding:10px" data-in="2.0,0.4,up" data-out="3.0,0.4">
+      <div style="padding:14px 18px;border-radius:12px;background:rgba(45,212,191,.12);font:600 21px Inter">Adani Power Ltd <span class="muted" style="font-weight:500">· ADANIPOWER</span></div>
+      <div style="padding:14px 18px;font:500 21px Inter;color:#93a0b8">Adani Green Energy Ltd</div>
+    </div>
+    <!-- report cards -->
+    <div class="card" style="left:96px;top:350px;width:430px;height:430px;padding:28px" data-in="3.2,0.6,up">
+      <h3>Forensic checks</h3>
+      <div style="margin-top:26px;display:grid;gap:22px">
+        <div><div style="display:flex;justify-content:space-between;font:600 20px Inter"><span>Piotroski F</span><span>5 / 9</span></div>
+          <div class="bar" style="margin-top:10px"><i data-in="3.6,0.9,grow" data-to="55.5" style="background:var(--saffron)"></i></div></div>
+        <div><div style="display:flex;justify-content:space-between;font:600 20px Inter"><span>Altman Z</span><span class="ok">4.48 · safe</span></div>
+          <div class="bar" style="margin-top:10px"><i data-in="3.75,0.9,grow" data-to="82" style="background:var(--green)"></i></div></div>
+        <div><div style="display:flex;justify-content:space-between;font:600 20px Inter"><span>Beneish M</span><span class="ok">−2.49 · clean</span></div>
+          <div class="bar" style="margin-top:10px"><i data-in="3.9,0.9,grow" data-to="78" style="background:var(--green)"></i></div></div>
+        <div><div style="display:flex;justify-content:space-between;font:600 20px Inter"><span>Promoter pledge</span><span class="ok">3.1%</span></div>
+          <div class="bar" style="margin-top:10px"><i data-in="4.05,0.9,grow" data-to="6" style="background:var(--green)"></i></div></div>
+      </div>
+    </div>
+    <div class="card" style="left:556px;top:350px;width:520px;height:430px;padding:28px" data-in="3.5,0.6,up">
+      <h3>Monte-Carlo fair value</h3>
+      <div style="display:flex;align-items:flex-end;gap:7px;height:210px;margin-top:34px;position:relative">
+        <!-- histogram -->
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#2b3d63" data-in="3.9,0.6,growy" data-to="12"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#2f4a78" data-in="3.95,0.6,growy" data-to="30"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#34588f" data-in="4.0,0.6,growy" data-to="55"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#3a67a8" data-in="4.05,0.6,growy" data-to="82"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#4b7fd0" data-in="4.1,0.6,growy" data-to="100"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#3a67a8" data-in="4.15,0.6,growy" data-to="84"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#34588f" data-in="4.2,0.6,growy" data-to="60"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#2f4a78" data-in="4.25,0.6,growy" data-to="40"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#2b3d63" data-in="4.3,0.6,growy" data-to="24"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#263553" data-in="4.35,0.6,growy" data-to="14"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#223049" data-in="4.4,0.6,growy" data-to="8"></i>
+        <i style="flex:1;border-radius:5px 5px 0 0;background:#1f2b42" data-in="4.45,0.6,growy" data-to="5"></i>
+        <div style="position:absolute;left:31%;top:-10px;bottom:0;border-left:2px dashed #7aa2ff" data-in="4.8,0.5,fade"></div>
+        <div style="position:absolute;left:84%;top:-10px;bottom:0;border-left:3px solid var(--saffron)" data-in="5.1,0.5,fade"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:22px">
+        <div data-in="4.8,0.5,up"><div class="muted" style="font:600 15px Inter">DCF median</div><div class="big" style="color:#9db8ff" data-in="4.8,0.9,count" data-to="93" data-pre="₹"></div></div>
+        <div data-in="5.0,0.5,up"><div class="muted" style="font:600 15px Inter">p10 – p90</div><div class="big" style="font-size:34px;margin-top:6px">₹42 – 176</div></div>
+        <div data-in="5.1,0.5,up" style="text-align:right"><div class="muted" style="font:600 15px Inter">Price</div><div class="big warn" data-in="5.1,0.9,count" data-to="196" data-pre="₹"></div></div>
+      </div>
+    </div>
+    <div class="card" style="left:1106px;top:350px;width:398px;height:430px;padding:28px" data-in="3.8,0.6,up">
+      <h3>And the rest</h3>
+      <div style="display:grid;gap:13px;margin-top:24px;font:600 19px Inter">
+        <div data-in="4.3,0.4,left">🏭 Business, from the annual report</div>
+        <div data-in="4.45,0.4,left">📈 Growth, margins &amp; returns</div>
+        <div data-in="4.6,0.4,left">🔄 Reverse-DCF: what's priced in</div>
+        <div data-in="4.75,0.4,left">🏦 Who bought, who sold</div>
+        <div data-in="4.9,0.4,left">💰 Smart-money cost zones</div>
+        <div data-in="5.05,0.4,left">🎯 Levels: support &amp; resistance</div>
+        <div data-in="5.2,0.4,left">⚖️ Verdict — and what changes it</div>
+      </div>
+      <div class="chip" style="position:absolute;left:28px;bottom:26px;color:var(--teal)" data-in="5.6,0.5,up">📄 ~15 sections + a PDF</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── 3 · filings, cited ─────────────────────────── -->
+  <section class="scene" data-t="13.6,21">
+    <div class="kicker" data-in="0,0.5,up">Grounded</div>
+    <h2 data-in="0.1,0.6,up">Every claim is read from a filing — and cited.</h2>
+    <svg width="1600" height="900" style="position:absolute;left:0;top:0" fill="none">
+      <path id="p1" d="M560 400 C 700 400, 700 360, 820 360" stroke="rgba(122,162,255,.5)" stroke-width="2.5" data-in="1.6,0.8,draw"/>
+      <path id="p2" d="M560 535 C 700 535, 700 520, 820 520" stroke="rgba(45,212,191,.5)" stroke-width="2.5" data-in="1.8,0.8,draw"/>
+      <path id="p3" d="M560 670 C 700 670, 700 680, 820 680" stroke="rgba(245,165,36,.5)" stroke-width="2.5" data-in="2.0,0.8,draw"/>
+      <circle r="7" fill="#7aa2ff" data-pulse="2.2,2.0" data-path="p1"/>
+      <circle r="7" fill="#2dd4bf" data-pulse="2.5,2.0" data-path="p2"/>
+      <circle r="7" fill="#f5a524" data-pulse="2.8,2.0" data-path="p3"/>
+    </svg>
+    <div style="position:absolute;left:96px;top:330px;display:grid;gap:22px">
+      <div class="card" style="position:relative;width:460px;padding:22px 26px;display:flex;gap:18px;align-items:center" data-in="0.5,0.5,right">
+        <div style="font-size:38px">📘</div><div><div style="font:700 21px Inter">Annual report FY26</div><div class="muted" style="font:500 16px Inter;margin-top:4px">312 pages · XBRL financials</div></div>
+        <span class="tag" style="margin-left:auto;background:rgba(122,162,255,.16);color:#9db8ff">F1</span></div>
+      <div class="card" style="position:relative;width:460px;padding:22px 26px;display:flex;gap:18px;align-items:center" data-in="0.7,0.5,right">
+        <div style="font-size:38px">🎙️</div><div><div style="font:700 21px Inter">Q1 FY27 concall</div><div class="muted" style="font:500 16px Inter;margin-top:4px">Transcript · management guidance</div></div>
+        <span class="tag" style="margin-left:auto;background:rgba(45,212,191,.16);color:#5eead4">F2</span></div>
+      <div class="card" style="position:relative;width:460px;padding:22px 26px;display:flex;gap:18px;align-items:center" data-in="0.9,0.5,right">
+        <div style="font-size:38px">📊</div><div><div style="font:700 21px Inter">Investor presentation</div><div class="muted" style="font:500 16px Inter;margin-top:4px">Sep 2026 · capacity &amp; pipeline</div></div>
+        <span class="tag" style="margin-left:auto;background:rgba(245,165,36,.16);color:#fbbf24">F3</span></div>
+    </div>
+    <div style="position:absolute;left:820px;top:318px;display:grid;gap:22px">
+      <div class="card" style="position:relative;width:680px;padding:24px 28px" data-in="2.4,0.5,left">
+        <div style="font:600 22px/1.4 Inter">Return on equity 35.9% → 19.5% over four years as debt was paid down</div>
+        <span class="tag" style="display:inline-block;margin-top:12px;background:rgba(122,162,255,.16);color:#9db8ff">F1 · computed</span></div>
+      <div class="card" style="position:relative;width:680px;padding:24px 28px" data-in="2.9,0.5,left">
+        <div style="font:600 22px/1.4 Inter">"23.7 GW of new thermal capacity already locked in"</div>
+        <span class="tag" style="display:inline-block;margin-top:12px;background:rgba(45,212,191,.16);color:#5eead4">F2 · quoted</span></div>
+      <div class="card" style="position:relative;width:680px;padding:24px 28px" data-in="3.4,0.5,left">
+        <div style="font:600 22px/1.4 Inter">Portfolio target: 45 GW, plus hydro and nuclear by 2035</div>
+        <span class="tag" style="display:inline-block;margin-top:12px;background:rgba(245,165,36,.16);color:#fbbf24">F3 · quoted</span></div>
+    </div>
+    <div class="chip" style="position:absolute;left:820px;top:790px;color:var(--green)" data-in="4.4,0.5,up">✓ No filing behind it → it doesn't make the report</div>
+  </section>
+
+  <!-- ─────────────────────────── 4 · agents ─────────────────────────── -->
+  <section class="scene" data-t="21,29.4">
+    <div class="kicker" data-in="0,0.5,up">Agents that read the world</div>
+    <h2 data-in="0.1,0.6,up">A shock abroad → an Indian beneficiary, checked.</h2>
+    <svg width="1600" height="900" style="position:absolute;left:0;top:0" fill="none">
+      <path id="a1" d="M356 450 H 416" stroke="rgba(148,163,184,.4)" stroke-width="3" data-in="1.4,0.5,draw"/>
+      <path id="a2" d="M656 450 H 716" stroke="rgba(148,163,184,.4)" stroke-width="3" data-in="2.0,0.5,draw"/>
+      <path id="a3" d="M956 450 H 1016" stroke="rgba(148,163,184,.4)" stroke-width="3" data-in="2.6,0.5,draw"/>
+      <path id="a4" d="M1256 450 H 1316" stroke="rgba(148,163,184,.4)" stroke-width="3" data-in="3.2,0.5,draw"/>
+      <circle r="7" fill="#2dd4bf" data-pulse="1.6,1.6" data-path="a1"/>
+      <circle r="7" fill="#7aa2ff" data-pulse="2.2,1.6" data-path="a2"/>
+      <circle r="7" fill="#a78bfa" data-pulse="2.8,1.6" data-path="a3"/>
+      <circle r="7" fill="#f5a524" data-pulse="3.4,1.6" data-path="a4"/>
+    </svg>
+    <div class="card" style="left:96px;top:290px;width:260px;height:320px;padding:28px;border-color:rgba(248,113,113,.45)" data-in="0.6,0.6,up">
+      <div style="font-size:44px">🌏</div><div style="font:800 26px/1.25 Inter;margin-top:18px">Philippines bans ube exports</div>
+      <div class="muted" style="font:500 17px/1.45 Inter;margin-top:12px">A supply shock abroad, in the news</div></div>
+    <div class="card" style="left:416px;top:290px;width:240px;height:320px;padding:28px" data-in="1.4,0.5,pop">
+      <div class="tag" style="display:inline-block;background:rgba(45,212,191,.16);color:#5eead4">AGENT 1</div>
+      <div style="font:800 30px Inter;margin-top:20px">Scout</div><div class="muted" style="font:500 17px/1.45 Inter;margin-top:10px">Finds export bans, quotas &amp; tariffs worldwide</div></div>
+    <div class="card" style="left:716px;top:290px;width:240px;height:320px;padding:28px" data-in="2.0,0.5,pop">
+      <div class="tag" style="display:inline-block;background:rgba(122,162,255,.16);color:#9db8ff">AGENT 2</div>
+      <div style="font:800 30px Inter;margin-top:20px">Analyst</div><div class="muted" style="font:500 17px/1.45 Inter;margin-top:10px">Who loses supply, who can fill the gap</div></div>
+    <div class="card" style="left:1016px;top:290px;width:240px;height:320px;padding:28px" data-in="2.6,0.5,pop">
+      <div class="tag" style="display:inline-block;background:rgba(167,139,250,.16);color:#c4b5fd">AGENT 3</div>
+      <div style="font:800 30px Inter;margin-top:20px">Mapper</div><div class="muted" style="font:500 17px/1.45 Inter;margin-top:10px">Maps it to listed Indian companies</div></div>
+    <div class="card" style="left:1316px;top:290px;width:188px;height:320px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;border-color:rgba(52,211,153,.55);background:rgba(16,60,48,.55)" data-in="3.2,0.5,pop">
+      <div style="font:800 46px Inter;color:var(--green)">✓</div><div style="font:800 20px/1.25 Inter">Python auditor: a real NSE listing</div></div>
+    <div style="position:absolute;left:96px;top:680px;display:flex;gap:12px">
+      <div class="chip" data-in="3.8,0.5,up">💨 Tailwind · weekly</div>
+      <div class="chip" data-in="3.95,0.5,up">⛏️ Pickaxe · demand surges</div>
+      <div class="chip" data-in="4.1,0.5,up">🏛️ Policy radar</div>
+      <div class="chip" data-in="4.25,0.5,up">🔥 Hotlist</div>
+      <div class="chip" data-in="4.4,0.5,up">🎙️ Concall say-do gap</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── 5 · your portfolio ─────────────────────────── -->
+  <section class="scene" data-t="29.4,38.2">
+    <div class="kicker" data-in="0,0.5,up">Your portfolio</div>
+    <h2 data-in="0.1,0.6,up">Tax-aware, down to every lot.</h2>
+    <div class="card" style="left:96px;top:240px;width:780px;height:520px;padding:30px" data-in="0.5,0.6,up">
+      <h3>Holdings · sample</h3>
+      <div style="margin-top:22px;display:grid;gap:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-radius:14px;background:rgba(255,255,255,.04)" data-in="0.9,0.4,left">
+          <div><div style="font:700 21px Inter">Infosys</div><div class="muted" style="font:500 15px Inter;margin-top:4px">3 buys · averaged</div></div>
+          <span class="tag" style="background:rgba(52,211,153,.14);color:#6ee7b7">long-term</span>
+          <div class="big ok" style="font-size:28px" data-in="0.9,1,count" data-to="18.4" data-dec="1" data-pre="+" data-suf="%"></div></div>
+        <div style="padding:18px 20px;border-radius:14px;background:rgba(255,255,255,.04)" data-in="1.3,0.4,left">
+          <div style="display:flex;justify-content:space-between;align-items:center"><div style="font:700 21px Inter">Larsen &amp; Toubro</div>
+          <span class="tag" style="background:rgba(245,165,36,.14);color:#fbbf24">🎁 bonus</span></div>
+          <div class="muted" style="font:500 16px/1.45 Inter;margin-top:8px">Bonus shares become their own lot: <b style="color:var(--text)">₹0 cost, dated on allotment</b></div></div>
+        <div style="padding:18px 20px;border-radius:14px;background:rgba(255,255,255,.04)" data-in="1.7,0.4,left">
+          <div style="display:flex;justify-content:space-between;align-items:center"><div style="font:700 21px Inter">A demerged company</div>
+          <span class="tag" style="background:rgba(122,162,255,.16);color:#9db8ff">✂️ demerger</span></div>
+          <div class="muted" style="font:500 16px/1.45 Inter;margin-top:8px">Cost split <b style="color:var(--text)">85% / 15%</b> from the company's own notice — the new shares follow your buys</div></div>
+        <div style="padding:18px 20px;border-radius:14px;background:rgba(255,255,255,.04)" data-in="2.1,0.4,left">
+          <div style="display:flex;justify-content:space-between;align-items:center"><div style="font:700 21px Inter">Held since 2017</div>
+          <span class="tag" style="background:rgba(167,139,250,.16);color:#c4b5fd">grandfathered</span></div>
+          <div class="muted" style="font:500 16px/1.45 Inter;margin-top:8px">31-Jan-2018 price counts as cost for tax</div></div>
+      </div>
+    </div>
+    <div class="card" style="left:910px;top:240px;width:594px;height:520px;padding:30px" data-in="2.6,0.6,up">
+      <h3>“raise 50000”</h3>
+      <div class="mono" style="font-size:24px;margin-top:20px;color:var(--teal)" data-in="2.9,0.8,type" data-text="› take out 50k"></div>
+      <div style="margin-top:28px;padding:22px;border-radius:16px;background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.3)" data-in="3.9,0.5,up">
+        <div style="font:700 18px Inter;color:#6ee7b7">🧾 Plan 1 · least tax</div>
+        <div style="display:flex;justify-content:space-between;margin-top:14px;font:600 20px Inter"><span>Sell 3 holdings</span><span>tax <b class="ok" data-in="4.2,0.8,count" data-to="0" data-pre="₹"></b></span></div>
+        <div class="muted" style="font:500 15px Inter;margin-top:8px">Long-term gains inside the ₹1.25 lakh exemption first</div></div>
+      <div style="margin-top:16px;padding:22px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid var(--line)" data-in="4.4,0.5,up">
+        <div style="font:700 18px Inter;color:#cfd6e4">💪 Plan 2 · weakest holdings first</div>
+        <div style="display:flex;justify-content:space-between;margin-top:14px;font:600 20px Inter"><span>Sell 2 holdings</span><span>tax <b class="warn" data-in="4.7,0.8,count" data-to="1805" data-pre="₹"></b></span></div>
+        <div class="muted" style="font:500 15px Inter;margin-top:8px">⏳ One turns long-term in 36 days — wait and save more</div></div>
+      <div class="muted" style="font:500 14px Inter;margin-top:18px" data-in="5.2,0.5,fade">FIFO · set-off · grandfathering · Income-tax Act 2025 — local only, never uploaded</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── 6 · keeps score ─────────────────────────── -->
+  <section class="scene" data-t="38.2,43.4">
+    <div class="kicker" data-in="0,0.5,up">Accountable</div>
+    <h2 data-in="0.1,0.6,up">It keeps score of itself.</h2>
+    <p class="sub" data-in="0.4,0.6,up">Every verdict and every idea is logged the moment it goes out — then scored against the Nifty 500. The AI never sees the results.</p>
+    <div style="position:absolute;left:96px;right:96px;top:500px;height:4px;border-radius:2px;background:rgba(148,163,184,.18)">
+      <i style="display:block;height:100%;border-radius:2px;width:0;background:linear-gradient(90deg,#2dd4bf,#7aa2ff)" data-in="0.8,2.6,grow" data-to="100"></i></div>
+    <div style="position:absolute;left:96px;right:96px;top:410px;display:flex;justify-content:space-between">
+      <div class="card" style="position:relative;width:250px;padding:18px 20px" data-in="1.0,0.4,pop"><div class="muted" style="font:600 14px Inter">Deep report</div><div style="font:700 19px Inter;margin-top:6px">Verdict logged</div></div>
+      <div class="card" style="position:relative;width:250px;padding:18px 20px" data-in="1.4,0.4,pop"><div class="muted" style="font:600 14px Inter">Hotlist</div><div style="font:700 19px Inter;margin-top:6px">5 ideas logged</div></div>
+      <div class="card" style="position:relative;width:250px;padding:18px 20px" data-in="1.8,0.4,pop"><div class="muted" style="font:600 14px Inter">Tailwind</div><div style="font:700 19px Inter;margin-top:6px">3 ideas logged</div></div>
+      <div class="card" style="position:relative;width:250px;padding:18px 20px" data-in="2.2,0.4,pop"><div class="muted" style="font:600 14px Inter">Reality Check</div><div style="font:700 19px Inter;margin-top:6px">Tip logged</div></div>
+      <div class="card" style="position:relative;width:250px;padding:18px 20px;border-color:rgba(52,211,153,.45)" data-in="2.8,0.4,pop"><div class="ok" style="font:600 14px Inter">Scored</div><div style="font:700 19px Inter;margin-top:6px">vs Nifty 500 ✓</div></div>
+    </div>
+    <div style="position:absolute;left:96px;top:560px;display:flex;gap:12px">
+      <span class="chip" data-in="3.2,0.4,up">entry at the next open</span><span class="chip" data-in="3.35,0.4,up">1 week → 1 year</span>
+      <span class="chip" data-in="3.5,0.4,up">split-adjusted prices</span><span class="chip" data-in="3.65,0.4,up">the AI never sees outcomes</span>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── 7 · outro ─────────────────────────── -->
+  <section class="scene" data-t="43.4,48.6" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+    <div class="kicker" data-in="0,0.5,up">Open source · self-hosted</div>
+    <h1 style="margin-top:22px" data-in="0.2,0.7,up">Your data. Your keys.<br><span class="grad">Your research desk.</span></h1>
+    <div class="card" style="position:relative;margin-top:44px;padding:22px 34px;width:560px" data-in="0.9,0.6,up">
+      <span class="mono" style="font-size:28px;color:var(--teal)" data-in="1.2,1.0,type" data-text="$ uv run eqr demo"></span></div>
+    <div style="display:flex;gap:12px;margin-top:34px">
+      <span class="chip" data-in="2.0,0.5,up">🌐 Web UI</span><span class="chip" data-in="2.15,0.5,up">⌨️ Terminal</span>
+      <span class="chip" data-in="2.3,0.5,up">✉️ Email</span><span class="chip" data-in="2.45,0.5,up">🔑 Any LLM</span>
+    </div>
+  </section>
+
+  <div class="brand"><span style="width:10px;height:10px;border-radius:50%;background:var(--teal)"></span>equity-research · github</div>
+  <div id="progress"></div>
+</div>
+<script src="motion.js"></script>
+</body>
+</html>

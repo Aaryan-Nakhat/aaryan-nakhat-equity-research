@@ -11,12 +11,12 @@
 ![License](https://img.shields.io/badge/license-MIT-informational)
 [![CI](https://github.com/Aaryan-Nakhat/aaryan-nakhat-equity-research/actions/workflows/ci.yml/badge.svg)](https://github.com/Aaryan-Nakhat/aaryan-nakhat-equity-research/actions/workflows/ci.yml)
 
-<p align="center"><img src="docs/media/demo.gif" alt="Typing “adani”, picking Adani Power from the matches, and touring the finished deep report: filings-based overview, forensics, ownership changes, smart-money cost, employee sentiment, reverse-DCF, verdict, trading levels and charts" width="900"></p>
+<p align="center"><a href="docs/media/hero.mp4"><img src="docs/media/hero.gif" alt="A 48-second tour: ask for a company in plain words and the report builds itself — forensics, a Monte-Carlo fair value, every claim cited to a filing; agents turning a shock abroad into an Indian beneficiary; a tax-aware portfolio; a scorecard" width="100%"></a><br><sub>▶ <a href="docs/media/hero.mp4">Watch in full quality (MP4, 48 s)</a></sub></p>
 
 **[Deep report](#-the-deep-report)** · **[Find ideas](#-find-ideas-you-didnt-ask-for)** ·
 **[Global & demand engines](#-agents-that-read-the-world)** · **[Sectors, investors, earnings](#-sectors-investors-and-earnings)** ·
 **[Funds, IPOs, levels, alerts](#-funds-ipos-levels-and-alerts)** · **[Track record](#-it-keeps-score-of-itself)** ·
-**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[Thesis Guard](#%EF%B8%8F-you-bought-it-for-a-reason-is-it-still-true)** · **[How it thinks](#-how-it-thinks)** ·
+**[Reality Check](#-saw-a-tip-in-a-reel-a-post-or-the-news-check-it)** · **[Thesis Guard](#%EF%B8%8F-you-bought-it-for-a-reason-is-it-still-true)** · **[Portfolio](#-your-portfolio--every-corporate-action-every-tax-rule)** · **[How it thinks](#-how-it-thinks)** ·
 **[Quickstart](#-quickstart)** · **[Every command](docs/COMMANDS.md)**
 
 ## Why it's different
@@ -55,48 +55,32 @@ Ask for any listed company in plain words (`adani power`, `hdfc` → pick from a
 a report of ~15 sections plus a PDF with charts. **[Full Adani Power PDF](docs/samples/adani-power.pdf)** ·
 [HDFC Bank](docs/samples/hdfc-bank.pdf) · [ICICI Lombard](docs/samples/icici-lombard.pdf) — unedited output of 29-Sep-2026.
 
+<p align="center"><img src="docs/media/deep-report.png" alt="The deep report at a glance" width="100%"></p>
+
 **It starts from the company's own filings** — what the business does, its revenue mix, market position — read
 from the annual report, investor presentations and concall transcripts, with the page it came from.
-
-![Business overview read from the filings](docs/samples/dr-overview.png)
 
 **Forensics** — Altman Z (distress), Beneish M (earnings manipulation), Piotroski F (fundamental strength),
 accruals and promoter pledge, each with what the number means.
 
-![Forensic deep-dive](docs/samples/dr-forensic.png)
-
 **Who owns it, and who just moved** — every promoter and >1% holder from the SEBI shareholding filings, and the
 quarter-on-quarter diff: who entered, added, trimmed or exited.
-
-![Ownership changes](docs/samples/dr-ownership.png)
 
 **💰 Smart-money cost** — what each institution likely paid (from the price range of the quarters it bought in),
 so you can see who's sitting on gains and might book profit. Holders who bought before the data starts are
 marked unknown, not guessed.
 
-![Smart-money cost and profit-booking risk](docs/samples/dr-smart-money.png)
-
 **🏢 The inside view** — what employees say about the company and its management, graded A→E against its own
 industry.
-
-![Employee and management sentiment](docs/samples/dr-inside-view.png)
 
 **What the price already assumes** — a reverse-DCF (the growth today's price implies), a Monte-Carlo DCF, and
 the multiple against the company's own history and its peers.
 
-![Reverse-DCF](docs/samples/dr-reverse-dcf.png)
-
-![Monte-Carlo DCF fair-value distribution](docs/samples/dr-chart-montecarlo.png)
-
 **The verdict, argued** — earnings quality, returns, balance sheet, growth, forensics and valuation, each read by
 the LLM from the computed brief and the filings, ending in a verdict it has to justify.
 
-![Verdict](docs/samples/dr-verdict.png)
-
 **Trading levels** — support and resistance zones computed from swing pivots, moving averages, 52-week extremes,
 volume-by-price and round numbers, and a reward-to-risk entry / stop / target that defers to the fundamental verdict.
-
-![Support and resistance chart](docs/samples/dr-chart-levels.png)
 
 <details>
 <summary><b>Banks and insurers get their own report</b> — NIM, NPAs, CET1 · combined ratio, solvency, persistency</summary>
@@ -105,70 +89,98 @@ A lender has no EBITDA and an insurer has no working capital, so they're read on
 with their own health checks — and the industrial forensics (Altman, Beneish, Piotroski) are left out rather than
 misapplied.
 
+</details>
+
+Reply **`1`** after any report for the **Upside Drivers 1-pager**: forward catalysts from the concalls and investor
+presentations, each with an estimated ₹ cr / % impact and how certain it is.
+
+<details><summary><b>📸 The real report, section by section</b></summary>
+
+![Business overview read from the filings](docs/samples/dr-overview.png)
+
+![Forensic deep-dive](docs/samples/dr-forensic.png)
+
+![Ownership changes](docs/samples/dr-ownership.png)
+
+![Smart-money cost and profit-booking risk](docs/samples/dr-smart-money.png)
+
+![Employee and management sentiment](docs/samples/dr-inside-view.png)
+
+![Reverse-DCF](docs/samples/dr-reverse-dcf.png)
+
+![Monte-Carlo DCF fair-value distribution](docs/samples/dr-chart-montecarlo.png)
+
+![Verdict](docs/samples/dr-verdict.png)
+
+![Support and resistance chart](docs/samples/dr-chart-levels.png)
+
 ![HDFC Bank: asset quality](docs/samples/bank-asset-quality.png)
 
 ![ICICI Lombard: underwriting ratios](docs/samples/insurer-underwriting.png)
 
 </details>
 
-Reply **`1`** after any report for the **Upside Drivers 1-pager**: forward catalysts from the concalls and investor
-presentations, each with an estimated ₹ cr / % impact and how certain it is.
-
 ## 🔎 Find ideas you didn't ask for
 
 Every screen replies with a ranked, numbered list — pick a number for that company's deep report.
 
+<p align="center"><img src="docs/media/ideas.png" alt="12 screens and the hotlist" width="100%"></p>
+
 **🔥 `hotlist`** — the names that several screens flag at once (volume breakouts, market beaters, institutional
 buying, value + clean books, small-cap capex). Agreement between independent screens is a stronger lead than any one.
-
-![Hotlist](docs/samples/hotlist.png)
 
 **`screen: value`** — the Nifty 500 ranked on quality (Piotroski) + clean forensics (Altman, Beneish, accruals, no pledge)
 + cheap against its own history.
 
-![Value screen](docs/samples/screen-value.png)
-
 **`screen: smallcap`** — ₹1,000–10,000 cr companies in a capex cycle (capex vs its 3-year base and depreciation,
 self-funded, rising ROCE, smart money in), with distress, manipulation, pledge and shrinking-revenue traps gated out.
-
-![Small-cap capex screen](docs/samples/screen-smallcap.png)
 
 <details>
 <summary><b>9 more screens</b> — volume breakouts · market beaters · institutional buying · margin momentum · debt payers · compounders · holdcos below NAV · marquee investors · chart setups</summary>
 
 **`screen: volume`** — near a 52-week high, in an uptrend, on a volume surge.
 
-![Volume breakouts](docs/samples/screen-volume.png)
-
 **`screen: beaters`** — beating the Nifty 500 over 3, 6 and 12 months and still trending.
-
-![Market beaters](docs/samples/screen-beaters.png)
 
 **`screen: institutions`** — promoters raising their own stake, with the institution adding alongside.
 
-![Institutional buying](docs/samples/screen-institutions.png)
-
 **`screen: margins`** — net margin expanding on growing revenue.
-
-![Margin momentum](docs/samples/screen-margins.png)
 
 **`screen: deleverage`** — cut debt over 3–4 years while staying profitable.
 
-![Debt payers](docs/samples/screen-deleverage.png)
-
 **`screen: quality`** — high ROCE, low debt, steady growth, clean books.
-
-![Compounders](docs/samples/screen-quality.png)
 
 **`screen: holdco`** — listed holding companies trading below the value of their listed stakes.
 
-![Holding companies below NAV](docs/samples/screen-holdco.png)
-
 **`screen: investors`** — where ~25 tracked marquee investors entered, added, trimmed or exited.
 
-![Marquee investors](docs/samples/screen-investors.png)
-
 **`screen: technical`** — the strongest chart setups, each with entry, stop and target.
+
+</details>
+
+<details><summary><b>📸 Real screen output</b></summary>
+
+![Hotlist](docs/samples/hotlist.png)
+
+![Value screen](docs/samples/screen-value.png)
+
+![Small-cap capex screen](docs/samples/screen-smallcap.png)
+
+![Volume breakouts](docs/samples/screen-volume.png)
+
+![Market beaters](docs/samples/screen-beaters.png)
+
+![Institutional buying](docs/samples/screen-institutions.png)
+
+![Margin momentum](docs/samples/screen-margins.png)
+
+![Debt payers](docs/samples/screen-deleverage.png)
+
+![Compounders](docs/samples/screen-quality.png)
+
+![Holding companies below NAV](docs/samples/screen-holdco.png)
+
+![Marquee investors](docs/samples/screen-investors.png)
 
 ![Technical setups](docs/samples/screen-technical.png)
 
@@ -182,65 +194,70 @@ chokepoints in the news and the US Federal Register, an analyst keeps only real 
 number), a web-search mapper finds existing producers, and a Python auditor drops any name that isn't a real,
 plausible NSE listing. Pushed weekly, plus same-day alerts when a fresh shock lands.
 
-![Tailwind](docs/samples/tailwind.png)
+<p align="center"><img src="docs/media/agents.png" alt="Tailwind and Pickaxe agent pipelines" width="100%"></p>
 
 **⛏️ `pickaxe`** — the demand-side mirror: rising "buy" searches on Google Trends and demand news → the durable theme →
 not the crowded producer but the supplier to it (the feed, vaccine, packaging or equipment maker), each with its
 price, P/E vs sector, support/resistance and a revenue-share projection read from its filings, with sources.
 
-![Pickaxe](docs/samples/pickaxe.png)
-
-
 **🏛️ `policy`** — the latest government press releases (PIB), often at the cabinet-approval or draft stage, mapped
 to the sectors and listed companies they help.
+
+<details><summary><b>📸 Real Tailwind and Pickaxe output</b></summary>
+
+![Tailwind](docs/samples/tailwind.png)
+
+![Pickaxe](docs/samples/pickaxe.png)
+
+</details>
 
 ## 🧭 Sectors, investors and earnings
 
 **`sector: defence`** (or pharma, banks, IT…) — the sector index's trend, relative strength and valuation against its
 own history, who's accumulating, and the best and cheapest names inside it, plus its listed supply chain.
 
-![Sector: defence](docs/samples/sector-defence.png)
+<p align="center"><img src="docs/media/sectors.png" alt="Sector rotation and the concall say-do gap" width="100%"></p>
 
 **`sector: rotation`** — every sector ranked: leaders, laggards, and the ones turning up from cheap.
-
-![Sector rotation](docs/samples/sector-rotation.png)
 
 **🎙️ `concalls`** — every recent earnings call scored twice: the **tone** of what management said (from the
 transcript) and the **execution** in the quarter's numbers (from the filings). Upbeat talk on soft numbers is a
 caution; quiet talk on strong numbers is an under-the-radar lead.
-
-![Concalls: say-do gap](docs/samples/concalls.png)
 
 **📈 `results`** — companies that just reported, ranked by growth, whether it's accelerating, and margin inflection
 (during results season; it's empty between seasons).
 
 **👤 `investor: <name>`** — a marquee investor's disclosed holdings, last-quarter moves and their cost vs today.
 
-![Investor: Mukul Agrawal](docs/samples/investor.png)
-
 **🔗 `suppliers: <company>`** — the smaller listed suppliers feeding a big name.
 
+<details><summary><b>📸 Real sector, concall, investor and supplier output</b></summary>
+
+![Sector: defence](docs/samples/sector-defence.png)
+
+![Sector rotation](docs/samples/sector-rotation.png)
+
+![Concalls: say-do gap](docs/samples/concalls.png)
+
+![Investor: Mukul Agrawal](docs/samples/investor.png)
+
 ![Suppliers: BEL](docs/samples/suppliers.png)
+
+</details>
 
 ## 💵 Funds, IPOs, levels and alerts
 
 **`fund: <name>`** — any of ~14,000 mutual-fund schemes: returns, rolling consistency, risk, SIP/XIRR, alpha / beta /
 capture vs its benchmark, category rank and, where the AMC publishes it, the portfolio.
 
-![Mutual fund report](docs/samples/fund.png)
-
-![Growth of ₹100 invested in the fund](docs/samples/fund-chart.png)
+<p align="center"><img src="docs/media/funds.png" alt="Funds, IPOs, levels and alerts" width="100%"></p>
 
 **`ipo: ongoing` / `ipo: upcoming` / `ipo: <name>`** — a pre-listing note from the offer documents: fresh issue vs
 offer-for-sale, valuation at the band vs listed peers, an accounting and governance flag, risks, subscription, and
 apply / avoid / neutral.
 
-![Live IPOs](docs/samples/ipo.png)
-
 **`levels: <name>`** — the quick one: support/resistance zones, structure and a setup with a chart, in ~30 seconds and
 without the LLM.
-
-![Levels](docs/samples/levels.png)
 
 **🔔 `alert: order win`** — watch every company's exchange filings for a phrase and get an email within ~20 minutes of
 a match. **💰 `booking` / `sell`** rank your own holdings by profit-booking risk and which to trim first — and
@@ -249,6 +266,18 @@ weakest-holdings-first plan, with shares, money in hand and the estimated capita
 **📬 Arrives by itself** (with email set up): a pre-market brief at 08:30 (GIFT Nifty implied open, overnight
 markets, FII positioning), midday and evening watchlist digests, and weekly screen, sector, Tailwind, concall and
 results pushes.
+
+<details><summary><b>📸 Real fund, IPO and levels output</b></summary>
+
+![Mutual fund report](docs/samples/fund.png)
+
+![Growth of ₹100 invested in the fund](docs/samples/fund-chart.png)
+
+![Live IPOs](docs/samples/ipo.png)
+
+![Levels](docs/samples/levels.png)
+
+</details>
 
 ## 🔍 Saw a tip in a reel, a post or the news? Check it
 
@@ -261,6 +290,8 @@ pledged or selling promoters, "multibagger" language) — ending in a bottom lin
 *Real, but small* or *Looks like hype*. Tried on a post saying HDFC Bank's profit "jumped 60%": ❌ contradicted —
 the reported quarter shows +19%.
 
+<p align="center"><img src="docs/media/reality-check.png" alt="Reality Check on a social post" width="100%"></p>
+
 ## 🛡️ You bought it for a reason. Is it still true?
 
 `thesis: BEL — order book keeps growing, debt-free, ROE above 20%, promoters not selling; exit below 250,
@@ -270,6 +301,18 @@ judged from the company's recent filings and concall notes with the filing cited
 plan. Every evening it's all re-checked, and you get an email **only when something changes** — a reason
 slipping from 🟢 intact to 🟡 weakening or 🔴 broken, or a rule triggering. It answers the question forums
 won't ("should I still hold this?") with your own reasons, not a tip.
+
+<p align="center"><img src="docs/media/thesis-guard.png" alt="Thesis Guard checks and exit plan" width="100%"></p>
+
+## 💼 Your portfolio — every corporate action, every tax rule
+
+Add what you own in the web UI's **💼 My holdings** (your watchlist is already listed — type quantity and price) or a
+`holdings.csv`; it never leaves your computer. Then it's worked out for you: splits and bonuses (bonus shares as their
+own ₹0-cost lot), rights offers, demergers split by the company's own cost notice, companies that merged away entered
+as you bought them, 31-Jan-2018 grandfathering, sells matched oldest-first into realised gains by tax year, dividends,
+XIRR — and **`raise 50000`** says exactly what to sell, least tax first. ETFs, SME, REITs, InvITs and BSE-only shares too.
+
+<p align="center"><img src="docs/media/portfolio.png" alt="A sample portfolio: tax lots, bonus and demerger handling, realised gains by tax year and a raise-cash plan" width="100%"></p>
 
 ## 📊 It keeps score of itself
 
@@ -283,7 +326,7 @@ your local database; it's never published.
 
 ## 🧠 How it thinks
 
-<p align="center"><img src="docs/media/tailwind-agents.png" alt="Tailwind: four agents turning a Philippine ube export ban into a verified Indian small-cap" width="880"></p>
+<p align="center"><img src="docs/media/architecture.png" alt="How it works: official data → a local DuckDB → deterministic Python → an LLM that reads, writes and is checked → web, terminal, email" width="100%"></p>
 
 The LLMs read, triage and write; **Python computes every number and checks every name they propose.**
 
@@ -452,10 +495,10 @@ src/equity_research/
   portfolio/   your buys / sells (web UI + holdings.csv) → tax lots, realised gains, dividends, XIRR
   cli.py       the `eqr` terminal command
   common/      config, storage, shared utilities
-scripts/       pipeline entry points (email_bot.py launches bot/app.py; make_demo_gif.py / make_samples.py /
-               render_card.py rebuild the README media)
+scripts/       pipeline entry points (email_bot.py launches bot/app.py; render_video.py / render_images.py /
+               make_samples.py rebuild the README media)
 data/          raw scrapes + processed artifacts (gitignored)
-docs/          reference docs · docs/samples/ real sample reports (specs.txt rebuilds them) · docs/media/ the demo GIF
+docs/          reference docs · docs/samples/ real sample reports (specs.txt rebuilds them) · docs/media/ the README visuals (src/ rebuilds them)
 tests/         tests
 ```
 

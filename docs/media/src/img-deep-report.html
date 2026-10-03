@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"></head><body>
+<div id="stage">
+  <div class="orb" style="width:640px;height:640px;left:-200px;top:-260px;background:#0f766e"></div>
+  <div class="orb" style="width:560px;height:560px;right:-200px;top:200px;background:#3b4fd8"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">🔬 Deep report</div>
+  <h1>One company name → <span class="grad">~15 sections and a PDF.</span></h1>
+  <p class="lede">Computed in Python from the exchange filings; the AI reads the documents and writes the argument, citing the page.</p>
+
+  <div class="grid3" style="margin-top:38px">
+    <div class="card">
+      <h3>🏭 The business</h3>
+      <h4>Read from the company's own documents</h4>
+      <div style="display:grid;gap:10px;margin-top:18px">
+        <div class="line"><span>📘 Annual report</span><span class="tag tb">F1 · p.24</span></div>
+        <div class="line"><span>🎙️ Concall transcript</span><span class="tag tt">F2</span></div>
+        <div class="line"><span>📊 Investor presentation</span><span class="tag ta">F3 · p.8</span></div>
+      </div>
+      <p class="t">Segments, revenue mix, market position, capacity — each line with the page it came from.</p>
+    </div>
+    <div class="card">
+      <h3>🧪 Forensics</h3>
+      <div style="display:grid;gap:14px;margin-top:18px">
+        <div><div class="line"><span>Piotroski F</span><span class="warn">5 / 9</span></div><div class="bar"><i style="width:55%;background:var(--saffron)"></i></div></div>
+        <div><div class="line"><span>Altman Z</span><span class="ok">4.48 · safe</span></div><div class="bar"><i style="width:82%;background:var(--green)"></i></div></div>
+        <div><div class="line"><span>Beneish M</span><span class="ok">−2.49 · clean</span></div><div class="bar"><i style="width:78%;background:var(--green)"></i></div></div>
+        <div><div class="line"><span>Promoter pledge</span><span class="ok">3.1%</span></div><div class="bar"><i style="width:5%;background:var(--green)"></i></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📐 Fair value</h3>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:120px;margin-top:22px;position:relative">
+        <i style="flex:1;height:12%;background:#2b3d63;border-radius:4px 4px 0 0"></i><i style="flex:1;height:32%;background:#2f4a78;border-radius:4px 4px 0 0"></i>
+        <i style="flex:1;height:58%;background:#34588f;border-radius:4px 4px 0 0"></i><i style="flex:1;height:84%;background:#3a67a8;border-radius:4px 4px 0 0"></i>
+        <i style="flex:1;height:100%;background:#4b7fd0;border-radius:4px 4px 0 0"></i><i style="flex:1;height:80%;background:#3a67a8;border-radius:4px 4px 0 0"></i>
+        <i style="flex:1;height:56%;background:#34588f;border-radius:4px 4px 0 0"></i><i style="flex:1;height:36%;background:#2f4a78;border-radius:4px 4px 0 0"></i>
+        <i style="flex:1;height:20%;background:#2b3d63;border-radius:4px 4px 0 0"></i><i style="flex:1;height:10%;background:#263553;border-radius:4px 4px 0 0"></i>
+        <div style="position:absolute;left:84%;top:-6px;bottom:0;border-left:3px solid var(--saffron)"></div>
+      </div>
+      <div class="line" style="margin-top:16px"><span class="muted">Monte-Carlo DCF median</span><span style="color:#9db8ff">₹93</span></div>
+      <div class="line" style="margin-top:6px"><span class="muted">p10 – p90</span><span>₹42 – 176</span></div>
+      <div class="line" style="margin-top:6px"><span class="muted">Price</span><span class="warn">₹196</span></div>
+    </div>
+    <div class="card">
+      <h3>🏦 Ownership</h3>
+      <div style="display:flex;align-items:center;gap:22px;margin-top:18px">
+        <svg width="120" height="120" viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.9" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6"/>
+          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#2dd4bf" stroke-width="6" stroke-dasharray="75 25" stroke-dashoffset="25"/></svg>
+        <div><div class="big">75.0%</div><div class="t" style="margin-top:4px">promoter holding</div></div>
+      </div>
+      <p class="t">Every >1% holder from SEBI shareholding filings — who entered, added, trimmed or left last quarter, plus insider trades and pledges.</p>
+    </div>
+    <div class="card">
+      <h3>💰 Smart-money cost zones</h3>
+      <svg width="100%" height="128" viewBox="0 0 400 128" style="margin-top:16px" fill="none">
+        <rect x="0" y="62" width="400" height="30" fill="rgba(45,212,191,.12)"/><text x="250" y="110" fill="#5eead4" font-family="Inter" font-size="12" font-weight="700">where institutions bought</text>
+        <path d="M0 110 C60 100 90 80 130 84 S 210 60 250 46 S 330 30 400 18" stroke="#7aa2ff" stroke-width="3"/>
+      </svg>
+      <p class="t">From the quarters they added: the price they likely paid vs today → how much profit they're sitting on, and the profit-booking risk.</p>
+    </div>
+    <div class="card" style="border-color:rgba(245,165,36,.35)">
+      <h3>⚖️ Verdict</h3>
+      <h4>The call, the reasons, and what would change it</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+        <span class="tag tb">reverse-DCF</span><span class="tag tt">upside drivers</span><span class="tag ta">risks</span><span class="tag tv">levels</span><span class="tag tg">track record</span>
+      </div>
+      <p class="t">Banks are read on NIM, NPAs and capital; insurers on combined ratio and solvency — their own reports, not one template.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Figures: Adani Power, from the public sample report (29-Sep-2026) · docs/samples/adani-power.pdf</span><span>not investment advice</span></div>
+</div></body></html>

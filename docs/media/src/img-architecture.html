@@ -1,0 +1,46 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>
+  .stage-col { display: flex; flex-direction: column; gap: 12px; }
+  .blk { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 13px 16px; font: 600 16px/1.3 Inter; }
+  .blk small { display: block; font: 500 13.5px/1.4 Inter; color: var(--muted); margin-top: 3px; }
+  .hd { font: 800 15px/1 Inter; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+  .flow { display: grid; grid-template-columns: 1fr 40px 0.9fr 40px 1.05fr 40px 1fr 40px 0.9fr; align-items: start; margin-top: 34px; }
+  .arr { align-self: center; text-align: center; color: var(--faint); font: 700 26px Inter; }
+</style></head><body>
+<div id="stage">
+  <div class="orb" style="width:620px;height:620px;left:-220px;top:-260px;background:#0f766e"></div>
+  <div class="orb" style="width:540px;height:540px;right:-200px;top:260px;background:#3b4fd8"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">🧠 How it works</div>
+  <h1>Python computes. <span class="grad">The AI reads and writes — and is checked.</span></h1>
+  <div class="flow">
+    <div class="stage-col"><div class="hd" style="color:#9db8ff">Official data</div>
+      <div class="blk">📄 NSE / BSE XBRL<small>financials, every quarter</small></div>
+      <div class="blk">🏦 SEBI shareholding<small>every &gt;1% holder, pledges, insiders</small></div>
+      <div class="blk">🎙️ Concalls &amp; filings<small>transcripts, presentations, notices</small></div>
+      <div class="blk">🏛️ RBI · AMFI · PIB<small>macro, funds, schemes</small></div>
+      <div class="blk">📈 Daily prices<small>split-adjusted from NSE / BSE records</small></div></div>
+    <div class="arr">→</div>
+    <div class="stage-col"><div class="hd" style="color:#5eead4">Local store</div>
+      <div class="blk" style="padding:22px 18px;border-color:rgba(45,212,191,.4)">🦆 DuckDB<small>one file on your computer — data, your holdings, the track record</small></div></div>
+    <div class="arr">→</div>
+    <div class="stage-col"><div class="hd" style="color:#fbbf24">Deterministic Python</div>
+      <div class="blk">🧪 Forensics<small>Piotroski · Altman · Beneish · Benford</small></div>
+      <div class="blk">📐 Valuation<small>Monte-Carlo DCF · reverse-DCF · own history</small></div>
+      <div class="blk">🏦 Ownership &amp; smart money</div>
+      <div class="blk">🎯 Technicals &amp; levels</div>
+      <div class="blk">💼 Corporate actions &amp; tax</div></div>
+    <div class="arr">→</div>
+    <div class="stage-col"><div class="hd" style="color:#c4b5fd">AI · any provider</div>
+      <div class="blk">📖 Reads the filings<small>business, guidance, cost notices</small></div>
+      <div class="blk">✍️ Writes the argument<small>every claim cites a filing id</small></div>
+      <div class="blk">🤖 Agents<small>Tailwind · Pickaxe · policy · concalls</small></div>
+      <div class="blk" style="border-color:rgba(52,211,153,.45)">✓ Python checks it<small>no filing id → dropped · names must be real listings</small></div></div>
+    <div class="arr">→</div>
+    <div class="stage-col"><div class="hd" style="color:#6ee7b7">You</div>
+      <div class="blk">🌐 Web UI</div><div class="blk">⌨️ Terminal — <span class="mono">eqr</span></div><div class="blk">✉️ Email</div>
+      <div class="blk">⏰ Scheduled briefs<small>08:30 · midday · evening · weekly</small></div>
+      <div class="blk">📊 Scorecard<small>every call scored; the AI never sees it</small></div></div>
+  </div>
+  <div class="foot" style="margin-top:28px"><span>No LLM key? Every report still builds with every number.</span><span>MIT · self-hosted</span></div>
+</div></body></html>

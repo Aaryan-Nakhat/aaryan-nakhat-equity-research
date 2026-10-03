@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+  .tile b { display: block; font: 700 18px/1.2 Inter; margin-top: 10px; }
+  .tile span { display: block; font: 500 14.5px/1.45 Inter; color: var(--muted); margin-top: 6px; }
+  .tile .cmd { font: 600 13px/1 "JetBrains Mono"; color: var(--teal); margin-top: 10px; }
+</style></head><body>
+<div id="stage">
+  <div class="orb" style="width:640px;height:640px;left:-220px;top:-240px;background:#0f766e"></div>
+  <div class="orb" style="width:560px;height:560px;right:-160px;bottom:-200px;background:#b45309;opacity:.32"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">🔎 Idea engines</div>
+  <h1>12 screens. <span class="grad">The hotlist is where they agree.</span></h1>
+  <p class="lede">Every screen replies with a ranked, numbered list — pick a number for that company's deep report.</p>
+  <div style="display:grid;grid-template-columns:470px 1fr;gap:26px;margin-top:36px;align-items:stretch">
+    <div class="card" style="display:flex;flex-direction:column">
+      <h3>🔥 hotlist</h3>
+      <h4>A name several independent screens flag at once</h4>
+      <svg viewBox="0 0 420 330" width="100%" style="margin-top:14px">
+        <circle cx="160" cy="130" r="95" fill="rgba(45,212,191,.16)" stroke="rgba(45,212,191,.6)" stroke-width="2"/>
+        <circle cx="260" cy="130" r="95" fill="rgba(122,162,255,.16)" stroke="rgba(122,162,255,.6)" stroke-width="2"/>
+        <circle cx="210" cy="215" r="95" fill="rgba(245,165,36,.14)" stroke="rgba(245,165,36,.6)" stroke-width="2"/>
+        <text x="95" y="95" fill="#5eead4" font-family="Inter" font-weight="700" font-size="16">volume</text>
+        <text x="282" y="95" fill="#9db8ff" font-family="Inter" font-weight="700" font-size="16">beaters</text>
+        <text x="160" y="295" fill="#fbbf24" font-family="Inter" font-weight="700" font-size="16">institutions</text>
+        <circle cx="210" cy="160" r="15" fill="#f5a524"/><text x="210" y="166" text-anchor="middle" fill="#06101f" font-family="Inter" font-weight="800" font-size="15">🔥</text>
+      </svg>
+      <p class="t" style="margin-top:auto">Agreement between screens that measure different things is a stronger lead than any one of them.</p>
+    </div>
+    <div class="grid4" style="grid-template-columns:repeat(3,1fr)">
+      <div class="tile"><div class="icon">💎</div><b>Value</b><span>Quality + clean books + cheap vs its own history</span><div class="cmd">screen: value</div></div>
+      <div class="tile"><div class="icon">🏗️</div><b>Small-cap capex</b><span>₹1k–10k cr firms spending for growth, traps gated out</span><div class="cmd">screen: smallcap</div></div>
+      <div class="tile"><div class="icon">📊</div><b>Volume breakouts</b><span>Near 52-week highs on a volume surge</span><div class="cmd">screen: volume</div></div>
+      <div class="tile"><div class="icon">🏁</div><b>Market beaters</b><span>Beating the Nifty 500 over 3, 6 and 12 months</span><div class="cmd">screen: beaters</div></div>
+      <div class="tile"><div class="icon">🏦</div><b>Institutional buying</b><span>Promoters and funds adding, quarter on quarter</span><div class="cmd">screen: institutions</div></div>
+      <div class="tile"><div class="icon">📈</div><b>Margin momentum</b><span>Margins widening on growing revenue</span><div class="cmd">screen: margins</div></div>
+      <div class="tile"><div class="icon">🧹</div><b>Debt payers</b><span>Cut debt for years while staying profitable</span><div class="cmd">screen: deleverage</div></div>
+      <div class="tile"><div class="icon">🌱</div><b>Compounders</b><span>High ROCE, low debt, steady growth</span><div class="cmd">screen: quality</div></div>
+      <div class="tile"><div class="icon">🏢</div><b>Holdcos below NAV</b><span>Trading under the value of their listed stakes</span><div class="cmd">screen: holdco</div></div>
+      <div class="tile"><div class="icon">👤</div><b>Marquee investors</b><span>Where well-known investors just moved</span><div class="cmd">screen: investors</div></div>
+      <div class="tile"><div class="icon">🎯</div><b>Technical setups</b><span>Entry, stop and target from the chart</span><div class="cmd">screen: technical</div></div>
+      <div class="tile"><div class="icon">🏛️</div><b>Policy radar</b><span>New government schemes → listed beneficiaries</span><div class="cmd">policy</div></div>
+    </div>
+  </div>
+</div></body></html>

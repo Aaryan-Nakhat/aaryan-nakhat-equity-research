@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>
+  table { width: 100%; border-collapse: collapse; font: 600 16px Inter; margin-top: 14px; }
+  td, th { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { font: 700 12.5px Inter; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+  .n { text-align: right; } .sub td { font: 500 14px Inter; color: var(--muted); padding-top: 6px; padding-bottom: 10px; }
+</style></head><body>
+<div id="stage">
+  <div class="orb" style="width:600px;height:600px;left:-200px;top:-260px;background:#0f766e"></div>
+  <div class="orb" style="width:540px;height:540px;right:-180px;top:240px;background:#3b4fd8"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">💼 Your portfolio · on your computer only</div>
+  <h1>Every corporate action, every tax rule — <span class="grad">done for you.</span></h1>
+  <div class="grid4" style="margin-top:30px">
+    <div class="card"><h3>Invested</h3><div class="big" style="margin-top:12px">₹4,80,000</div></div>
+    <div class="card"><h3>Value now</h3><div class="big" style="margin-top:12px">₹5,62,400</div></div>
+    <div class="card"><h3>Dividends</h3><div class="big ok" style="margin-top:12px">₹9,850</div></div>
+    <div class="card"><h3>XIRR</h3><div class="big ok" style="margin-top:12px">+14.2%</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:22px;margin-top:22px">
+    <div class="card">
+      <h3>Holdings · tax lots</h3>
+      <table>
+        <tr><th>Stock / buy</th><th class="n">Shares</th><th class="n">Cost</th><th>Tax</th></tr>
+        <tr><td>Infosys · 3 buys, averaged</td><td class="n">60</td><td class="n">₹88,200</td><td><span class="tag tg">long</span> <span class="tag ta">short · 41 d</span></td></tr>
+        <tr><td>Larsen &amp; Toubro</td><td class="n">40</td><td class="n">₹96,000</td><td><span class="tag tg">long</span></td></tr>
+        <tr class="sub"><td colspan="4">🎁 +20 bonus shares — ₹0 cost, dated on allotment (your broker averages them in; totals match)</td></tr>
+        <tr><td>A merged company → its acquirer</td><td class="n">150</td><td class="n">₹12,000</td><td><span class="tag tg">long</span></td></tr>
+        <tr class="sub"><td colspan="4">🔁 Entered as bought; converted at the swap ratio read from the filing — same cost, same date</td></tr>
+        <tr><td>Parent + demerged company</td><td class="n">100 + 100</td><td class="n">85% / 15%</td><td><span class="tag tg">long</span></td></tr>
+        <tr class="sub"><td colspan="4">✂️ Cost split from the company's own notice; the new shares follow your buys and sells</td></tr>
+        <tr><td>Held since 2016</td><td class="n">100</td><td class="n">₹21,000</td><td><span class="tag tv">grandfathered</span></td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>📒 Booked · Tax year 2026-27</h3>
+        <div style="display:grid;gap:8px;margin-top:14px">
+          <div class="line"><span>Long-term gain</span><span class="ok">₹46,200</span></div>
+          <div class="line"><span class="muted">tax-free (₹1.25 lakh a year)</span><span class="muted">₹46,200</span></div>
+          <div class="line"><span>Short-term gain</span><span>₹3,100</span></div>
+          <div class="line"><span>Estimated tax</span><span class="warn">₹645</span></div>
+        </div>
+        <p class="t">Sells matched oldest-first (FIFO); buybacks taxed by the rules of their date.</p>
+      </div>
+      <div class="card">
+        <h3>💰 raise 50000</h3>
+        <div class="line" style="margin-top:14px"><span>🧾 Least tax</span><span class="ok">tax ₹0</span></div>
+        <div class="line" style="margin-top:8px"><span>💪 Weakest holdings first</span><span class="warn">tax ₹1,805</span></div>
+        <p class="t">⏳ One lot turns long-term in 36 days — waiting saves more.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>ETFs · SME · REITs · InvITs · BSE-only &amp; suspended shares · dividends · rights offers · 31-Jan-2018 grandfathering · Income-tax Act 2025</span><span>sample portfolio</span></div>
+</div></body></html>

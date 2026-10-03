@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>
+  .pipe { display: grid; grid-template-columns: 1.15fr 32px 1fr 32px 1fr 32px 1fr 32px 1fr; align-items: stretch; margin-top: 18px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 18px; }
+  .step b { display: block; font: 800 20px/1.2 Inter; margin-top: 10px; }
+  .step span { display: block; font: 500 14.5px/1.45 Inter; color: var(--muted); margin-top: 6px; }
+  .arrow { display: flex; align-items: center; justify-content: center; color: var(--faint); font: 700 22px Inter; }
+  .lane { margin-top: 34px; }
+  .lane-h { display: flex; align-items: baseline; gap: 14px; }
+  .lane-h h2 { font: 800 28px/1 Inter; letter-spacing: -.02em; }
+</style></head><body>
+<div id="stage">
+  <div class="orb" style="width:600px;height:600px;left:-200px;top:-240px;background:#0f766e"></div>
+  <div class="orb" style="width:560px;height:560px;right:-180px;top:240px;background:#5b3fd8;opacity:.42"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">🌍 Agents that read the world</div>
+  <h1>The LLMs read and triage. <span class="grad">Python checks every name.</span></h1>
+
+  <div class="lane">
+    <div class="lane-h"><h2>💨 Tailwind</h2><span class="muted" style="font:600 17px Inter">a supply shock abroad → the Indian company that is the other supplier · weekly + same-day alerts</span></div>
+    <div class="pipe">
+      <div class="step" style="border-color:rgba(248,113,113,.45)"><div class="icon">🌏</div><b>Philippines bans ube exports</b><span>The news, ~30 commodity chokepoints, the US Federal Register</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tt">① SCOUT</span><b>Collects signals</b><span>Bans, quotas and tariffs as they're announced</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tb">② ANALYST · LLM</span><b>Keeps real disruptions</b><span>Cites its evidence by number — no source, dropped</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tv">③ MAPPER · LLM + web</span><b>Finds producers</b><span>Existing Indian makers of that thing</span></div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:rgba(52,211,153,.5);background:rgba(16,60,48,.5)"><span class="tag tg">④ AUDITOR · Python</span><b>Real NSE listing?</b><span>Hallucinated or implausible names are cut</span></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lane-h"><h2>⛏️ Pickaxe</h2><span class="muted" style="font:600 17px Inter">a demand surge → not the crowded producer, the supplier to it · monthly</span></div>
+    <div class="pipe">
+      <div class="step" style="border-color:rgba(245,165,36,.45)"><div class="icon">📈</div><b>"Buy" searches rising</b><span>Google Trends and demand news</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tt">THEME</span><b>Is it durable?</b><span>A lasting shift, not a fad</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tb">PICKAXES</span><b>Who supplies it</b><span>Feed, packaging, equipment, ingredients</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag tv">PER NAME</span><b>Price · P/E · levels</b><span>vs its sector, support and resistance</span></div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:rgba(52,211,153,.5);background:rgba(16,60,48,.5)"><span class="tag tg">FROM FILINGS</span><b>Revenue share</b><span>Now → next year, with sources; labelled an estimate</span></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:12px;margin-top:30px">
+    <span class="chip">🏛️ Policy radar — new government schemes → beneficiaries</span>
+    <span class="chip">🎙️ Concalls — what management said vs what the numbers show</span>
+  </div>
+</div></body></html>
