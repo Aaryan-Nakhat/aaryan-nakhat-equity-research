@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css">
+<style>
+  .flow { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr 44px 1fr; align-items: start; margin-top: 36px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px 22px; min-height: 210px; }
+  .step b { display: block; font: 800 24px/1.2 Inter; margin-top: 12px; }
+  .step span.d { display: block; font: 500 16px/1.45 Inter; color: var(--muted); margin-top: 8px; }
+  .arr { align-self: center; margin-top: -40px; text-align: center; color: var(--faint); font: 700 30px Inter; }
+  .drop { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(248,113,113,.10);
+          border: 1px dashed rgba(248,113,113,.5); color: #fca5a5; font: 600 15px/1.35 Inter; }
+  .eg { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.04);
+        font: 500 14.5px/1.4 Inter; color: #cfd6e4; }
+  .eg i { font-style: normal; color: var(--faint); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+</style></head><body>
+<div id="stage">
+  <div class="orb" style="width:600px;height:600px;left:-220px;top:-260px;background:#0f766e"></div>
+  <div class="orb" style="width:540px;height:540px;right:-200px;top:200px;background:#5b3fd8;opacity:.4"></div>
+  <div class="gridbg"></div>
+  <div class="kicker">🧠 How it thinks · the Tailwind pipeline</div>
+  <h1>The LLMs read, triage and write. <span class="grad">Python checks every name.</span></h1>
+  <div class="flow">
+    <div class="step"><span class="tag tt">① SCOUT</span><b>Collects signals</b><span class="d">News on ~30 commodity chokepoints · the US Federal Register</span>
+      <div class="eg"><i>real case · 19-Sep-2026</i>Philippines restricts ube (purple yam) exports</div></div>
+    <div class="arr">→</div>
+    <div class="step"><span class="tag tb">② ANALYST · LLM</span><b>Keeps real disruptions</b><span class="d">Must cite its evidence by number</span>
+      <div class="drop">✗ dropped — no valid source</div></div>
+    <div class="arr">→</div>
+    <div class="step"><span class="tag tv">③ MAPPER · LLM + web</span><b>Finds producers</b><span class="d">Existing Indian makers only</span>
+      <div class="eg"><i>real case</i>No "purple-yam stock" → one layer out: natural colours &amp; food ingredients</div></div>
+    <div class="arr">→</div>
+    <div class="step" style="border-color:rgba(52,211,153,.5)"><span class="tag tg">④ AUDITOR · Python</span><b>Real NSE listing? Plausible?</b>
+      <div class="drop">✗ dropped — hallucinated or implausible</div></div>
+    <div class="arr">→</div>
+    <div class="step" style="background:rgba(16,60,48,.55);border-color:rgba(52,211,153,.55)"><span class="tag tg">OUTPUT</span><b>Verified names, smallest first</b>
+      <div class="eg"><i>real case</i>3 small-caps passed — an idea generator, not a call</div></div>
+  </div>
+  <div class="foot" style="margin-top:30px"><span>The same rule everywhere: the model proposes, deterministic code verifies.</span><span>docs/HOW_IT_THINKS.md</span></div>
+</div></body></html>

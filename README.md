@@ -330,15 +330,7 @@ your local database; it's never published.
 
 The LLMs read, triage and write; **Python computes every number and checks every name they propose.**
 
-```mermaid
-flowchart LR
-    S["① Scout<br/>news · US Federal Register"] --> A["② Analyst (LLM)<br/>cites evidence by number"]
-    A --> M["③ Mapper (LLM + web)<br/>existing producers only"]
-    M --> U["④ Auditor (Python)<br/>real NSE listing? plausible?"]
-    U --> O["verified names,<br/>smallest first"]
-    A -. "no valid source" .-> X1["✗"]
-    U -. "hallucinated" .-> X2["✗"]
-```
+<p align="center"><img src="docs/media/tailwind-flow.png" alt="The Tailwind pipeline: scout, analyst (LLM, must cite evidence), mapper (LLM + web), Python auditor (real NSE listing?) → verified names; unsourced and hallucinated names are dropped" width="100%"></p>
 
 **A real case, including the part that didn't work.** On Saturday 19-Sep-2026 the weekly Tailwind digest carried a
 low-severity catalyst: the Philippines restricting exports of ube (purple yam). There's no "purple-yam stock", so the
