@@ -32,7 +32,7 @@ import duckdb
 
 from equity_research.portfolio import income, tax
 
-SPLIT_KINDS = {"split", "consolidation", "split+bonus", "bonus+split", "split/bonus", "demerger+bonus"}
+_ORDER = {"split": 0, "consolidation": 0, "bonus": 1, "rights": 2, "demerger": 3}
 SUSPECT_BELOW = 0.6      # a dated buy priced under 60% of the market price then, with a split since → flagged
 _RIGHTS = re.compile(r"rights?\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)(?:.*?premium\s*r[se]\.?\s*(\d+(?:\.\d+)?))?",
                      re.I)
@@ -173,7 +173,60 @@ def walk(con: duckdb.DuckDBPyConnection, symbol: str, name: str, lots: list[dict
     return res
 
 
+def decompose(kind: str, mult: float | None, factor: float | None, detail: str | None
+              ) -> list[tuple[str, float | None, float | None, str]]:
+    """One ex-date's record → the actions to apply, in order (splits, then bonuses, rights, demergers).
+
+    A combined record ('split+bonus', 'bonus+rights', 'demerger+bonus' …) keeps each part's NSE wording in
+    ``detail`` (joined by ' — '), so each part is re-read and applied on its own. Anything that can't be split
+    into known parts — or whose parts don't add up to the recorded share multiplier — becomes 'unsized' (a
+    visible note), never a silent skip. 'split/bonus' (a price gap the exchange never explained) is applied as
+    a split, with a note that it may have been a bonus."""
+    from equity_research.analysis import corporate_actions as ca
+
+    if kind in ("split", "consolidation", "bonus", "rights", "demerger", "unsized"):
+        return [(kind, mult, factor, detail or "")]
+    if kind == "split/bonus":
+        return [("split", mult, factor, detail or ""),
+                ("unsized", None, None, "A price gap the exchange never explained, applied as a split — if it was a "
+                                        "bonus, the extra shares cost nothing and are dated on that day")]
+    if "+" not in kind:
+        return [("unsized", None, None, f"{kind} ({detail or 'corporate action'})")]
+    pieces = []
+    for seg in str(detail or "").split(" — "):
+        got = ca.parse_subject(seg)
+        if got:
+            k, f = got
+            m = (1 / f) if f else None
+            if any(k == k2 and m is not None and m == m2 for k2, m2, _ in pieces):
+                continue                         # the same action filed twice under different wording
+            pieces.append((k, m, seg))
+    kinds = sorted({k for k, _, _ in pieces})
+    if sorted(set(kind.split("+"))) != kinds:
+        return [("unsized", None, None, f"{kind} ({detail or 'corporate action'})")]
+    fixed = [m for k, m, _ in pieces if k in ("split", "consolidation", "bonus") and m]
+    expect = 1.0
+    for m in fixed:
+        expect *= m
+    has_rights = any(k == "rights" for k, _, _ in pieces)
+    if mult and not has_rights and abs(expect - mult) > 1e-6 * max(1.0, mult) and len(set(kind.split("+"))) == len(
+            kind.split("+")):
+        return [("unsized", None, None, f"{kind} ({detail}) — its parts don't match the recorded share change")]
+    out = []
+    for k, m, seg in sorted(pieces, key=lambda x: _ORDER.get(x[0], 9)):
+        if k == "demerger":                     # the day's price drop also carries the split / bonus
+            out.append((k, 1.0, (factor * expect) if factor else None, seg))
+        else:
+            out.append((k, m, None, seg))
+    return out
+
+
 def _apply(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: Result, fmv_high, dc) -> None:
+    for sub in decompose(*action):
+        _apply_one(con, symbol, name, ex, sub, parts, res, fmv_high, dc)
+
+
+def _apply_one(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: Result, fmv_high, dc) -> None:
     kind, mult, factor, detail = action
     lot_ids = sorted({p.lot_id for p in parts})
     if kind == "bonus" and mult and mult > 1:
@@ -187,14 +240,13 @@ def _apply(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: R
             got = sum(p.shares for p in parts if p.lot_id == lot_id and p.kind == "bonus" and p.acquired == ex)
             res.logs[lot_id].bonus.append({"date": ex.isoformat(), "shares": got})
             _mark(res.logs[lot_id], ex, f"bonus (ex {ex:%d-%b-%Y}, +{mult - 1:g} per share, ₹0 cost)")
-    elif kind in SPLIT_KINDS and mult and abs(mult - 1) > 1e-9:
+    elif kind in ("split", "consolidation") and mult and abs(mult - 1) > 1e-9:
         for p in parts:
             p.shares *= mult
             if ex > tax.GRANDFATHER_DATE:
                 p.fmv_div *= mult
-        note = "" if kind in ("split", "consolidation") else " — treated as a split"
         for lot_id in lot_ids:
-            _mark(res.logs[lot_id], ex, f"{kind} (ex {ex:%d-%b-%Y}, ×{mult:.3g} shares{note})")
+            _mark(res.logs[lot_id], ex, f"{kind} (ex {ex:%d-%b-%Y}, ×{mult:.3g} shares)")
     elif kind == "rights":
         m = _RIGHTS.search(str(detail or ""))
         if m:
@@ -211,10 +263,11 @@ def _apply(con, symbol, name, ex: date, action: tuple, parts: list[Part], res: R
             res.logs[lot_id].rights.append({"date": ex.isoformat(), "ratio": ratio, "entitled": entitled,
                                             "price": issue})
     elif kind == "unsized":
+        src = "BSE record" if "(BSE)" in str(detail) else "exchange record"
         for lot_id in lot_ids:
             res.logs[lot_id].notes.append(
-                f"{str(detail or 'Corporate action').replace(' (BSE)', '')} on {ex:%d-%b-%Y} (BSE record) may have "
-                "changed your share count — it isn't applied here. Check this buy's quantity against your broker "
+                f"{str(detail or 'Corporate action').replace(' (BSE)', '')} on {ex:%d-%b-%Y} ({src}) may have "
+                "changed your share count or cost — it isn't fully applied here. Check this buy against your broker "
                 "and, if it changed, enter the buy without a date as your broker shows it today.")
     elif kind == "demerger":
         split = dc.known(con, symbol, ex)

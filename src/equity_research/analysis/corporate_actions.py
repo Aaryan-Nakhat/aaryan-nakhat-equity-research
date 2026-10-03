@@ -108,7 +108,9 @@ def nse_parts(actions, aliases: dict[str, list[str]] | None = None
         subject = " ".join(str(r.get("subject")).split())
         for s in [sym, *(aliases or {}).get(sym, [])]:
             _, parts = out.setdefault((s, ex), (sym, []))
-            if all(p[2].lower() != subject.lower() for p in parts):
+            same = any(p[2].lower() == subject.lower()
+                       or (p[0] == parsed[0] and p[1] is not None and p[1] == parsed[1]) for p in parts)
+            if not same:                         # the same action filed twice under different wording counts once
                 parts.append((parsed[0], parsed[1], subject))
     return out
 

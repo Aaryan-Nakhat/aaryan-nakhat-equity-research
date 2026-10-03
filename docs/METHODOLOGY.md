@@ -600,7 +600,8 @@ with zero).
 - **💪 Weakest first:** stocks in `sell`-ranking order (lowest keep score first), FIFO within each.
 - **Tax estimate (computed, `tax_estimate`):** short-term losses set off against short-term gains, then long-term
   gains; long-term losses against long-term gains only; the yearly long-term exemption; STCG / LTCG rates + cess
-  from `.env` (defaults 20 % / 12.5 % / ₹1.25 lakh / 4 %). The gains from sells you've recorded this financial
+  from `.env` (defaults 20 % / 12.5 % / ₹1.25 lakh / 4 %) for sales from 23-Jul-2024, and 15 % / 10 % with a ₹1 lakh
+  exemption before that (each sale taxed at the rates of its date). Long-term = held more than 12 calendar months. The gains from sells you've recorded this financial
   year are added first, so the plan's tax is only what it adds (exemption already used, set-off available); other
   gains aren't known. Brokerage, STT and surcharge left out; undated shares' gain / loss shown but not taxed. Whole
   shares, at the last close. From 1-Apr-2026 the law is the Income-tax Act 2025 (long-term gains on listed shares:

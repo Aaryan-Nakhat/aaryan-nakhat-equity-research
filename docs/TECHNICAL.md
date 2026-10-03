@@ -117,8 +117,10 @@ Local only — nothing is sent anywhere, and nothing personal is committed (see 
   (undated buys aren't replayed, aren't touched by sells, and have P&L only).
 - **The timeline (per stock, in date order; same day: dividend, then the ex-date action, then buys, then sells):**
   each dated buy becomes a *part* (shares, cost, acquisition date).
-  - *split / consolidation* (and combined split+bonus records, treated as splits): every part's shares × m; cost and
-    date unchanged.
+  - *split / consolidation*: every part's shares × m; cost and date unchanged. A combined record
+    ('split+bonus', 'bonus+rights', 'demerger+bonus' …) is split back into its parts from NSE's wording
+    (`timeline.decompose`) and applied splits first, then bonuses, rights, demergers; the same action filed twice
+    counts once; anything that can't be split into known parts becomes a visible note, never a silent skip.
   - *bonus*: each part spawns a part of `shares × (m − 1)` at **₹0 cost, acquired on the ex-date** (s.55(2)(aa) —
     brokers average it in; the totals match theirs, the per-share split doesn't).
   - *rights*: not applied — each lot gets an offer (entitled whole shares, issue price = face value + the premium

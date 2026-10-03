@@ -188,3 +188,55 @@ def test_no_benchmark_when_index_history_starts_later(con):
     old = pf.value_lot(con, pf.add_lot(con, "ALPHA", 1, 10, "2016-05-02"), today=TODAY)
     new = pf.value_lot(con, pf.add_lot(con, "ALPHA", 1, 10, "2020-03-27"), today=TODAY)
     assert "bench_pct" not in old and new["bench_pct"] == pytest.approx(200)
+
+
+# ------------------------------------------------------------------ tax rules: dates and combined actions
+@pytest.mark.parametrize("bought, sold, want", [
+    (date(2023, 3, 1), date(2024, 3, 1), "short"),       # exactly 12 months (a leap year: 366 days) — not "more than"
+    (date(2023, 3, 1), date(2024, 3, 2), "long"),
+    (date(2025, 1, 31), date(2026, 1, 31), "short"),
+    (date(2025, 1, 31), date(2026, 2, 1), "long"),
+])
+def test_term_is_more_than_twelve_calendar_months(bought, sold, want):
+    assert tax.term(bought, sold) == want
+
+
+def test_days_to_long_counts_to_the_day_after_the_anniversary():
+    assert tax.days_to_long(date(2025, 6, 10), date(2026, 6, 1)) == 10
+    assert tax.days_to_long(date(2025, 6, 10), date(2026, 6, 11)) is None
+
+
+def test_old_sales_use_the_old_rates_and_exemption():
+    old = tax.tax_estimate([{"gain": 300000, "term": "long", "date": date(2024, 3, 10)},
+                            {"gain": 10000, "term": "short", "date": date(2024, 3, 10)}])
+    assert old["exemption_used"] == 100000                          # ₹1 lakh in FY 2023-24
+    assert old["tax"] == pytest.approx((0.10 * 200000 + 0.15 * 10000) * 1.04)
+    new = tax.tax_estimate([{"gain": 300000, "term": "long", "date": date(2025, 3, 10)}])
+    assert new["tax"] == pytest.approx(0.125 * 175000 * 1.04)
+
+
+@pytest.mark.parametrize("kind, mult, detail, want", [
+    ("split+bonus", 6.0, "Face Value Split (Sub-Division) - From Rs 2/- Per Share To Re 1/- Per Share — Bonus 2:1",
+     [("split", 2.0), ("bonus", 3.0)]),
+    ("bonus+split", 8.75, "Bonus 3:4 — Face Value Split (Sub-Division) - From Rs 10/- Per Share To Rs 2/- Per Share",
+     [("split", 5.0), ("bonus", 1.75)]),
+    ("bonus+rights", 2.4, "Bonus 1:1 — Rights 1:5 @ Premium Rs 70/-", [("bonus", 2.0), ("rights", None)]),
+    ("bonus+bonus", 4.0, "Bonus 1:1 — Bonus 1:1 issue", [("bonus", 2.0)]),          # the same action filed twice
+    ("split+merger", 2.0, "Something odd", [("unsized", None)]),                    # never silently skipped
+])
+def test_combined_records_are_split_into_their_parts(kind, mult, detail, want):
+    from equity_research.portfolio.timeline import decompose
+
+    assert [(k, m) for k, m, _, _ in decompose(kind, mult, None, detail)] == want
+
+
+def test_a_same_day_split_and_bonus_gives_a_zero_cost_bonus_lot(con):
+    con.execute("INSERT INTO price_adjustments VALUES ('ALPHA', '2026-03-02', ?, 6, 'split+bonus', 'nse', ?)",
+                [1 / 6, "Face Value Split (Sub-Division) - From Rs 2/- Per Share To Re 1/- Per Share — Bonus 2:1"])
+    pf.add_lot(con, "ALPHA", 10, 600, "2024-06-01")                   # cost 6,000
+    v = _stock(pf.portfolio(con, today=TODAY), "ALPHA")["lots"][0]
+    bought = [p for p in v["parts"] if p["kind"] == "bought"][0]
+    bonus = [p for p in v["parts"] if p["kind"] == "bonus"][0]
+    assert v["adj_qty"] == 60 and v["cost"] == 6000
+    assert (bought["shares"], bought["cost_ps"]) == (20, 300)          # the split: same cost and date
+    assert (bonus["shares"], bonus["cost_ps"], bonus["acquired"]) == (40, 0, "2026-03-02")

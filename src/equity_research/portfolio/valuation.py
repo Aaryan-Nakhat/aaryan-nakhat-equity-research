@@ -67,7 +67,7 @@ def _lot_view(con, lot: dict, parts: list[Part], res: Result, ltp, today: date, 
     if d:
         days = (today - d).days
         v.update(days_held=days, term=tax.term(d, today), days_to_long=tax.days_to_long(d, today))
-        if ltp and days >= tax.LONG_TERM_DAYS and cost > 0 and shares:
+        if ltp and days >= tax.LONG_TERM_DAYS and cost > 0 and shares:      # a yearly return once held ~a year
             v["yearly_pct"] = 100 * ((v["value"] / cost) ** (365 / days) - 1)
         b = _bench_since(con, d)
         if b is not None:
@@ -334,9 +334,9 @@ def by_year(realised: list[dict], dividends: list[dict]) -> list[dict]:
         y["dividends"] += d["amount"]
     out = []
     for y in years.values():
-        taxable = [{"gain": r["gain"], "term": r["term"]} for r in y["rows"]
+        taxable = [{"gain": r["gain"], "term": r["term"], "date": date.fromisoformat(r["date"])} for r in y["rows"]
                    if r["gain"] is not None and r["treatment"] in ("capital_gains", "dividend")]
-        y["tax"] = tax.tax_estimate(taxable)
+        y["tax"] = tax.tax_estimate(taxable)          # each sale at the rates of its date, that year's exemption
         y["exempt_buyback"] = sum(r["gain"] or 0 for r in y["rows"] if r["treatment"] == "exempt")
         y["unmatched"] = sum(1 for r in y["rows"] if r["treatment"] == "unmatched")
         y["rows"].sort(key=lambda r: r["date"])

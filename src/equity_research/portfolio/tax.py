@@ -1,9 +1,11 @@
 """Indian capital-gains rules for listed shares, as used by the holdings page, the realised-gains table and
 the ``raise ₹X`` plan. Estimates for planning — not tax advice.
 
-* **Term.** Held more than 12 months → long-term; otherwise short-term.
-* **Rates.** ``config.STCG_RATE`` / ``LTCG_RATE`` + cess, with ``LTCG_EXEMPTION`` of long-term gain tax-free per
-  financial year (defaults: the rates from 23-Jul-2024 — 20 % / 12.5 % / ₹1.25 lakh / 4 %). Surcharge isn't modelled.
+* **Term.** Held for more than 12 calendar months → long-term (bought 1-Mar-2023, sold 1-Mar-2024 is exactly 12
+  months: short-term); otherwise short-term.
+* **Rates, by sale date.** From 23-Jul-2024: ``config.STCG_RATE`` / ``LTCG_RATE`` (defaults 20 % / 12.5 %); before it:
+  15 % / 10 %. Plus cess. Long-term gains tax-free per financial year: ₹1 lakh up to FY 2023-24, then
+  ``config.LTCG_EXEMPTION`` (₹1.25 lakh). Surcharge isn't modelled.
 * **Set-off.** Short-term losses against short-term gains, then long-term gains; long-term losses against long-term
   gains only.
 * **Grandfathering.** For shares acquired on or before 31-Jan-2018, the cost for long-term gains is
@@ -29,7 +31,9 @@ from datetime import date
 import duckdb
 
 log = logging.getLogger(__name__)
-LONG_TERM_DAYS = 365                 # held MORE than 12 months → long-term
+LONG_TERM_DAYS = 365                 # ≈ a year, for annualising returns (the tax term uses calendar months)
+RATE_CHANGE = date(2024, 7, 23)      # Finance (No. 2) Act 2024: 15 → 20 % short-term, 10 → 12.5 % long-term
+OLD_STCG, OLD_LTCG, OLD_EXEMPTION = 0.15, 0.10, 100000.0
 GRANDFATHER_DATE = date(2018, 1, 31)
 BUYBACK_DIVIDEND_FROM = date(2024, 10, 1)
 NEW_ACT_FROM = date(2026, 4, 1)
@@ -37,17 +41,41 @@ _FMV_URL = "https://nsearchives.nseindia.com/content/historical/EQUITIES/2018/JA
 _fmv_lock = threading.Lock()
 
 
+def _twelve_months(acquired: date) -> date:
+    from dateutil.relativedelta import relativedelta
+
+    return acquired + relativedelta(months=12)
+
+
 def term(acquired: date | None, on: date) -> str:
-    """'long' / 'short' for shares acquired on ``acquired`` and sold (or valued) on ``on``; 'unknown' undated."""
+    """'long' / 'short' for shares acquired on ``acquired`` and sold (or valued) on ``on``; 'unknown' undated.
+    Long-term means held for *more than* 12 months: sold after the same date a year later."""
     if not acquired:
         return "unknown"
-    return "long" if (on - acquired).days > LONG_TERM_DAYS else "short"
+    return "long" if on > _twelve_months(acquired) else "short"
 
 
 def days_to_long(acquired: date | None, on: date) -> int | None:
-    if not acquired or (on - acquired).days > LONG_TERM_DAYS:
+    """Days until a sale would be long-term (the day after the 12-month anniversary); None once it is."""
+    if not acquired or on > _twelve_months(acquired):
         return None
-    return LONG_TERM_DAYS + 1 - (on - acquired).days
+    return (_twelve_months(acquired) - on).days + 1
+
+
+def rates_on(sold: date | None) -> tuple[float, float]:
+    """(short-term rate, long-term rate) for a sale on that date — before 23-Jul-2024 the older 15 % / 10 %."""
+    from equity_research import config
+
+    if sold and sold < RATE_CHANGE:
+        return OLD_STCG, OLD_LTCG
+    return config.STCG_RATE, config.LTCG_RATE
+
+
+def exemption_for(sold: date | None) -> float:
+    """Long-term gain tax-free in that sale's financial year: ₹1 lakh up to FY 2023-24, then the current figure."""
+    from equity_research import config
+
+    return OLD_EXEMPTION if sold and fy_start(sold) < date(2024, 4, 1) else config.LTCG_EXEMPTION
 
 
 def fy_label(d: date) -> str:
@@ -80,12 +108,15 @@ def tax_cost_ps(cost_ps: float, sale_ps: float, acquired: date | None, fmv_ps: f
 
 
 def tax_estimate(sales: list[dict], *, exemption: float | None = None) -> dict:
-    """``sales`` = [{gain, term: short|long|unknown}] → {st_gain, lt_gain, unknown_gain, taxable_lt,
+    """``sales`` = [{gain, term: short|long|unknown, date?}] → {st_gain, lt_gain, unknown_gain, taxable_lt,
     exemption_used, tax}. Set-off: short-term losses against short-term gains, then long-term gains;
-    long-term losses against long-term gains only."""
+    long-term losses against long-term gains only. Each sale is taxed at the rates in force on its date (no date:
+    today's); what's left after set-off and the exemption is spread over the gains in proportion."""
     from equity_research import config
 
-    ex = config.LTCG_EXEMPTION if exemption is None else exemption
+    dates = [s.get("date") for s in sales if s.get("date")]
+    ex = (exemption if exemption is not None
+          else exemption_for(max(dates)) if dates else config.LTCG_EXEMPTION)
     st_g = sum(s["gain"] for s in sales if s["term"] == "short" and s["gain"] > 0)
     st_l = -sum(s["gain"] for s in sales if s["term"] == "short" and s["gain"] < 0)
     lt_g = sum(s["gain"] for s in sales if s["term"] == "long" and s["gain"] > 0)
@@ -94,7 +125,14 @@ def tax_estimate(sales: list[dict], *, exemption: float | None = None) -> dict:
     net_st = max(0.0, st_g - st_l)
     net_lt = max(0.0, lt_g - lt_l - max(0.0, st_l - st_g))
     taxable_lt = max(0.0, net_lt - ex)
-    tax = (config.STCG_RATE * net_st + config.LTCG_RATE * taxable_lt) * (1 + config.TAX_CESS)
+
+    def blended(kind: str, idx: int) -> float:
+        """The rate on this term's positive gains, weighted by their size (rates follow each sale's date)."""
+        pos = [(s["gain"], rates_on(s.get("date"))[idx]) for s in sales if s["term"] == kind and s["gain"] > 0]
+        tot = sum(g for g, _ in pos)
+        return sum(g * r for g, r in pos) / tot if tot else rates_on(None)[idx]
+
+    tax = (blended("short", 0) * net_st + blended("long", 1) * taxable_lt) * (1 + config.TAX_CESS)
     return {"st_gain": net_st, "lt_gain": net_lt, "unknown_gain": unknown, "taxable_lt": taxable_lt,
             "exemption_used": min(net_lt, ex), "tax": tax}
 
