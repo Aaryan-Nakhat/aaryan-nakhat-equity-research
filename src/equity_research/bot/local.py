@@ -191,7 +191,7 @@ class LocalSession:
         return self._run(req, root=root, subject=subject, wait_background=wait_background)
 
     def _run(self, req: EmailRequest, *, root: str, subject: str, wait_background: bool) -> Result:
-        from equity_research.bot import app          # heavy import — only when a command runs
+        from equity_research.bot import app  # heavy import — only when a command runs
 
         before = set(threading.enumerate())
         with self._lock:

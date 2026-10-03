@@ -35,20 +35,20 @@ def test_results_nothing_reported_is_not_a_timeout(session, monkeypatch):
 
 
 def test_results_timeout_says_so(session, monkeypatch):
-    from equity_research.bot import app
+    from equity_research.bot import screens
 
-    monkeypatch.setattr(app, "_screen_run", lambda fn, **k: None)          # the wrapper's timeout
+    monkeypatch.setattr(screens, "_screen_run", lambda fn, **k: None)          # the wrapper's timeout
     assert "timed out" in text_of(session.ask("results"))
 
 
 def test_tailwind_nothing_vs_timeout(session, monkeypatch):
-    from equity_research.bot import app
+    from equity_research.bot import screens
     from equity_research.reports import tailwind_brief
 
     monkeypatch.setattr(tailwind_brief, "build_tailwind_report", lambda con, **k: None)
     out = text_of(session.ask("tailwind"))
     assert "surfaced right now" in out and "timed out" not in out
-    monkeypatch.setattr(app, "_screen_run", lambda fn, **k: None)
+    monkeypatch.setattr(screens, "_screen_run", lambda fn, **k: None)
     assert "timed out" in text_of(session.ask("tailwind"))
 
 

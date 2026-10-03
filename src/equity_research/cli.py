@@ -188,7 +188,9 @@ def _server_base() -> str | None:
 
     base = f"http://{_local_host()}:{config.WEB_PORT}"
     try:
-        with urllib.request.urlopen(base + "/api/health", timeout=0.7) as r:
+        # Nothing listening → refused at once, so a generous wait only matters when a server *is* there but busy
+        # (building a report) — and treating a busy server as absent would run the command beside it.
+        with urllib.request.urlopen(base + "/api/health", timeout=5) as r:
             return base if json.load(r).get("service") == "eqr" else None
     except (OSError, ValueError):
         return None

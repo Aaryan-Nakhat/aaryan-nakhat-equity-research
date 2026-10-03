@@ -70,7 +70,7 @@ def _static_version() -> str:
 def command_catalog() -> list[dict]:
     """Every command, from the same help table the bot emails (so the UI can't drift from the real
     commands): ``[{"cmd", "also", "desc", "section"}]``. ``cmd`` is the first backticked form."""
-    from equity_research.bot.app import _HELP_SECTIONS
+    from equity_research.bot.help import _HELP_SECTIONS
 
     out = []
     for title, _intro, rows in _HELP_SECTIONS:

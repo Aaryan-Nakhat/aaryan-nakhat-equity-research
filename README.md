@@ -446,7 +446,8 @@ src/equity_research/
   scrapers/    source-specific scrapers (NSE, BSE, SEBI, RBI, ...)
   analysis/    fundamental + technical analysis
   reports/     report generation + email delivery
-  bot/         the command handler (app.py) + the local channel (local.py) shared by email and CLI
+  bot/         commands: app.py (routing + main loop) · queries · core · help · deliver · screens ·
+               personal · pushes · local.py (the channel shared by email, web and CLI)
   web/         the local web UI (FastAPI + plain JS, no build step), incl. 💼 My holdings
   portfolio/   your buys / sells (web UI + holdings.csv) → tax lots, realised gains, dividends, XIRR
   cli.py       the `eqr` terminal command

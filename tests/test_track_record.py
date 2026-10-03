@@ -139,10 +139,10 @@ def test_track_record_switch(con, monkeypatch):
 
 def test_only_idea_menus_are_logged(monkeypatch, tmp_path):
     """The bot's list hook logs engine picks, never name-matching / holdings / fund menus."""
-    from equity_research.bot import app
+    from equity_research.bot import app, core
 
     monkeypatch.setattr(db, "DEFAULT_DB_PATH", tmp_path / "bot.duckdb")
-    monkeypatch.setattr(app, "connect", lambda: db.connect(tmp_path / "bot.duckdb"))
+    monkeypatch.setattr(core, "connect", lambda: db.connect(tmp_path / "bot.duckdb"))
     c = db.connect(tmp_path / "bot.duckdb")
     try:
         app._track_basket(c, "hotlist", ["ACME", "BETA"])

@@ -80,6 +80,13 @@ scheduled pushes to the real inbox untouched. A numbered pick is an in-thread re
 thread-scoped menus work identically; local channels only reword email phrasing for display
 (`bot.local.localize`).
 
+**The `bot/` package.** `app.py` routes (`handle_request`) and runs the main loop; the rest is split by job,
+each module depending only on the ones before it: `core` (schedule constants, logging, the "which one?" state,
+reply helpers) → `queries` (subject parsers — pure functions) → `help` → `deliver` (deep report, Upside Drivers,
+IPO, levels, fund reports) → `screens` (idea engines and screens on request) → `personal` (sell / raise ₹X,
+Thesis Guard, Reality Check, scorecard, filing alerts) → `pushes` (scheduled `maybe_*` hooks and background
+refreshes). `local.py` is the channel the web UI and the CLI share with email.
+
 **One process owns the database.** DuckDB is single-writer across processes, so the server process
 hosts everything: `bot/app.main` starts the web server (`web/server.py`, FastAPI + uvicorn, in a
 background thread; `WEB_UI_ENABLED`) next to the IMAP loop, and `eqr serve` does the same (web-only
@@ -239,7 +246,7 @@ WEEKLY  gate: once/ISO-week, Saturday ≥18:00 IST (scan.tailwind_due)
 
 URGENT  gate: trading day Mon–Fri, at 3 IST slots — pre-market 08:30 / midday 12:30 / evening 18:00,
         once per slot (scan.tailwind_urgent_slot_done); Saturday skipped (weekly covers it).
-        bot.app.maybe_tailwind_urgent (_current_urgent_slot picks the due slot; catch-up-friendly)
+        bot.pushes.maybe_tailwind_urgent (_current_urgent_slot picks the due slot; catch-up-friendly)
         │
         ▼  tailwind.run_tailwind_urgent() — the LIGHTER pass: Scout + Analyst only (cheap), keep FRESH,
               in-effect/proposed disruptions NOT in scan.tailwind_seen_keys, map+audit a bounded set
@@ -258,7 +265,7 @@ URGENT  gate: trading day Mon–Fri, at 3 IST slots — pre-market 08:30 / midda
 ## Flow H — Push: ⛏️ Pickaxe surging-demand radar (monthly, 1st Sat) + on-demand `pickaxe`
 
 ```
-MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due) — bot.app.maybe_pickaxe
+MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due) — bot.pushes.maybe_pickaxe
         │
         ▼  pickaxe.run_pickaxe() — the DEMAND-SIDE mirror of Tailwind, a FOUR-TIER agent pipeline:
               ① SCOUT   pickaxe._scout_signals — Google Trends rising "buy" queries by consumer
@@ -287,7 +294,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
               growth · sources · why; ⛏️ pickaxe / 🎯 direct badges) + Trends charts. Cached 24h (no PNGs).
         ▼
    ⛏️ ONE "Pickaxe" email + charted PDF. The full build is ~10-15 min, so it runs in a BACKGROUND thread
-        (bot.app._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
+        (bot.screens._pickaxe_worker, single-build lock): on-demand `pickaxe` acks instantly & delivers when
         ready; the monthly push runs off-heartbeat. `--latest` forces fresh; reply a number → deep report.
 
    (An idea generator — every theme is source-cited; a genuine demand theme ALWAYS has beneficiaries.
@@ -297,7 +304,7 @@ MONTHLY gate: once/calendar-month, first Saturday ≥18:00 IST (scan.pickaxe_due
 ## Flow I — 🎙️ Concalls: market-wide earnings-call scan (background ingest + weekly Sat push + on-demand `concalls`)
 
 ```
-INGEST  gate: ~hourly, background (scan.concall_ingest_due) — bot.app.maybe_concall_ingest (off-heartbeat
+INGEST  gate: ~hourly, background (scan.concall_ingest_due) — bot.pushes.maybe_concall_ingest (off-heartbeat
         thread, _concall_lock). Cost-bounded: persist once, read cheap.
         ▼  call_radar.pending_transcripts — ONE market-wide date-ranged sweep
               (nse_api.corporate_announcements(from_date,to_date)) → new TRANSCRIPT filings
@@ -309,8 +316,8 @@ INGEST  gate: ~hourly, background (scan.concall_ingest_due) — bot.app.maybe_co
               • Say-Do Gap + Signal(0-100) call_radar._gap / _signal_score — divergence weighted most
         →  upsert into concall_signals (tone, execution, gap, signal_score, takeaways, guidance, url)
 
-SERVE   on-demand `concalls` (bot.app._send_call_radar) and the WEEKLY Sat ≥18:00 push
-        (scan.call_radar_due / bot.app.maybe_call_radar) both just READ + RANK the table
+SERVE   on-demand `concalls` (bot.screens._send_call_radar) and the WEEKLY Sat ≥18:00 push
+        (scan.call_radar_due / bot.pushes.maybe_call_radar) both just READ + RANK the table
         (call_radar.radar → call_radar_brief.build_call_radar) — NO LLM at request time.
         ▼
    🎙️ ranked list of the most notable calls (biggest tone-vs-execution gaps first); reply a number → deep report.
@@ -320,7 +327,7 @@ SERVE   on-demand `concalls` (bot.app._send_call_radar) and the WEEKLY Sat ≥18
 ## Flow J — 📈 Results Radar just-reported strength (background refresh + weekly Sat push + on-demand `results`)
 
 ```
-REFRESH gate: ~hourly, background (scan.results_ingest_due) — bot.app.maybe_results_ingest (off-heartbeat,
+REFRESH gate: ~hourly, background (scan.results_ingest_due) — bot.pushes.maybe_results_ingest (off-heartbeat,
         _results_lock). No LLM, no new table — financials.filing_date IS the "just reported" marker.
         ▼  results_radar.recent_filers — the SAME market-wide date-ranged sweep Concalls uses
               (nse_api.corporate_announcements(from_date,to_date)), filtered to "Results filed"
@@ -328,8 +335,8 @@ REFRESH gate: ~hourly, background (scan.results_ingest_due) — bot.app.maybe_re
         ▼  results_radar.refresh_new — for a BOUNDED batch (~6) whose stored latest quarter is STALE:
               ingest.ingest_financials(symbol, max_filings=2) → lands the fresh quarter
 
-SERVE   on-demand `results` (bot.app._send_results) and the WEEKLY Sat ≥18:00 push
-        (scan.results_radar_due / bot.app.maybe_results) both COMPUTE + RANK on-the-fly:
+SERVE   on-demand `results` (bot.screens._send_results) and the WEEKLY Sat ≥18:00 push
+        (scan.results_radar_due / bot.pushes.maybe_results) both COMPUTE + RANK on-the-fly:
         ▼  results_radar.radar — names whose latest quarter filed within ~35d, scored by
               magnitude (YoY growth) + acceleration (vs prior ~3 quarters) + margin inflection,
               with the shared fundamentals.execution_band (Firing..Struggling) — ranked best-first
