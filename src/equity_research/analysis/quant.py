@@ -281,8 +281,20 @@ def monte_carlo_dcf(inp: DcfInputs, n: int = 20000, seed: int = 42) -> McResult:
     return res
 
 
+def implied_path(g: float, tg: float) -> tuple[float, float]:
+    """The projection's revenue path for a year-1 growth ``g`` fading to ``tg``: (average yearly growth over the
+    projection years — a CAGR, revenue multiple at the end of them)."""
+    mult = 1.0
+    for tyr in range(1, _PROJ_YEARS + 1):
+        mult *= 1 + g + (tg - g) * (tyr - 1) / (_PROJ_YEARS - 1)
+    return mult ** (1 / _PROJ_YEARS) - 1, mult
+
+
 def reverse_dcf(inp: DcfInputs) -> dict:
-    """Constant revenue growth implied by today's price (bisection)."""
+    """The growth path today's price implies (bisection on the year-1 growth that fades to the terminal rate,
+    as in the DCF). Reported as the average yearly growth over the projection years (``implied_cagr``) and
+    the revenue multiple it means — never as a perpetual rate. ``plausible`` compares that average with the
+    growth the company has actually delivered."""
     if not inp.usable or not inp.price:
         return {"note": inp.note or "inputs unavailable"}
     lo, hi = -0.20, 0.50
@@ -293,7 +305,8 @@ def reverse_dcf(inp: DcfInputs) -> dict:
     if f(lo) > 0:
         return {"implied_growth": None, "note": "price below even the bear case (deeply undervalued on DCF)"}
     if f(hi) < 0:
-        return {"implied_growth": None, "note": "price implies >50% perpetual growth (richly valued)"}
+        return {"implied_growth": None, "note": "even 50% growth in year 1, fading over the projection, doesn't "
+                                                "reach today's price (richly valued)"}
     for _ in range(60):
         mid = (lo + hi) / 2
         if f(mid) > 0:
@@ -301,8 +314,10 @@ def reverse_dcf(inp: DcfInputs) -> dict:
         else:
             lo = mid
     implied = (lo + hi) / 2
-    return {"implied_growth": implied, "historical_growth": inp.growth,
-            "plausible": implied <= (inp.growth or 0) + 0.03}
+    cagr, mult = implied_path(implied, inp.terminal_growth)
+    return {"implied_growth": implied, "implied_cagr": cagr, "revenue_multiple": mult, "years": _PROJ_YEARS,
+            "terminal_growth": inp.terminal_growth, "historical_growth": inp.growth,
+            "plausible": cagr <= (inp.growth or 0) + 0.03}
 
 
 def scenario_dcf(inp: DcfInputs) -> dict:
@@ -428,9 +443,14 @@ _SANE = {"P/E": (0, 150), "P/B": (0, 50), "ROE%": (-100, 100),
          "Solvency(x)": (0, 10), "Combined%": (50, 200), "Persist13%": (0, 100)}
 
 
+MIN_Z_PEERS = 8       # below this a standard deviation is noise — a rank is shown instead
+MIN_RANK_PEERS = 3
+
+
 def sector_zscores(con: duckdb.DuckDBPyConnection, symbol: str,
                    consolidated: bool = False) -> dict:
-    """Target ratios vs peer mean/std (z = (target−mean)/std). Needs ≥3 peers."""
+    """Target ratios vs peers. With ≥ ``MIN_Z_PEERS`` peers: z = (target − mean) / std. With fewer (≥ 3): only
+    the target's rank among them (``z`` None) — a z-score from three or four peers is meaningless."""
     pl = sector.peers(con, symbol)
     if not pl:
         return {"note": "no sector peers (ingest_sector_map first)"}
@@ -445,9 +465,12 @@ def sector_zscores(con: duckdb.DuckDBPyConnection, symbol: str,
     rows = {}
     for k, tv in target.items():
         vals = np.array(peer_vals.get(k, []), dtype=float)
-        if len(vals) >= 3 and np.std(vals) > 0:
-            rows[k] = {"value": tv, "peer_mean": float(np.mean(vals)),
-                       "peer_std": float(np.std(vals)), "n": int(len(vals)),
-                       "z": float((tv - np.mean(vals)) / np.std(vals))}
+        if len(vals) < MIN_RANK_PEERS:
+            continue
+        rank = int(np.sum(vals > tv)) + 1                     # 1 = highest
+        row = {"value": tv, "peer_mean": float(np.mean(vals)), "n": int(len(vals)), "rank": rank, "z": None}
+        if len(vals) >= MIN_Z_PEERS and np.std(vals) > 0:
+            row.update(peer_std=float(np.std(vals)), z=float((tv - np.mean(vals)) / np.std(vals)))
+        rows[k] = row
     return {"industry": sector.peer_industry_of(con, symbol), "ratios": rows} if rows else \
         {"industry": sector.peer_industry_of(con, symbol), "note": "not enough peers with data"}

@@ -22,7 +22,7 @@ from equity_research import config
 
 _RF_DEFAULT = config.RISK_FREE_RATE          # ~India 1y risk-free
 _TRADING_DAYS = config.FUNDS_TRADING_DAYS
-# horizon label -> lookback in days (None = since inception)
+# horizon label -> lookback in days (None = since the first NAV we hold, which may be later than the fund's launch)
 _HORIZONS = {"1m": 30, "3m": 91, "6m": 182, "1y": 365, "3y": 1095, "5y": 1825, "incep": None}
 _ASOF_TOL_DAYS = config.FUNDS_ASOF_TOL_DAYS          # accept a NAV within this many days of the target date
 
@@ -337,8 +337,11 @@ def category_percentile(con: duckdb.DuckDBPyConnection, scheme_code: int,
     if mine is None:
         return None
     below = sum(1 for _, r in rets if r < mine)
-    return {"horizon": horizon, "percentile": round(100 * below / len(rets)),
-            "rank": sum(1 for _, r in rets if r > mine) + 1, "n": len(rets),
+    rank = sum(1 for _, r in rets if r > mine) + 1
+    # beats_pct: share of the OTHER funds it beat (#1 of 5 → 100, #5 of 5 → 0); top_pct: rank as a share of the
+    # field (#1 of 5 → top 20 %). Kept apart — reading one as the other once turned #4 of 5 into "top 20 %".
+    return {"horizon": horizon, "beats": below, "beats_pct": round(100 * below / max(1, len(rets) - 1)),
+            "top_pct": round(100 * rank / len(rets)), "rank": rank, "n": len(rets),
             "category_median": round(float(np.median([r for _, r in rets])), 1)}
 
 

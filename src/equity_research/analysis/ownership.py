@@ -27,11 +27,27 @@ _APPEAR_FLOOR = config.OWNERSHIP_APPEAR_FLOOR        # % of shares
 _DELTA_FLOOR = config.OWNERSHIP_DELTA_FLOOR         # percentage points
 
 _NOTABLE_CATEGORIES = {"mutual fund", "insurance company", "FPI", "bank / FI"}
+# funds that hold a stock because it is in an index, or as one leg of a hedged arbitrage trade — no view on the
+# company, so never "smart money"
+_PASSIVE = re.compile(r"\b(index|indices|etf|exchange traded|nifty|sensex|bees|vanguard|ishares|spdr|passive|"
+                      r"arbitrage)\b", re.I)
 
 
-def _is_notable(category: str, classification: str, is_promoter: bool) -> bool:
+def is_passive(name: str) -> bool:
+    return bool(_PASSIVE.search(name or ""))
+
+
+def _is_notable(category: str, classification: str, is_promoter: bool, name: str = "") -> bool:
+    if is_passive(name):
+        return False
     return (is_promoter or classification == "LISTED company"
             or category in _NOTABLE_CATEGORIES)
+
+
+def _is_discretionary_institution(category: str, classification: str, is_promoter: bool, name: str) -> bool:
+    """A fund / insurer / bank that chose to buy: not a promoter or promoter-group company, not an index fund."""
+    return (not is_promoter and classification != "LISTED company" and category in _NOTABLE_CATEGORIES
+            and not is_passive(name))
 
 
 def _norm(name: str) -> str:
@@ -159,6 +175,10 @@ def institutional_cost(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | No
     was already holding in our earliest snapshot entered *before* our data — flagged cost-unknown
     rather than faked. ``None`` if <2 quarters or no price.
 
+    Only discretionary institutions count (mutual funds, insurers, FPIs, banks) — promoters, promoter-group
+    and listed holding companies, and index funds / ETFs are left out: their cost says nothing about selling
+    pressure from profit-takers.
+
     Returns ``{current_price, window:{from,to}, holders:[{name, category, pct, avg_cost, zone_lo,
     zone_hi, gain_pct, emoji, read, basis}], summary:{avg_gain_pct, emoji, read, known, total}}``.
     """
@@ -184,7 +204,7 @@ def institutional_cost(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | No
 
     holders = []
     for h in traj.values():
-        if not _is_notable(h["cat"], h["cls"], h["prom"]):
+        if not _is_discretionary_institution(h["cat"], h["cls"], h["prom"], h["name"]):
             continue
         cur_pct = h["q"].get(latest, 0.0)
         if cur_pct < 0.3:                                  # skip trivially small current stakes
@@ -250,7 +270,8 @@ def ownership_changes(con: duckdb.DuckDBPyConnection, symbol: str) -> dict | Non
             n = _norm(name)
             out.append({"name": name, "pct": pct or 0.0, "category": cat,
                         "classification": cls, "is_promoter": prom, "notable":
-                        _is_notable(cat, cls, prom), "norm": n, "toks": frozenset(n.split())})
+                        _is_notable(cat, cls, prom, name), "passive": is_passive(name),
+                        "norm": n, "toks": frozenset(n.split())})
         return out
 
     cur, prev = _snap(cur_as_of), _snap(prev_as_of)

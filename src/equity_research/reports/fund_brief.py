@@ -9,6 +9,7 @@ portfolio-quality score are layered in when ``mf_holdings`` coverage exists (Pha
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 
 import duckdb
 
@@ -76,9 +77,11 @@ def _pct(v: float | None, plus: bool = True) -> str:
     return f"{v:+.1f}%" if plus else f"{v:.1f}%"
 
 
-def _returns_block(r: dict) -> str:
+def _returns_block(r: dict, since: date | None = None) -> str:
+    # "incep" runs from the first NAV we hold — the fund's launch only if our history reaches back that far
     order = [("1m", "1-month"), ("3m", "3-month"), ("6m", "6-month"),
-             ("1y", "1-year"), ("3y", "3-year CAGR"), ("5y", "5-year CAGR"), ("incep", "since-incep CAGR")]
+             ("1y", "1-year"), ("3y", "3-year CAGR"), ("5y", "5-year CAGR"),
+             ("incep", f"CAGR since {since:%b-%Y} (start of our NAV history)" if since else "CAGR over our NAV history")]
     return "\n".join(f"- **{label}:** {_pct(r.get(k))}" for k, label in order if r.get(k) is not None)
 
 
@@ -108,11 +111,12 @@ def build_fund_brief(con: duckdb.DuckDBPyConnection, scheme_code: int, *,
         f"{d['history_days'] / 365.25:.1f}y of NAV history on file",
         "",
         "## 📈 Returns",
-        _returns_block(d["returns"]) or "_Insufficient history for trailing returns._",
+        _returns_block(d["returns"], d["nav_date"] - timedelta(days=d["history_days"]))
+        or "_Insufficient history for trailing returns._",
     ]
     if pct:
         lines += ["", f"↳ **{pct['horizon']} return ranks #{pct['rank']} of {pct['n']}** in "
-                  f"*{d['category']}* (top {pct['percentile']}% · category median "
+                  f"*{d['category']}* (beat {pct['beats']} of the other {pct['n'] - 1} · category median "
                   f"{_pct(pct['category_median'])})."]
     lines += [
         "",

@@ -73,7 +73,7 @@ def _forward_line(guidance: dict | None, snap: dict | None, evd: dict, lens: str
 
 
 def _insider_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
-    """Recent SEBI PIT insider/promoter trades (from `insider_trades`) + a net read.
+    """SEBI PIT insider/promoter trades (from `insider_trades`), each dated, + a net read of the last 6 months.
     Returns [] if none stored."""
     rows = con.execute(
         "SELECT disclosure_dt, acq_name, category, mode, txn_type, qty, value_cr, "
@@ -106,14 +106,19 @@ def _insider_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list[str]:
             have = True
             t = (r["txn"] or "").lower()
             net += r["val"] if "buy" in t else -r["val"] if "sell" in t else 0
-    L = ["### Insider & promoter trades (recent)"]
-    if have:
+    L = ["### Insider & promoter trades"]
+    recent = any(r["dt"] >= cutoff for r in recs)
+    if not recent:
+        months = (datetime.now() - recs[0]["dt"]).days // 30
+        L.append(f"- **No insider trades disclosed in the last 6 months** — the latest is from "
+                 f"{recs[0]['dt']:%b-%Y} (~{months} months ago), so the list below is history, not a current signal.")
+    elif have:
         dirn = "net buyers" if net > 0 else "net sellers" if net < 0 else "roughly flat"
         tag = " — conviction" if net > 0 else " — caution" if net < 0 else ""
         L.append(f"- **Net (last 6 mo, promoter/director + open-market): {dirn} "
                  f"₹{abs(net):,.1f} cr{tag}.**")
     else:
-        L.append("- _Recent activity is routine (off-market / designated-person ESOP); "
+        L.append("- _Last 6 months' activity is routine (off-market / designated-person ESOP); "
                  "no material promoter/open-market signal._")
     for r in recs:                                   # all disclosures, newest-first — no cap
         t = (r["txn"] or "").lower()
@@ -206,10 +211,16 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
         star = " ⭐" if r["notable"] else ""
         kind = (r["classification"] if r["classification"] == "LISTED company"
                 else "promoter" if r["is_promoter"] else r["category"])
+        if r.get("passive"):
+            kind += " · index / arbitrage fund — not a view on the company"
         return f"**{r['name']}** ({kind}){star}"
 
     for r in ch["entered"]:
-        L.append(f"- 🆕 **New:** {_who(r)} — 0.00% → {r['pct']:.2f}% (+{r['pct']:.2f}pp)")
+        if r["is_promoter"]:                     # promoter accounts are listed at any size — this one is new
+            L.append(f"- 🆕 **New promoter-group account:** {_who(r)} — {r['pct']:.2f}%")
+        else:
+            L.append(f"- ⬆️ **Crossed above 1%:** {_who(r)} — now {r['pct']:.2f}% "
+                     "(not in last quarter's >1% list — may have held just under 1%)")
     for r in ch["added"]:
         L.append(f"- 🟢 **Added:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
                  f"(+{r['delta']:.2f}pp)")
@@ -217,11 +228,17 @@ def _ownership_changes_block(con: duckdb.DuckDBPyConnection, symbol: str) -> lis
         L.append(f"- 🔴 **Trimmed:** {_who(r)} {r['prev_pct']:.2f}% → {r['pct']:.2f}% "
                  f"({r['delta']:.2f}pp)")
     for r in ch["exited"]:
-        L.append(f"- ⚪ **Exited:** {_who(r)} — {r['prev_pct']:.2f}% → 0.00% "
-                 f"(−{r['prev_pct']:.2f}pp)")
-    L += ["", "_Diff of the two most recent SEBI Reg-31 shareholding filings. ⭐ = notable "
-          "(promoter / mutual fund / FPI / insurer / listed-company holder) — real "
-          "conviction or distribution, above retail churn._", ""]
+        if r["is_promoter"]:
+            L.append(f"- ⚪ **Left the promoter list:** {_who(r)} — was {r['prev_pct']:.2f}% "
+                     "(sold, or moved its shares to another group account)")
+        else:
+            L.append(f"- ⬇️ **Dropped below 1%:** {_who(r)} — was {r['prev_pct']:.2f}% "
+                     "(sold some or all — holdings under 1% aren't disclosed)")
+    L += ["", "_Diff of the two most recent SEBI Reg-31 shareholding filings, which name only holders above "
+          "1% — so crossing that line isn't necessarily a new buyer or a full exit. ⭐ = notable "
+          "(promoter / active fund / FPI / insurer / listed-company holder); promoter accounts are listed at any size. "
+          "Index funds, ETFs and arbitrage funds follow an index or a hedge and "
+          "aren't a view on the company._", ""]
     return L
 
 
@@ -260,10 +277,11 @@ def _smart_money_cost_block(con: duckdb.DuckDBPyConnection, symbol: str) -> list
         L.append(_table(["Holder", "Type", "Stake", "Est. cost zone", "Now vs cost"], rows))
         L.append("")
     if unknown:
-        L.append(f"_Plus {len(unknown)} large holder(s) (e.g. promoters / long-term funds) already "
-                 f"holding in our earliest snapshot — they **entered before our data, so their cost "
-                 f"is unknown** and isn't guessed._")
-    L += ["", "_Exact transaction prices aren't disclosed; a holder's cost is **inferred** from the "
+        L.append(f"_Plus {len(unknown)} institution(s) already holding in our earliest snapshot — they "
+                 f"**entered before our data, so their cost is unknown** and isn't guessed._")
+    L += ["", "_Active institutions only — mutual funds, insurers, FPIs, banks. Promoters, promoter-group and "
+          "listed holding companies, and index / ETF / arbitrage funds are left out. "
+          "Exact transaction prices aren't disclosed; a holder's cost is **inferred** from the "
           "price range of the quarter(s) they added in (SEBI Reg-31 filings are quarterly). Near cost "
           "= little selling pressure; large gains = watch for profit-booking unless the stock is still "
           "in a strong uptrend. Coverage deepens as more shareholding history is ingested._", ""]
@@ -936,6 +954,42 @@ def _insurer_forensics(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataF
     return L
 
 
+def _promoter_from_holders(con, symbol: str) -> tuple | None:
+    """(as_of, promoter-group %, promoter rows) from the latest holder list, or None if we have none."""
+    try:
+        return con.execute(
+            "SELECT as_of, sum(pct) FILTER (WHERE is_promoter), count(*) FILTER (WHERE is_promoter) "
+            "FROM shp_holders WHERE symbol = ? AND as_of = (SELECT max(as_of) FROM shp_holders WHERE symbol = ?) "
+            "GROUP BY as_of", [symbol, symbol]).fetchone()
+    except duckdb.Error:
+        return None
+
+
+def _pledge_line(p: tuple | None, holders: tuple | None) -> str:
+    """The pledge bullet. The shareholding snapshot can show a promoter figure for a company that has none (its
+    'encumbered' shares are then other holders' — not promoter pledges); the holder list settles it, and fills in
+    the promoter stake when the snapshot is missing."""
+    no_promoter = holders is not None and not holders[2] and (not p or p[0] <= holders[0])
+    if p and no_promoter:
+        enc = (f" {_f(p[3], 1, pct=True)} of all shares are recorded as encumbered — other holders' shares, "
+               "not promoter pledges." if p[3] else "")
+        return f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** n/a — no promoter group in the latest filing.{enc}"
+    if p and p[2] is not None and (p[1] or 0) >= 1:
+        return (f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
+                f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of that is pledged** "
+                f"({glossary.label('Pledge%', p[2]) or 'n/a'}) — 0% ideal, >50% a serious red flag.")
+    if p:
+        return (f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
+                f"{_f(p[1], 1, pct=True)} — no significant promoter; {_f(p[3], 1, pct=True)} of "
+                "total shares encumbered.")
+    if holders and holders[2]:
+        return (f"- **Promoter pledge:** the promoter group holds {_f(holders[1], 1, pct=True)} (holder list, "
+                f"{holders[0]:%d-%b-%Y}); pledge figures weren't in our shareholding data — check the filing.")
+    if holders:
+        return f"- **Promoter pledge:** n/a — no promoter group in the latest filing ({holders[0]:%d-%b-%Y})."
+    return "- **Promoter pledge:** n/a (no shareholding data yet)."
+
+
 def _statement_sections(con: duckdb.DuckDBPyConnection, symbol: str, af: pd.DataFrame,
                         consolidated: bool) -> tuple[list[str], pd.Series, pd.Series]:
     """§1–§8 for an industrial / services company: income statement, margins, balance sheet,
@@ -1225,16 +1279,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                      f"{glossary.label('Sloan accruals%', acc.value) or 'n/a'}.** Non-cash part of "
                      f"earnings (cash-flow accruals {_f(acc.components.get('cashflow_accruals_%'), 1, pct=True)}); "
                      "near-zero/negative = earnings cash-backed, high positive = aggressive.")
-    if p and p[2] is not None:
-        L.append(f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
-                 f"{_f(p[1], 1, pct=True)}; **{_f(p[2], 1, pct=True)} of that is pledged** "
-                 f"({glossary.label('Pledge%', p[2]) or 'n/a'}) — 0% ideal, >50% a serious red flag.")
-    elif p:
-        L.append(f"- **Promoter pledge (as of {p[0]:%d-%b-%Y}):** promoter holds "
-                 f"{_f(p[1], 1, pct=True)} — no significant promoter; {_f(p[3], 1, pct=True)} of "
-                 "total shares encumbered.")
-    else:
-        L.append("- **Promoter pledge:** n/a (no shareholding snapshot).")
+    L.append(_pledge_line(p, _promoter_from_holders(con, symbol)))
     L.append("- **Contingent liabilities & related-party transactions:** these aren't in the "
              "structured XBRL that builds the tables above — they're disclosed only in the **notes "
              "to accounts**. They are **not skipped**: the **Analysis section below reads them "
@@ -1276,7 +1321,12 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         is_cyclical = lens == "cyclical" and ev_val is not None and ev_val == ev_val and ev_val > 0
         L.append(f"- Market cap **₹{_f(snap.get('market_cap_cr'),0)} cr**"
                  + (f" · sector: {industry}" if industry else ""))
-        if lens == "financial":
+        if lens == "financial" and insurer:
+            primary = ("**P/B judged against ROE** — for an insurer, read alongside the underwriting and solvency "
+                       "numbers in §1 and §9" + (" (and embedded value, which the structured filing doesn't carry)"
+                                                 if kind == "life" else "")
+                       + "; its P/E and a DCF are shown only for context")
+        elif lens == "financial":
             primary = ("**P/B judged against ROE** — the right lens for a lender; its P/E and a "
                        "DCF are unreliable, so they are shown only for context")
         elif is_cyclical:
@@ -1335,7 +1385,7 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
     fwd = _forward_line(guidance, snap, evd, lens)            # forward multiple from guidance
     if fwd:
         L.append(fwd)
-    if sec.get("peers_with_data", 0) >= 3:
+    if sec.get("peers_with_data", 0) >= 5:
         L.append(f"- Sector ({sec['industry']}): P/E vs median {_f(sec.get('sector_median_pe'),1)} — "
                  f"cheaper than {_f(sec.get('pe_cheaper_than_%_of_peers'),0)}% of {sec['peers_with_data']} peers")
     elif sec.get("industry"):
@@ -1372,7 +1422,8 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
               "means the per-share DCF figures below are on the pre-action count — read the "
               "intrinsic-value-per-share relative to the pre-action price, not today's._", ""]
     if inp.is_financial:
-        L.append("- Reverse/forward-DCF is not meaningful for a lender/financial; rely on the "
+        L.append(f"- Reverse/forward-DCF is not meaningful for {'an insurer' if insurer else 'a lender/financial'}; "
+                 "rely on the "
                  "P/B-on-ROE and the peer comparison in §10." + (f" {inp.note}" if inp.note else ""))
     elif not inp.usable:
         L.append(f"- DCF inputs unavailable: {', '.join(inp.missing) or inp.note or 'n/a'}. "
@@ -1382,11 +1433,13 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         # LEAD with the reverse-DCF — the robust 'what's priced in' read.
         if rev.get("implied_growth") is not None:
             hg = rev.get("historical_growth")
-            L.append(f"- **Reverse-DCF (the centrepiece):** at today's price the market is pricing in "
-                     f"~{_f(100 * rev['implied_growth'], 1, pct=True)} perpetual revenue growth, vs "
-                     f"~{_f(100 * (hg or 0), 1, pct=True)} delivered historically — "
-                     f"**{'plausible' if rev.get('plausible') else 'demanding'}**. If the company can "
-                     "clear that implied bar the stock is cheap; if not, it's rich.")
+            L.append(f"- **Reverse-DCF (the centrepiece):** today's price implies revenue growing "
+                     f"~{_f(100 * rev['implied_cagr'], 1, pct=True)} a year on average for the next "
+                     f"{rev['years']} years (revenue ×{rev['revenue_multiple']:.1f}; starting at "
+                     f"~{_f(100 * rev['implied_growth'], 1, pct=True)} and fading to "
+                     f"{_f(100 * rev['terminal_growth'], 1, pct=True)}), vs ~{_f(100 * (hg or 0), 1, pct=True)} "
+                     f"a year delivered historically — **{'plausible' if rev.get('plausible') else 'demanding'}**. "
+                     "If the company can clear that bar the stock is cheap; if not, it's rich.")
         elif rev.get("note"):
             L.append(f"- **Reverse-DCF:** {rev['note']}.")
         # Monte-Carlo FCFF-DCF: only a SECONDARY cross-check, and only where it's meaningful.
@@ -1445,11 +1498,16 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
         L.append(f"- Benford: {bf.get('note', 'n/a')}.")
     zs = quant.sector_zscores(con, symbol, consolidated)
     if zs.get("ratios"):
-        rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _f(v["z"], 2)]
-                for k, v in zs["ratios"].items()]
+        def _vs(v):
+            if v["z"] is not None:
+                return f"z {v['z']:+.2f} (n={v['n']})"
+            return f"#{v['rank']} of {v['n'] + 1} (too few peers for a z-score)"
+        rows = [[k, _f(v["value"], 2), _f(v["peer_mean"], 2), _vs(v)] for k, v in zs["ratios"].items()]
+        few = all(v["z"] is None for v in zs["ratios"].values())
         # blank line BEFORE the table so markdown parses it as a table, not inline pipe-text
-        L += [f"- Sector-relative z-scores ({zs.get('industry', '?')}, vs {len(rows)} ratios over peers):",
-              "", _table(["Ratio", "Value", "Peer mean", "z"], rows), ""]
+        L += [f"- Sector-relative position ({zs.get('industry', '?')}"
+              + (", a small peer set — read as a rough ranking only):" if few else "):"),
+              "", _table(["Ratio", "Value", "Peer mean", "vs peers"], rows), ""]
     else:
         L.append(f"- Sector z-scores: {zs.get('note', 'n/a')}.")
     L += [
@@ -1500,12 +1558,14 @@ def build_deep_brief(con: duckdb.DuckDBPyConnection, symbol: str, *,
                  "as reported by the bank (a few filings state them 100× too small; those are "
                  "rescaled).")
     elif insurer:
-        L.append("- Insurer ratios come from the IRDAI results filing: APE = first-year premium + "
-                 "10% of single premium; ROE on average net worth; net worth = the larger of "
+        L.append("- Insurer ratios come from the IRDAI results filing: "
+                 + ("APE = first-year premium + 10% of single premium; " if kind == "life" else "")
+                 + "ROE on average net worth; net worth = the larger of "
                  "(capital + reserves) and the filed shareholders' funds (insurers mis-tag one "
                  "or the other); share count = profit ÷ EPS (no face value is filed). Solvency / "
-                 "persistency filed 100× too small in some periods are rescaled. VNB margin and "
-                 "embedded value aren't in the structured filing.")
+                 + ("persistency filed 100× too small in some periods are rescaled. VNB margin and "
+                    "embedded value aren't in the structured filing." if kind == "life" else
+                    "claims ratios filed 100× too small in some periods are rescaled."))
     else:
         L.append("- COGS, EBITDA and FCFF/FCFE use documented approximations "
                  "(COGS=materials+purchases+Δinv; EBITDA=PBT+interest+depreciation; "

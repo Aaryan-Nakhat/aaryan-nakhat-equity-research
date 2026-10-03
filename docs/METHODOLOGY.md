@@ -197,10 +197,14 @@ with zero).
   conversion are clean.
 - **Sloan accruals %** = `100 × [Δ(non-cash current assets) − Δ(non-debt current liabilities) −
   D&A] / average total assets`. Plus a cash-flow accrual `100×(PAT−CFO)/assets` for corroboration.
-- **Promoter pledge** — `shareholding.pledged_pct_of_promoter` (from NSE `/api/corporate-pledgedata`).
+- **Promoter pledge** — `shareholding.pledged_pct_of_promoter` (from NSE `/api/corporate-pledgedata`), checked
+  against the latest holder list: a company with **no promoter group** there (e.g. a widely held bank) shows
+  "n/a" and its encumbered shares as other holders', not promoter pledges; a missing snapshot falls back to the
+  holder list's promoter stake.
 - **Insider & promoter trades** — `insider_trades` (SEBI PIT Reg 7(2), via `/api/corporates-pit`):
   each buy/sell with ₹ size and holding % before→after; routine ESOP/off-market filtered; net
-  6-month promoter direction summarised. **Model:** none.
+  6-month promoter direction summarised; every trade is dated, and when nothing was disclosed in the last 6
+  months the report says so (with the latest trade's age) instead of calling old trades recent. **Model:** none.
 - **Shareholding — holder-level (SHP)** — `shp_holders` from the SHP XBRL (`nse_shp.py`): every
   promoter account + public >0.5% holder, each **classified** (individual/HUF · **LISTED company**
   with its symbol, matched against `equity_master` — the Elcid pattern · unlisted pvt · trust ·
@@ -208,9 +212,13 @@ with zero).
 - **Ownership changes (QoQ)** (`analysis/ownership.py`) — diff of the two most recent SHP snapshots,
   holders matched across quarters by normalised name (+ token-subset fallback for scheme relabels)
   → entered / exited / added / trimmed with the pp delta; notable holders (promoter/MF/FPI/listed)
-  sorted first. **Model:** none.
+  sorted first. Filings name public holders only **above 1 %**, so "entered" / "exited" are labelled **crossed
+  above 1 %** / **dropped below 1 %** (not a new buyer or a full exit); promoter accounts are listed at any size, so
+  theirs read "new promoter-group account" / "left the promoter list". Index, ETF and **arbitrage** funds are
+  tagged passive (an index or a hedge, not a view) and never starred. **Model:** none.
 - **Smart-money cost & profit-booking risk** (`analysis/ownership.institutional_cost`) — the *price*
-  context on top of the %-holding. Exact transaction prices aren't disclosed, so a holder's **cost is
+  context on top of the %-holding. **Active institutions only** (mutual funds, insurers, FPIs, banks):
+  promoters, promoter-group / listed holding companies and passive funds are left out. Exact transaction prices aren't disclosed, so a holder's **cost is
   inferred**: across every ingested SHP quarter (backfilled to ~16 = ~4 yr by `ingest_shp_history`),
   find the quarters in which the holder **increased** their stake; for each such window `(qₜ₋₁, qₜ]`
   take the stock's price range from `equity_eod` (lo/hi/avg close) — that quarter is when the buy
@@ -228,7 +236,8 @@ with zero).
   / %detractor), review count, the **industry average**, and CEO. **Entity resolution** (a stock's name →
   the right AmbitionBox company, not a namesake) is the hard part: verified slug overrides (from
   `.env` `EMPLOYER_SLUG_OVERRIDES`, so the repo carries no specific tickers) → direct
-  name-slug → search API with a strict brand-token name-guard; unresolved → honest "no coverage".
+  name-slug → search API, both through a strict brand-token name-guard (only the verified overrides skip it);
+  unresolved → honest "no coverage". The report names the matched AmbitionBox profile so a mismatch is visible.
   **Scale — two banded scores, A→E, each 45% absolute + 55% peer-relative** (a rating *vs its own
   industry* matters more than the raw stars): **① Employee Sentiment** (overall + %detractor) and **②
   Management Quality** (`0.40·culture + 0.30·job-security + 0.15·career-growth + 0.15·work-satisfaction`,
@@ -271,9 +280,11 @@ with zero).
 - **The DCF engine (`_value_per_share`):** a **2-stage FCFF model** — revenue growth *fades*
   linearly from `g` (year 1) to `tg` (year 10); `FCFF_t = NOPAT + D&A − Capex − ΔNWC`; discount at
   WACC; terminal value `= FCFF_N·(1+tg)/max(WACC−tg, 0.03)`; `equity = ΣPV − net debt`; per share.
-- **Reverse-DCF (`reverse_dcf`):** **bisection** solves for the constant revenue growth that makes
-  the DCF equal today's price — "what growth is the price assuming?" Compared to history for
-  plausibility. This is the **centrepiece** read.
+- **Reverse-DCF (`reverse_dcf`):** **bisection** solves for the year-1 growth `g` (fading linearly to `tg`,
+  as in the DCF above) that makes the DCF equal today's price — "what growth is the price assuming?" It is
+  reported as the **average yearly growth over the projection years** (`implied_path` → CAGR and revenue
+  multiple), never as a perpetual rate, and called plausible when that CAGR is within 3 pp of the historical
+  revenue CAGR. This is the **centrepiece** read.
 - **Monte-Carlo (`monte_carlo_dcf`):** **20,000 draws** sampling g, EBIT margin, WACC, terminal g
   from normals around the base (with clips) → distribution of intrinsic value/share. Reports
   **median, p10, p90**, `Margin of safety = (median − price)/median`, `P(undervalued) =
@@ -286,7 +297,9 @@ with zero).
   frequencies vs expected `log10(1 + 1/d)`; **Nigrini MAD** = mean|obs − expected|; bands: <0.006
   close · <0.012 acceptable · <0.015 marginal · else nonconformity (soft flag). **Model:** none.
 - **Sector z-scores** — for P/E, P/B, ROE, ROCE, NetMargin, D/E: `z = (target − peer mean)/peer
-  std` over the granular-industry peers (≥3 needed; pathological peers bounded out). **Model:** none.
+  std` over the granular-industry peers, only with **≥ 8 peers** (`MIN_Z_PEERS`); with 3–7 the report shows the
+  target's **rank** instead ("#2 of 5 — too few peers for a z-score"); pathological peers bounded out. The sector
+  P/E percentile needs ≥ 5 peers. **Model:** none.
 
 ### §13 Technical snapshot (`analysis/technical.py`)
 - **Source:** `equity_eod` daily series, **EQ + BE + BZ** (trade-for-trade) series, one row/date.
@@ -314,7 +327,11 @@ with zero).
 - **Model:** `synthesize.synthesize_thesis` → the LLM writes earnings-quality / profitability /
   balance-sheet / growth / **forensic (RPTs, contingent liabilities read from the notes)** /
   valuation sections and a **Verdict (Buy/Accumulate/Hold/Reduce/Avoid)** with reasons. It's told
-  to respect the brief's numbers and caveats (never invent). The verdict is parsed back out
+  to respect the brief's numbers and caveats (never invent), plus explicit reading rules (`_GROUNDING`: quote
+  figures exactly; the 1 % disclosure line, index funds and promoters aren't smart money; the reverse-DCF is an
+  average, not perpetual; no conclusions from small peer sets; this business type's lens only — a general
+  insurer isn't a life insurer; say how old old data is). Lines where the model narrates its own drafting
+  ("Let me re-list…") are stripped (`strip_working_notes`). The verdict is parsed back out
   (`verdict_from_text`) to make the Trading-levels setup defer to it.
 
 ### Upside Drivers 1-pager (opt-in, reply `1`) — 🤖 LLM
@@ -386,7 +403,9 @@ with zero).
   rf)** (endpoint-annualised); **up/down capture** = mean fund return ÷ mean bench return on up/down
   days; **tracking error = std(fund − bench)·√252**; information ratio.
 - **Category percentile (`category_percentile`)** — the scheme's horizon return ranked among
-  same-category Direct-Growth peers (≥5 needed).
+  same-category Direct-Growth peers (≥5 needed): shown as "#4 of 5 · beat 1 of the other 4". The "since"
+  return runs from the first NAV we hold and is labelled with that month — the fund's launch only if our history
+  reaches back that far.
 - **Holdings look-through:** `holdings_snapshot` (top-10 concentration, biggest sector),
   `watchlist_overlap` (fund holdings ∩ your watchlist by name), `holdings_churn` (MoM buys/exits/
   adds/trims, **equity positions only** — CDs/CPs/T-bills/TREPS filtered). **Coverage:** holdings only

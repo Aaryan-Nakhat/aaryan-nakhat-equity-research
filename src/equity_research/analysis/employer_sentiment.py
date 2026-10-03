@@ -205,7 +205,9 @@ def section_lines(con: duckdb.DuckDBPyConnection, symbol: str, name: str | None 
     sub = r.get("subratings") or {}
     lines = head + [
         f"**Employee sentiment: {sb['emoji']} {sb['letter']} ({sb['label']})** · "
-        f"**Management: {mb['emoji']} {mb['letter']} ({mb['label']})** — from employee reviews.",
+        f"**Management: {mb['emoji']} {mb['letter']} ({mb['label']})** — from employee reviews"
+        + (f" of **{r['matched_name']}** on AmbitionBox (check it's this company)" if r.get("matched_name") else "")
+        + ".",
         "",
         f"- Overall **{_fmt(r.get('overall'))}/5** · {gap_txt} · **{_rev(r.get('reviews'))} reviews** "
         f"({r.get('confidence','').lower()} confidence)"

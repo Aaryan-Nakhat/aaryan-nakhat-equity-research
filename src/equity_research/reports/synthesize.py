@@ -39,6 +39,24 @@ it, and put EACH item on its OWN line starting with `- ` (or `1.`, `2.`, …). N
 together inside one paragraph like "1. … 2. … 3. …" — that renders as an unreadable run-on.
 - Leave a blank line between every paragraph, heading, table and list so nothing runs together."""
 
+_GROUNDING = """
+
+**How to read the brief (these override anything else):**
+- Quote figures exactly as the brief states them; don't recompute or restate a number differently. If two parts
+  of the brief disagree, say so rather than picking one.
+- Shareholding filings name only holders above 1%: a holder that "crossed above 1%" may have held just under it
+  before, and one that "dropped below 1%" may not have sold out. Index, ETF and arbitrage funds follow an index or a hedge;
+  promoters and promoter-group companies are owners, not investors. None of these is evidence of institutional
+  conviction or of smart money buying — don't present them as such.
+- The reverse-DCF is an average growth rate over the projection years (a start that fades to the long-run rate),
+  not a perpetual growth rate — describe it the way the brief does.
+- If the brief says a peer set or a sample is too small, don't draw conclusions from it.
+- Use only the lens of this company's business type: a bank or NBFC on lending metrics, an insurer on underwriting
+  and solvency (a general insurer is not a life insurer), everyone else on the industrial statements.
+- Older data (insider trades, filings, ratings) — say how old it is; don't call it recent.
+- Write only the finished note: no working notes, drafts, "let me…", or re-listing of what you already wrote."""
+
+
 _SYSTEM = """You are a sober, sell-side-grade equity analyst covering Indian \
 stocks. You are given a quantitative brief assembled from PRIMARY sources only \
 (exchange filings, XBRL financials, EOD prices). Optionally you are also given a \
@@ -59,7 +77,7 @@ stretch, technical weakness, anything from the filing).
 4. What to watch — 2-3 concrete upcoming triggers.
 
 Keep it under ~450 words. This is analysis for a personal decision, not advice \
-for the public."""
+for the public.""" + _GROUNDING
 
 _DEEP_SYSTEM = """You are a forensic equity analyst doing an exhaustive, in-depth \
 fundamental review of an Indian company for a sophisticated personal investor. \
@@ -119,7 +137,7 @@ critical — this is a forensic review, not a summary.
 a header row, a `|---|` separator line, one row per line, the SAME column count in every row \
 — kept to **at most 5 columns** with units in the header (not repeated in each cell). Never \
 output a space-aligned/ASCII table or one wider than 5 columns; if you have more dimensions \
-(e.g. many years), split into two smaller tables or summarise the rest in prose.""" + _FORMATTING
+(e.g. many years), split into two smaller tables or summarise the rest in prose.""" + _GROUNDING + _FORMATTING
 
 
 def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None,
@@ -138,11 +156,24 @@ def synthesize_thesis(brief_md: str, symbol: str, *, pdf_path: str | None = None
             docs.append((os.path.basename(pdf_path), fh.read()))
     instruction = ("Write the full forensic fundamental analysis." if deep
                    else "Write the investment note.")
-    return llm.generate(
+    return strip_working_notes(llm.generate(
         _DEEP_SYSTEM if deep else _SYSTEM,
         f"Brief for {symbol}:\n\n{brief_md}\n\n{instruction}",
         files=docs, model_name=model,
-        max_tokens=None if deep else 4000)      # deep mode: uncapped (use the model max)
+        max_tokens=None if deep else 4000))     # deep mode: uncapped (use the model max)
+
+
+_WORKING = re.compile(r"^\s*(?:\*\*)?(?:let me|let's re-?list|i'll (?:re-?list|redo|restate|rewrite|now)|"
+                      r"i will (?:now|re-?list)|now,? let me|okay,? (?:let me|so)|wait,|on second thought|"
+                      r"actually,? let me|re-?listing)\b", re.I)
+
+
+def strip_working_notes(text: str) -> str:
+    """Drop lines where the model narrates its own drafting ("Let me re-list this more cleanly") — they leaked
+    into a published report once. Only whole lines that *start* that way go; the analysis is untouched."""
+    if not text:
+        return text
+    return "\n".join(line for line in text.split("\n") if not _WORKING.match(line))
 
 
 _OVERVIEW_SYS = """You are an equity analyst writing the opening "Business overview" \

@@ -9,7 +9,7 @@ average** for peer benchmarking, and the CEO name).
 
 **Entity resolution** is the one hard part (a stock's name must map to the right AmbitionBox company,
 not a same-named namesake). Strategy, most-reliable first: a verified ``_SLUG_MAP`` override → the
-direct name-derived slug (trusted, since we built it from the name) → the search API with a strict
+direct name-derived slug (name-guarded too — a slug from the name can still land on a namesake) → the search API with a strict
 name-match guard (to avoid namesakes like a small co → a same-named giant). If nothing resolves confidently it returns
 ``no_coverage`` — an honest blank beats a wrong company.
 
@@ -140,7 +140,9 @@ def fetch_company(name: str, symbol: str | None = None) -> dict:
         return {"status": "disabled"}
     from scrapling.fetchers import StealthyFetcher
 
-    direct = [s for s in [_slug_overrides().get((symbol or "").upper()), _clean_slug(name)] if s]
+    override = _slug_overrides().get((symbol or "").upper())
+    # (slug, name to guard with): the verified map is trusted; a slug made from the name can land on a namesake
+    direct = [(s, g) for s, g in [(override, None), (_clean_slug(name), name)] if s]
     result: dict = {"status": "no_coverage"}
 
     def _action(page):
@@ -158,9 +160,9 @@ def fetch_company(name: str, symbol: str | None = None) -> dict:
             data["slug"] = slug
             return data
 
-        # 1) direct slugs (verified map / name-derived) — trusted, no name-guard
-        for slug in dict.fromkeys(direct):
-            d = _try(slug, guard_name=None)
+        # 1) direct slugs — the verified map unguarded, the name-derived one through the name guard
+        for slug, guard in dict.fromkeys(direct):
+            d = _try(slug, guard_name=guard)
             if d:
                 result.update(status="ok", **d)
                 return page
